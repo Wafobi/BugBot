@@ -1,0 +1,22 @@
+{
+  "_comment": "Hot-reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). XP gibt es für Discord-Nachrichten; welche Rolle es ab welchem Level gibt, steht in discord.json unter 'levels'.",
+  "xp_cooldown_seconds": 60,
+  "xp_min": 15,
+  "xp_max": 25,
+  "announce_level_up": true,
+  "top_limit": 10,
+  "command_names": {
+    "_comment": "Befehle umbenennen, aliasen oder abschalten: \"!rank\": [\"!level\", \"!rank\"] | \"!top\": false"
+  },
+  "texts": {
+    "help.rank": "XP und Level eines Users",
+    "help.top": "Level-Bestenliste",
+    "rank.elsewhere": "📈 Die XP werden auf Discord gesammelt - dort zeigt !rank deinen Stand, hier hilft !rank <Name>.",
+    "rank.self": "📈 {user}: Level {level} ({xp} XP)",
+    "rank.other": "📈 {user}: Level {level} ({xp} XP)",
+    "rank.unknown": "📈 Für {user} sind noch keine XP erfasst.",
+    "top.none": "📈 Noch keine Levels vergeben.",
+    "top.title": "📈 Level-Bestenliste:",
+    "top.line": "{rank}. {user} - Level {level} ({xp} XP)"
+  }
+}

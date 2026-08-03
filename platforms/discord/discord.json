@@ -1,0 +1,300 @@
+{
+  "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Namen von Rollen und Kanälen stehen hier und nicht im Code - der Bot findet sie über genau diese Zeichenketten, ein anderer Server heißt also nur hier anders. Unter 'texts' steht jeder Satz, den der Bot ausgibt; {platzhalter} werden gefüllt und müssen stehen bleiben.",
+  "roles": {
+    "_comment": "Die Rolle 'moderator' ist die Berechtigungsprüfung des Bots: wer sie hat (oder Administrator ist), darf Mod-Befehle und wird nicht moderiert. 'member' bekommt jeder, der sich über die Reaktionsrollen eine Rolle abholt.",
+    "moderator": "🛡️ Moderator",
+    "member": "👥 Mitglied"
+  },
+  "channels": {
+    "_comment": "Kanalnamen ohne '#'. Leer lassen schaltet die jeweilige Funktion ab: ohne 'honeypot' keine Auto-Bans, ohne 'log' kein Mod-Protokoll, ohne 'commands' laufen öffentliche Befehle in jedem Kanal.",
+    "log": "bugbot-reports",
+    "commands": "🤖-bot-befehle",
+    "honeypot": "🍯-honey-pot",
+    "announcements": "📢-ankündigungen",
+    "role_selection": "🎭-rollen-auswahl"
+  },
+  "reaction_roles": {
+    "_comment": "Emoji -> Rollenname für die Rollenauswahl (!roles und die Reaktionen im Kanal 'role_selection').",
+    "🎮": "🎮 Gamer",
+    "🧪": "🧪 Testsubjekt",
+    "💻": "🧙‍♂️ Code-Magier"
+  },
+  "announce_channels": {
+    "_comment": "Ankündigungsart -> Kanal. Eine Art ohne Kanal wird auf Discord nicht gepostet.",
+    "stream.online": "🎥-stream-live",
+    "stream.offline": "🎥-stream-live",
+    "bug.report": "🐛-bug-reports",
+    "clip.created": "🎬-clips",
+    "status": "bugbot-reports"
+  },
+  "status_report_hours": 1,
+  "command_names": {
+    "_comment": "Befehle umbenennen, aliasen oder abschalten: \"!ban\": \"!hammer\" | \"!bug\": [\"!bug\", \"!report\", \"!fehler\"] | \"!setup\": false"
+  },
+  "colors": {
+    "log": "#3498DB",
+    "status": "#2ECC71",
+    "bug": "#E67E22",
+    "warn": "#F1C40F",
+    "danger": "#E74C3C",
+    "filtered": "#E67E22",
+    "unban": "#2ECC71",
+    "role_added": "#3498DB",
+    "role_removed": "#95A5A6"
+  },
+  "texts": {
+    "reason.none": "kein Grund angegeben",
+    "roles.title": "🎭 Verfügbare Rollen (zum Reagieren in #{channel}):",
+    "roles.line": "{emoji} - **{name}**",
+    "bug.usage": "⚠️ Nutzung: !bug <Beschreibung des Fehlers>",
+    "bug.title": "🐛 Neuer Bug-Report",
+    "bug.thanks": "🐛 Danke! Dein Bug-Report wurde weitergeleitet.",
+    "bug.no_channel": "⚠️ Kanal #{channel} nicht gefunden.",
+    "announce.usage": "⚠️ Nutzung: !announce <Text>",
+    "announce.no_channel": "⚠️ Kanal #{channel} nicht gefunden.",
+    "announce.forbidden": "⚠️ Keine Berechtigung für #{channel}.",
+    "announce.message": "📢 {text}",
+    "announce.done": "✅ Angekündigt in {channel}.",
+    "warn.usage": "⚠️ Nutzung: !warn @user <Grund>",
+    "warn.log_title": "⚠️ Verwarnung",
+    "warn.log_text": "{target} wurde von {moderator} verwarnt.\n**Grund:** {reason}",
+    "warn.done": "⚠️ {target} wurde verwarnt. Grund: {reason}",
+    "purge.usage": "⚠️ Nutzung: !purge <Anzahl 1-100>",
+    "purge.forbidden": "⚠️ Keine Berechtigung zum Löschen in diesem Kanal.",
+    "slowmode.usage": "⚠️ Nutzung: !slowmode <Sekunden, 0 = aus>",
+    "slowmode.forbidden": "⚠️ Keine Berechtigung zum Ändern dieses Kanals.",
+    "slowmode.on": "🐢 Slow-Mode für {channel}: {seconds}s.",
+    "slowmode.off": "🐇 Slow-Mode für {channel} aus.",
+    "timeout.usage": "⚠️ Nutzung: !timeout @user <Minuten> [Grund]",
+    "timeout.forbidden": "⚠️ Keine Berechtigung für Timeout.",
+    "timeout.log_title": "⏱️ Manueller Timeout",
+    "timeout.log_text": "{target} wurde von {moderator} für {minutes}min stummgeschaltet.\n**Grund:** {reason}",
+    "timeout.done": "⏱️ {target} für {minutes}min stummgeschaltet. Grund: {reason}",
+    "ban.usage": "⚠️ Nutzung: !ban @user [Grund]",
+    "ban.forbidden": "⚠️ Keine Berechtigung zum Bannen.",
+    "ban.log_title": "🔨 Manueller Bann",
+    "ban.log_text": "{target} wurde von {moderator} gebannt.\n**Grund:** {reason}",
+    "ban.done": "🔨 {target} wurde gebannt. Grund: {reason}",
+    "unban.usage": "⚠️ Nutzung: !unban <User-ID>",
+    "unban.not_found": "⚠️ User nicht gefunden oder nicht gebannt.",
+    "unban.forbidden": "⚠️ Keine Berechtigung zum Entbannen.",
+    "unban.audit_reason": "Entbannt von {moderator}",
+    "unban.log_title": "🕊️ Entbannt",
+    "unban.log_text": "{target} wurde von {moderator} entbannt.",
+    "unban.done": "🕊️ {target} wurde entbannt.",
+    "setup.admin_only": "⚠️ !setup erfordert die Administrator-Berechtigung (nicht nur die Moderator-Rolle).",
+    "setup.confirm": "⚠️ **!setup** löscht ALLE Kanäle dieses Servers außer dem aktuellen und baut die komplette Struktur aus discord.json (Abschnitt \"setup\") neu auf. Das ist NICHT rückgängig zu machen!\nZum Bestätigen: `!setup confirm`",
+    "setup.missing": "⚠️ Kein \"setup\"-Abschnitt in discord.json gefunden.",
+    "setup.working": "⏳ Erstelle Server-Struktur mit Schreibschutz für neue User...",
+    "setup.done": "✅ Server-Setup erfolgreich abgeschlossen!",
+    "status.title": "📊 BugBot System-Statusbericht",
+    "status.uptime.name": "⏱️ Bot-Laufzeit (Uptime)",
+    "status.uptime.value": "`{hours}h {minutes}m`",
+    "status.stream.name": "🎥 Stream-Status",
+    "status.stream.value": "`{status}`",
+    "status.stream.live": "🟢 LIVE",
+    "status.stream.offline": "🔴 OFFLINE",
+    "status.bans.name": "❌ Blockierte Bots (Honey-Pot, diese Session)",
+    "status.bans.value": "`{count}` Accounts",
+    "status.cleaned.name": "🧹 Bereinigte Nachrichten (diese Session)",
+    "status.cleaned.value": "`{count}` Verstöße",
+    "honeypot.reason": "Honey-Pot Zugriff",
+    "honeypot.log_title": "❌ Auto-Bann (Honey-Pot)",
+    "honeypot.log_text": "User/Bot **{user}** ({user_id}) permanent entfernt.",
+    "violation.delete.title": "🧹 Nachricht gefiltert",
+    "violation.delete.text": "Nachricht von {author} gelöscht.\n**Grund:** {label}{detail}.",
+    "violation.detail": " (`{detail}`)",
+    "violation.timeout.title": "⏱️ Auto-Timeout",
+    "violation.timeout.text": "{author} wurde für {seconds}s stummgeschaltet.\n**Grund:** {label} (Verstoß #{count}).",
+    "levelup.message": "🎉 {user} hat **Level {level}** erreicht!",
+    "role.added.title": "🎭 Rolle zugewiesen",
+    "role.added.text": "Nutzer **{user}** hat sich die Rolle **{role}** abgeholt.",
+    "role.removed.title": "🎭 Rolle entfernt",
+    "role.removed.text": "Nutzer **{user}** hat die Rolle **{role}** abgewählt."
+  },
+  "rules": "📜 SERVER REGELN 📜\n\n**1. Remember the Human (Menschlichkeit):**\nHinter jedem Account sitzt ein echter Mensch. Respektloser Umgang, Beleidigungen, Drohungen, Hate Speech oder Belästigung jeglicher Art führen zum sofortigen Bann.\n\n**2. Angemessene Lesbarkeit (Kein Geschreie):**\nAchte auf eine verständliche Ausdrucksweise. Durchgehende GROSSSCHREIBUNG gilt im Netz als Schreien und ist zu unterlassen. Halte deine Texte präzise.\n\n**3. Spam- & Bot-Einschränkung:**\nDas Fluten von Kanälen (Spamming), Massen-Pings oder unbegründetes Markieren von Teammitgliedern ist verboten. Bot-Befehle gehören ausschließlich in den Kanal `#🤖-bot-befehle`.\n\n**4. Richtige Kanalnutzung (Thementreue):**\nNutze für deine Beiträge den thematisch passenden Bereich. Game-Dev-Fachgespräche gehören in die Entwickler-Kategorie, dein Smalltalk in den Hauptchat.\n\n**5. Altersbeschränkung & NSFW:**\nDieser Server ist aufgrund der Streaming- und Gamedev-Themen für Erwachsene (18+) deklariert. Nicht jugendfreie (NSFW) oder explizite Inhalte gehören ausnahmslos in dafür markierte Kanäle und niemals in den normalen Chat.\n\n**6. Urheberrecht & Fremdwerbung:**\nRespektiere geistiges Eigentum. Kopiere keine fremden Codes, Grafiken oder Assets ohne Erlaubnis oder Quellenangabe. Ungefragte Eigenwerbung für andere Server oder fremde Streams per Chat oder DM ist untersagt.\n\n**7. Anweisungen des Teams:**\nModeratoren und Admins sorgen für die Einhaltung der Netiquette. Ihren Anweisungen ist Folge zu leisten. Diskussionen über Mod-Entscheidungen werden privat per DM geklärt.\n\n*Es gelten die offiziellen Community-Richtlinien von Discord. Mit dem Bestätigen der Regeln oder der Rollenwahl erkennst du diese Bestimmungen an.*",
+  "commands": {
+    "!chef": "🍳 Chef's Adventure: Ein 2D Jump 'n' Run Plattformer von Wafobi! Begleite einen kleinen Koch auf der Suche nach entlaufenen Hühnern. 🔗 Wunschliste & Demo auf Steam: https://store.steampowered.com/app/2758910/Chefs_Adventure/?l=german"
+  },
+  "mod_commands": {},
+  "clip_channel": "🎬-clips",
+  "levels": {
+    "role_thresholds": {}
+  },
+  "moderation": {
+    "extra_banned_words": [],
+    "allowed_link_domains": [
+      "twitch.tv",
+      "steampowered.com",
+      "discord.gg",
+      "discord.com"
+    ],
+    "caps_min_length": 10,
+    "caps_ratio_threshold": 0.7,
+    "symbol_min_length": 8,
+    "symbol_ratio_threshold": 0.5,
+    "emote_spam_min_tokens": 6,
+    "emote_spam_min_repeats": 6,
+    "violation_window_minutes": 10,
+    "timeout_threshold": 3,
+    "timeout_duration_seconds": 60
+  },
+  "setup": {
+    "permission_profiles": {
+      "admin_only_write": {
+        "everyone": {
+          "read": true,
+          "send": false
+        },
+        "roles": {
+          "👑 Admin / Dev": {
+            "read": true,
+            "send": true
+          },
+          "🛡️ Moderator": {
+            "read": true,
+            "send": true
+          }
+        }
+      },
+      "members_write": {
+        "everyone": {
+          "read": true,
+          "send": false
+        },
+        "roles": {
+          "👥 Mitglied": {
+            "read": true,
+            "send": true
+          },
+          "👑 Admin / Dev": {
+            "read": true,
+            "send": true
+          },
+          "🛡️ Moderator": {
+            "read": true,
+            "send": true
+          }
+        }
+      },
+      "gamer_only": {
+        "everyone": {
+          "read": false
+        },
+        "roles": {
+          "🎮 Gamer": {
+            "read": true,
+            "send": true
+          },
+          "👑 Admin / Dev": {
+            "read": true,
+            "send": true
+          },
+          "🛡️ Moderator": {
+            "read": true,
+            "send": true
+          }
+        }
+      },
+      "team_only": {
+        "everyone": {
+          "read": false
+        },
+        "roles": {
+          "👑 Admin / Dev": {
+            "read": true,
+            "send": true
+          },
+          "🛡️ Moderator": {
+            "read": true,
+            "send": true
+          }
+        }
+      }
+    },
+    "categories": [
+      {
+        "name": "📌 Willkommen & Infos",
+        "permission_profile": "admin_only_write",
+        "channels": [
+          "📜-regeln",
+          "📢-ankündigungen",
+          "🎥-stream-live",
+          "🎭-rollen-auswahl"
+        ]
+      },
+      {
+        "name": "💬 Community & Gaming",
+        "permission_profile": "members_write",
+        "channels": [
+          "💬-hauptchat",
+          "🤖-bot-befehle",
+          "🎨-kreativ-und-memes",
+          "🎬-clips"
+        ]
+      },
+      {
+        "name": "🎮 Spiele-Ecke",
+        "permission_profile": "gamer_only",
+        "channels": [
+          "🕹️-current-quest",
+          "⚔️-world-of-warcraft",
+          "📜-elder-scrolls"
+        ]
+      },
+      {
+        "name": "🛠️ Game Development",
+        "permission_profile": "members_write",
+        "channels": [
+          {
+            "name": "📢-dev-logs",
+            "permission_profile": "admin_only_write"
+          },
+          "💡-ideen-feedback",
+          "🐛-bug-reports",
+          "💻-coding-und-design"
+        ]
+      },
+      {
+        "name": "🛡️ Intern",
+        "permission_profile": "team_only",
+        "channels": [
+          "🤫-mod-intern"
+        ]
+      }
+    ],
+    "roles": [
+      {
+        "name": "👑 Admin / Dev",
+        "color": "#E74C3C"
+      },
+      {
+        "name": "🛡️ Moderator",
+        "color": "#2ECC71"
+      },
+      {
+        "name": "🍇 Twitch Sub",
+        "color": "#9B59B6"
+      },
+      {
+        "name": "🧙‍♂️ Code-Magier",
+        "color": "#3498DB"
+      },
+      {
+        "name": "🎮 Gamer",
+        "color": "#F1C40F"
+      },
+      {
+        "name": "🧪 Testsubjekt",
+        "color": "#E67E22"
+      },
+      {
+        "name": "👥 Mitglied",
+        "color": "#95A5A6"
+      }
+    ],
+    "rules_channel": "📜-regeln",
+    "roles_channel": "🎭-rollen-auswahl",
+    "role_selection_message": "**🎭 WÄHLE DEINE ROLLEN 🎭**\n\nKlicke auf die Emojis unter dieser Nachricht, um dir selbst Rollen zuzuweisen. Die Gamer-Rolle schaltet außerdem die Spiele-Kategorie frei!\n\n🎮 - **Gamer** (Schaltet die 🎮 Spiele-Ecke frei)\n🧪 - **Testsubjekt** (Erhalte Test-Benachrichtigungen)\n💻 - **Code-Magier** (Für Entwickler-Austausch)"
+  }
+}
