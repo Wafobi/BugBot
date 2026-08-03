@@ -1,0 +1,8 @@
+.git
+.claude
+__pycache__
+*.pyc
+.env
+# Die DB kommt per Bind-Mount vom Host (siehe bugbot.container); eine ins Image kopierte
+# Kopie wäre nur totes Gewicht, das mit jedem Build wächst.
+bugbot.db

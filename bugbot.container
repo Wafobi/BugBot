@@ -1,0 +1,52 @@
+[Unit]
+Description=BugBot - Twitch & Discord moderation/automation bot
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=localhost/bugbot:latest
+ContainerName=bugbot
+# Ohne das mappt rootless Podman den aufrufenden Host-Benutzer auf root im Container, und
+# der Bot (der laut Dockerfile als uid 1000 läuft) landet auf einer subuid, der die vom
+# Host gemountete bugbot.db nicht gehört - SQLite meldet dann "readonly database" und die
+# Features, die eine Ablage brauchen, fallen beim Start aus. Das hier bildet den Host-
+# Benutzer auf uid 1000 im Container ab, also auf genau den Benutzer 'bugbot' aus dem
+# Dockerfile - unabhängig davon, welche uid er auf dem Host selbst hat.
+UserNS=keep-id:uid=1000,gid=1000
+# Replace /path/to/bugbot below with the absolute path of your clone of this repo.
+Volume=/path/to/bugbot/.env:/app/.env:Z
+Volume=/path/to/bugbot/platforms/discord/discord.json:/app/platforms/discord/discord.json:Z
+Volume=/path/to/bugbot/platforms/twitch/twitch.json:/app/platforms/twitch/twitch.json:Z
+Volume=/path/to/bugbot/platforms/discord/features/levels/levels.json:/app/platforms/discord/features/levels/levels.json:Z
+Volume=/path/to/bugbot/platforms/obs/obs.json:/app/platforms/obs/obs.json:Z
+# Die Konfiguration der neutralen Features - ohne diese Mounts wäre im Container die im
+# Image eingebackene Fassung wirksam, und eine Änderung auf dem Host bliebe folgenlos.
+Volume=/path/to/bugbot/features/moderation/moderation.json:/app/features/moderation/moderation.json:Z
+Volume=/path/to/bugbot/features/stats/stats.json:/app/features/stats/stats.json:Z
+Volume=/path/to/bugbot/features/chat_log/chat_log.json:/app/features/chat_log/chat_log.json:Z
+Volume=/path/to/bugbot/features/sql_db/sql_db.json:/app/features/sql_db/sql_db.json:Z
+Volume=/path/to/bugbot/bugbot.db:/app/bugbot.db:Z
+# Der einzige eingehende Port: hier wählt sich das OBS-Relais vom Rechner des Streamers ein
+# (siehe platforms/obs/). Muss zum OBS_BRIDGE_PORT aus der .env passen. Wer OBS nicht
+# anbindet, lässt die Zeile weg.
+#
+# Absichtlich an 127.0.0.1 gebunden und nicht an alle Adressen: der Weg von außen ist ein
+# SSH-Tunnel vom OBS-Rechner (ssh -L 4456:127.0.0.1:4456 ...), nicht ein offener Port. Damit
+# steht im Internet nichts, was eine laufende Sendung fernsteuern könnte, und die Strecke ist
+# zusätzlich verschlüsselt - obs-websocket selbst spricht unverschlüsseltes ws://.
+#
+# Der Bot *im* Container lauscht trotzdem auf 0.0.0.0 (OBS_BRIDGE_BIND) - er hat seinen
+# eigenen Netzwerk-Namensraum, und die Portweiterleitung von Podman kommt dort nicht über
+# dessen Loopback an. Die Einschränkung auf Loopback gehört deshalb hierhin, auf die
+# Host-Seite der Weiterleitung.
+PublishPort=127.0.0.1:4456:4456
+
+[Service]
+# always statt on-failure: der Bot soll auch dann wieder hochkommen, wenn der Prozess
+# sauber mit Exit-Code 0 endet (z.B. wenn discord.py die Verbindung endgültig aufgibt und
+# main() regulär durchläuft). Bei "systemctl stop" greift die Policy nicht.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
