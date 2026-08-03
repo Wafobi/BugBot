@@ -1,0 +1,7 @@
+{
+  "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py).",
+  "_platforms": "Von welchen Plattformen der Wortlaut mitgeschrieben wird. Leer = von allen, die Nachrichten melden. Einschränken geht mit einer Fähigkeit - [\"stream\"] ist \"nur der Chat der Plattform, deren Stream aufgezeichnet wird\", [\"chat\"] \"nur die mit einem eigenen Chat\" - oder mit einem Plattformnamen wie \"twitch\". Die Fähigkeit ist die bessere Angabe: sie stimmt auch dann noch, wenn der Dienst wechselt, und sie zeigt nicht still ins Leere, wenn die genannte Plattform gar nicht geladen ist.",
+  "platforms": [],
+  "_live_only": "Mitgeschrieben wird nur während eines Streams; das ist keine Einstellung, sondern das Tabellenlayout (chat_log.stream_session_id ist NOT NULL). Wer alles mitschneiden will, braucht dafür eine Schemaänderung.",
+  "recent_limit": 200
+}

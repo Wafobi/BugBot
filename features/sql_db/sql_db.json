@@ -1,0 +1,5 @@
+{
+  "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py) - außer db_path, der beim Start einmal gelesen wird. Vorrang: BUGBOT_DB aus der .env, dann dieser Wert, dann bugbot.db im Projektordner.",
+
+  "db_path": ""
+}

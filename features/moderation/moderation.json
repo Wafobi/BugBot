@@ -1,0 +1,31 @@
+{
+  "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Das hier gilt für alle Plattformen; einzelne Werte lassen sich pro Plattform im Abschnitt 'moderation' von twitch.json/discord.json überschreiben - so kann Twitch strenger sein als Discord.",
+
+  "settings": {
+    "allowed_link_domains": ["twitch.tv", "steampowered.com", "discord.gg", "discord.com"],
+    "caps_min_length": 10,
+    "caps_ratio_threshold": 0.7,
+    "symbol_min_length": 8,
+    "symbol_ratio_threshold": 0.5,
+    "emote_spam_min_tokens": 6,
+    "emote_spam_min_repeats": 6,
+    "violation_window_minutes": 10,
+    "timeout_threshold": 3,
+    "timeout_duration_seconds": 60
+  },
+
+  "banned_words": {
+    "_comment": "use_builtin_list schaltet die mitgelieferte DE/EN-Liste aus features/moderation/filters.py an oder aus. 'extra' kommt dazu, 'remove' fällt heraus - letzteres, weil in der Basisliste Wörter stehen, die in manchen Communities völlig normal sind. Ist am Ende kein einziges Wort übrig, greift der Bannwort-Filter gar nicht (statt auf alles anzuschlagen).",
+    "use_builtin_list": true,
+    "extra": [],
+    "remove": []
+  },
+
+  "texts": {
+    "reason.banned_word": "unerlaubtes Wort",
+    "reason.link_spam": "nicht erlaubter Link",
+    "reason.excessive_caps": "zu viele Großbuchstaben",
+    "reason.symbol_spam": "Symbol-Spam",
+    "reason.emote_spam": "Wort-/Emote-Spam"
+  }
+}
