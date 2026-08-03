@@ -1,0 +1,79 @@
+{
+  "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Die Quellennamen müssen genau so in OBS heißen; wo sie liegen (Szene oder Gruppe), sucht der Bot selbst.",
+  "ad_break": {
+    "_comment": "Twitch meldet den Beginn einer Werbepause, OBS blendet diese Quelle für deren Dauer ein. Leerer source-Name = aus.",
+    "source": "ads_panel",
+    "extra_seconds": 0
+  },
+  "announce": {
+    "_comment": "Ankündigungen (Bug-Report, Clip, Streamstart, ...) als Text im Bild. kinds ist absichtlich leer - eintragen, was im Stream erscheinen soll: stream.online, stream.offline, bug.report, clip.created, status.",
+    "kinds": [],
+    "text_source": "bugbot_announce",
+    "hide_after_seconds": 20,
+    "max_fields": 2
+  },
+  "raw_events": true,
+  "hide_on_connect": true,
+  "timings": {
+    "_comment": "Sekunden. request_timeout: wie lange auf die Antwort einer OBS-Anfrage gewartet wird; handshake_timeout: wie lange die Anmeldung eines neu eingewählten Relais dauern darf.",
+    "request_timeout": 10,
+    "handshake_timeout": 20
+  },
+  "command_names": {
+    "_comment": "Befehle umbenennen, aliasen oder abschalten: \"!scene\": [\"!szene\", \"!scene\"] | \"!obssource\": false"
+  },
+  "colors": {
+    "status": "#2ECC71",
+    "offline": "#E74C3C"
+  },
+  "texts": {
+    "help.obs": "Zustand von OBS: Szene, Stream, Aufnahme, Leistung",
+    "help.scene": "Szene wechseln (!scene <Name>) oder Szenen auflisten",
+    "help.rec": "Aufnahme steuern: !rec start|stop|pause|resume",
+    "help.replay": "Replay-Puffer speichern (muss in OBS laufen)",
+    "help.source": "Quelle ein-/ausblenden: !obssource <Name> on|off",
+    "offline": "🎛️ OBS ist gerade nicht verbunden (Relais auf dem OBS-PC läuft nicht?).",
+    "status.offline.title": "🎛️ OBS nicht verbunden",
+    "status.offline.text": "Das Relais hat sich nicht eingewählt - läuft obs_bridge.py auf dem OBS-PC? (Der Bot wartet auf Port {port}.)",
+    "status.title": "🎛️ OBS-Status",
+    "status.scene": "Szene: {scene}",
+    "status.failed": "⚠️ OBS antwortet nicht: {error}",
+    "status.stream.name": "Stream",
+    "status.stream.live": "🟢 seit {duration} (~{kbit} kbit/s)",
+    "status.stream.off": "🔴 aus",
+    "status.record.name": "Aufnahme",
+    "status.record.running": "🔴 läuft",
+    "status.record.paused": "⏸️ pausiert",
+    "status.record.value": "{state} seit {duration}",
+    "status.record.off": "⏹️ aus",
+    "status.dropped.name": "Verworfene Frames",
+    "status.dropped.value": "{dropped}{share}",
+    "status.dropped.share": " ({percent}%)",
+    "status.performance.name": "Leistung",
+    "status.performance.value": "{fps} FPS, CPU {cpu}%, {skipped} Render-Aussetzer",
+    "status.scenes.name": "Szenen",
+    "status.bridge.name": "Relais",
+    "status.bridge.value": "{peer} (obs-websocket {version})",
+    "scene.current": "🎬 Aktuell: {scene} · Szenen: {scenes}",
+    "scene.switched": "🎬 Szene gewechselt: {scene}",
+    "scene.not_found": "⚠️ Keine Szene passt zu '{wanted}'. Vorhanden: {scenes}",
+    "scene.failed": "⚠️ Szenenwechsel fehlgeschlagen: {error}",
+    "scene.none": "keine",
+    "rec.started": "🔴 Aufnahme gestartet.",
+    "rec.stopped": "⏹️ Aufnahme gestoppt.",
+    "rec.paused": "⏸️ Aufnahme pausiert.",
+    "rec.resumed": "▶️ Aufnahme fortgesetzt.",
+    "rec.file": "{reply} Datei: {path}",
+    "rec.status_failed": "⚠️ Aufnahmestatus nicht abrufbar: {error}",
+    "rec.idle": "⏹️ Es läuft keine Aufnahme. (!rec start|stop|pause|resume)",
+    "rec.running": "{state} seit {duration}. (!rec start|stop|pause|resume)",
+    "rec.failed": "⚠️ {action}: {error}",
+    "replay.saved": "💾 Replay gespeichert.",
+    "replay.failed": "⚠️ Replay konnte nicht gespeichert werden: {error}",
+    "source.usage": "⚠️ Nutzung: !obssource <Quellenname> on|off",
+    "source.missing": "⚠️ Quelle '{source}' liegt in keiner Szene.",
+    "source.shown": "👁️ eingeblendet",
+    "source.hidden": "🙈 ausgeblendet",
+    "source.done": "{state}: {source} ({count}x)"
+  }
+}
