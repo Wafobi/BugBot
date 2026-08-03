@@ -1,0 +1,9 @@
+.env
+bugbot.db
+__pycache__/
+*.pyc
+
+# Werkzeuge, nicht Projekt (.dockerignore hält sie ebenso heraus)
+.claude/
+.venv/
+venv/
