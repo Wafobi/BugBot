@@ -7,6 +7,11 @@ package, named after it, sitting next to the code that reads it — that's the w
 All of them are re-read when their mtime changes. Editing and saving is enough: no restart, no
 rebuild, no reload command.
 
+> With the containerised deployment there is one way to edit into the void — see
+> [Editing a config that the container can't see](deployment.md#editing-in-place). If a change
+> seems to be ignored, that is the first thing to check, and `python3 check_config.py` on the
+> host checks it for you.
+
 ## The files
 
 | File | Belongs to | Holds |
@@ -27,25 +32,30 @@ They are ignored everywhere, including in `command_names`.
 
 ## How the layering works
 
-Three layers lie on top of each other, each beating the one below:
+Two layers lie on top of each other, the upper beating the lower:
 
 | Layer | What it is |
 |---|---|
 | `defaults` | what the code brings along — the few values a module can't work without |
-| **baseline** | the content at the first successful load, i.e. the file as shipped in the repo |
 | current file | whatever is in it now |
 
-The middle layer is why the texts don't have to exist twice. A feature that is almost entirely
-sentences would otherwise carry them once in Python and once in JSON — two copies that drift
-apart without anyone noticing. The shipped file is the one source, and someone who later deletes
-a key or breaks the syntax still gets the last good state instead of a hole.
+What the file says is what applies. Delete a static command and it is gone; delete a threshold
+and the value from the code applies again. That is the point of the whole mechanism — a change
+you can't take back without restarting the bot isn't a runtime change.
 
 Nested dicts are merged, not replaced: setting *one* threshold doesn't cost you the others.
 Lists are treated as a single value — a list in the file replaces the default list completely,
 because otherwise you could never remove anything.
 
-**You cannot lock yourself out.** Delete a key, break the JSON, remove the file entirely: the
-last good state or the shipped default still applies, and the bot says so once in the log.
+There is a third layer, but only for **texts**, and only as a fallback string: the content at
+the first successful load, i.e. the file as shipped in the repo. It is why the texts don't have
+to exist twice — a feature that is almost entirely sentences would otherwise carry them once in
+Python and once in JSON, two copies that drift apart without anyone noticing. Delete a text key
+and the shipped sentence still comes out. For anything other than texts the same underlay would
+just be a way of keeping deleted things alive, which is why it isn't there.
+
+**You cannot lock yourself out.** Break the JSON or remove the file entirely and the last good
+state applies, with one line in the log saying so.
 
 ## Texts
 

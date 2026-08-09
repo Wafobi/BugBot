@@ -48,7 +48,7 @@ the database are mounted over it from your clone. That one difference decides ev
 
 | You changed | Run | Why |
 |---|---|---|
-| any `*.json` | **nothing** | `LiveConfig` re-reads the file whenever its mtime changes — texts, names, timings and command names included |
+| any `*.json` | **nothing** — but edit *in place*, see below | `LiveConfig` re-reads the file whenever its mtime changes — texts, names, timings and command names included |
 | `.env` | `systemctl --user restart bugbot` | mounted, but only read once at process start |
 | any `.py`, `requirements.txt`, `Dockerfile` | `./update.sh` | baked into the image — needs a rebuild |
 | `bugbot.container` | `./update.sh` | the unit systemd reads is a *copy* in `~/.config/containers/systemd/` |
@@ -60,6 +60,31 @@ the database are mounted over it from your clone. That one difference decides ev
 > rebuilt the image.
 >
 > **After pulling, always `./update.sh`.**
+
+<a id="editing-in-place"></a>
+> ### The other one that bites
+>
+> A bind mount of a **file** hangs off that file's inode, not its name. Overwriting the file is
+> fine — the container is looking at the same inode and sees every byte you write. *Replacing*
+> it is not: you get a new file under the old name, and the mount keeps pointing at the old one,
+> which nobody edits any more. From then on the container sees **no** change, not this one and
+> not any later one, no matter how often you edit or how long you wait.
+>
+> Plenty of ordinary things replace rather than overwrite: `vim` with the default `backupcopy`,
+> VS Code (including Remote-SSH), `sed -i`, `mv`, and every `git pull` that touches the file.
+> Nothing warns you — the file on the host looks exactly right, and so does the one in the
+> container.
+>
+> ```bash
+> python3 check_config.py    # on the host, with the service running
+> ```
+>
+> compares both sides and names any config the container has lost track of. The fix is always
+> `systemctl --user restart bugbot.service` — the mount is re-resolved at container start.
+>
+> To edit without tripping it: `nano` is safe as shipped, `vim` needs `:set backupcopy=yes`, and
+> `cat > file` / `cp file.new file` overwrite in place. After a `git pull` you run `./update.sh`
+> anyway, which restarts and therefore re-resolves everything.
 
 `update.sh` ends with the restart, so you never need both. It is a strict superset of
 `systemctl --user restart bugbot`, which is worth keeping only as the quick path when you know

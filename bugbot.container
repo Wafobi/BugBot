@@ -14,6 +14,13 @@ ContainerName=bugbot
 # Dockerfile - unabhängig davon, welche uid er auf dem Host selbst hat.
 UserNS=keep-id:uid=1000,gid=1000
 # Replace /path/to/bugbot below with the absolute path of your clone of this repo.
+#
+# Jede dieser Dateien ist einzeln gemountet, und ein Bind-Mount auf eine Datei hängt an deren
+# Inode, nicht am Namen. Überschreiben greift sofort (dafür ist es da); *Ersetzen* dagegen -
+# vim mit Default-backupcopy, VS Code, sed -i, mv, git pull - lässt hier die alte Datei
+# stehen, und der Container sieht ab da keine Änderung mehr. `python3 check_config.py` auf
+# dem Host meldet das, `systemctl --user restart bugbot.service` behebt es. Siehe
+# docs/deployment.md#editing-in-place.
 Volume=/path/to/bugbot/.env:/app/.env:Z
 Volume=/path/to/bugbot/platforms/discord/discord.json:/app/platforms/discord/discord.json:Z
 Volume=/path/to/bugbot/platforms/twitch/twitch.json:/app/platforms/twitch/twitch.json:Z

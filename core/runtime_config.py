@@ -60,20 +60,23 @@ class LiveConfig:
     zuletzt bekannte gute Stand (bzw. die Defaults beim allerersten Laden) erhalten,
     statt den Bot abstürzen zu lassen.
 
-    Drei Lagen liegen übereinander, jede schlägt die darunter:
+    Zwei Lagen liegen übereinander, die obere schlägt die untere:
 
         `defaults`     was der Code mitbringt. Für die wenigen Werte, ohne die ein Modul
                        nicht arbeiten kann - damit es auch ohne die Datei läuft.
-        Erstfassung    der Inhalt beim ersten erfolgreichen Laden, also die mitgelieferte
-                       Datei aus dem Repository. Sie ist der eigentliche Default-Stand.
         aktuelle Datei was jetzt darin steht.
 
-    Die mittlere Lage gibt es, damit die Texte nicht zweimal existieren müssen: ein
-    Feature, das fast nur aus Sätzen besteht, hätte sie sonst einmal in Python und einmal
-    in JSON - zwei Fassungen, die auseinanderlaufen, ohne dass es jemandem auffällt. So
-    ist die ausgelieferte Datei die eine Quelle, und wer später einen Schlüssel löscht
-    oder die Datei kaputtschreibt, bekommt trotzdem noch den Stand von vorhin statt eine
-    Lücke."""
+    Was in der Datei steht, ist damit auch das, was gilt: ein gelöschter Befehl ist weg,
+    ein gelöschter Schwellenwert fällt auf den Wert aus dem Code zurück. Genau daran
+    hängt der Sinn der ganzen Klasse - eine Änderung, die man nicht rückgängig machen
+    kann, ohne den Bot neu zu starten, ist keine Laufzeit-Änderung.
+
+    Eine dritte Lage gibt es trotzdem, aber nur für Texte und nur als Rückfalltext:
+    `_baseline`, der Inhalt beim ersten erfolgreichen Laden (also die mitgelieferte Datei
+    aus dem Repository). Sie hält text() am Leben, wenn ein Schlüssel fehlt - siehe dort.
+    Texte sind der eine Fall, in dem das richtig ist: ein Feature, das fast nur aus Sätzen
+    besteht, müsste sie sonst zweimal führen, einmal in Python und einmal in JSON. Für
+    alles andere wäre dieselbe Unterlage nur ein Weg, Gelöschtes am Leben zu halten."""
 
     def __init__(self, path, defaults=None):
         self._path = Path(path)
@@ -111,7 +114,10 @@ class LiveConfig:
             self._baseline = data
         self._mtime = mtime
         self._file_data = data
-        self._data = deep_merge(deep_merge(self._defaults, self._baseline), data)
+        # Bewusst ohne _baseline dazwischen: die Datei ist die Wahrheit, sonst ließe sich
+        # nichts löschen, was beim Start einmal dringestanden hat. Fehlende Texte fängt
+        # text() eigens über _baseline ab - der einzige Ort, an dem das gewollt ist.
+        self._data = deep_merge(self._defaults, data)
         self._complained.clear()
         self.version += 1
 

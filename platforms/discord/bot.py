@@ -28,7 +28,7 @@ TOTAL_MOD_ACTIONS = defaultdict(int)
 # Alles Einstellbare - Rollen- und Kanalnamen, Farben, Texte, Befehlsnamen, Regeln,
 # statische Befehle, Moderations-Schwellen - kommt aus discord.json und wird bei Änderung
 # neu gelesen (siehe core/runtime_config.py). Im Code steht nichts davon noch einmal: die
-# mitgelieferte Datei ist der Default-Stand.
+# mitgelieferte Datei ist der Default-Stand, auf den gelöschte Texte zurückfallen.
 #
 # Namen sind hier keine Kosmetik. Der Bot findet Rollen und Kanäle über genau diese
 # Zeichenketten - stimmt der Moderator-Rollenname nicht, ist auf diesem Server niemand

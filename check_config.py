@@ -14,7 +14,8 @@ Geprüft wird:
   * hat jeder text("...")-Aufruf im Code einen Schlüssel in der zugehörigen Datei,
   * passen die {platzhalter} eines Textes zu dem, was der Aufrufer mitgibt,
   * gibt es Texte, die niemand mehr benutzt,
-  * nennt "command_names" nur Befehle, die es gibt, und ist danach keiner doppelt.
+  * nennt "command_names" nur Befehle, die es gibt, und ist danach keiner doppelt,
+  * sieht der laufende Container dieselben Dateien - oder editiert man ins Leere.
 
 Die Zuordnung Code -> Datei folgt der Konvention aus core/runtime_config.py: eine JSON je
 Paket, benannt wie das Paket. Ausnahme sind die plattformeigenen Features, die sich die
@@ -28,6 +29,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+
+# Muss zu ContainerName in bugbot.container passen - siehe check_live_mounts.
+CONTAINER = "bugbot"
 
 # Welche Konfigurationsdatei zu welchem Modul gehört. Der erste passende Präfix gewinnt,
 # deshalb stehen die spezielleren Pfade oben.
@@ -220,10 +224,71 @@ def check_commands():
             seen[name] = path.name
 
 
+def check_live_mounts():
+    """Sieht der laufende Bot überhaupt die Dateien, die hier liegen?
+
+    Im Container ist jede JSON einzeln hereingemountet (siehe bugbot.container), und ein
+    Bind-Mount auf eine *Datei* hängt an deren Inode, nicht an ihrem Namen. Wer sie
+    ersetzt statt sie zu überschreiben - `vim` mit dem voreingestellten backupcopy, VS
+    Code, `sed -i`, `mv`, jedes `git pull`, das die Datei anfasst -, bekommt eine neue
+    Datei unter dem alten Namen. Der Container behält die alte und sieht ab da *keine*
+    Änderung mehr, auch keine spätere: die Hot-Reload-Prüfung in core/runtime_config.py
+    schaut auf eine Datei, die niemand mehr bearbeitet.
+
+    Von innen ist das nicht zu erkennen - die Datei ist ja da und wirkt unverändert.
+    Deshalb steht die Prüfung hier, auf der Host-Seite, wo sich beide Stände vergleichen
+    lassen. Ohne Podman oder ohne laufenden Container ist einfach nichts zu prüfen."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("podman"):
+        return
+    paths = [ROOT / config for _, config in CONFIG_FOR]
+    remote = {f"/app/{p.relative_to(ROOT).as_posix()}": p for p in paths if p.exists()}
+    if not remote:
+        return
+    try:
+        result = subprocess.run(
+            ["podman", "exec", CONTAINER, "stat", "-c", "%n %i %Y", *remote],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        notes.append(f"Mounts des laufenden Containers ungeprüft: {e}")
+        return
+    if result.returncode != 0 and not result.stdout.strip():
+        # Kein Container namens 'bugbot' - hier läuft der Bot nicht im Container, oder er
+        # läuft gerade nicht. Beides ist kein Problem dieser Konfiguration.
+        return
+
+    for line in result.stdout.splitlines():
+        name, _, rest = line.partition(" ")
+        path = remote.get(name)
+        if path is None:
+            continue
+        try:
+            inode, mtime = (int(float(v)) for v in rest.split())
+        except ValueError:
+            continue
+        host = path.stat()
+        if inode != host.st_ino:
+            problems.append(
+                f"{path.relative_to(ROOT)}: der laufende Container sieht eine andere Datei "
+                f"als diese hier (Inode {inode} statt {host.st_ino}). Etwas hat sie ersetzt "
+                f"statt sie zu überschreiben (Editor, `sed -i`, `git pull`); seitdem greift "
+                f"keine Änderung mehr. Behebt: systemctl --user restart bugbot.service"
+            )
+        elif mtime != int(host.st_mtime):
+            problems.append(
+                f"{path.relative_to(ROOT)}: Container und Host sind sich über den Stand der "
+                f"Datei nicht einig (mtime {mtime} statt {int(host.st_mtime)})"
+            )
+
+
 def main():
     used = check_texts()
     check_unused(used)
     check_commands()
+    check_live_mounts()
 
     for note in notes:
         print(f"ℹ️ {note}")

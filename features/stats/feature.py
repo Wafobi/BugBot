@@ -30,9 +30,9 @@ from core import events, feature as feature_api, runtime_config
 from .store import HIGHSCORE_METRICS, StatsStore
 
 # Sämtliche Beschriftungen, Sätze und Farben dieses Features stehen in stats.json - hier
-# nicht noch einmal. Die mitgelieferte Datei ist der Default-Stand (siehe
-# core/runtime_config.py: die Erstfassung bleibt als Unterlage erhalten, auch wenn jemand
-# später einen Schlüssel löscht).
+# nicht noch einmal. Die mitgelieferte Datei ist der Default-Stand: ein gelöschter Text
+# fällt auf ihre Fassung zurück (siehe core/runtime_config.py, text()), alles andere auf
+# den Default am Aufrufer.
 
 
 class StatsFeature(feature_api.Feature):
