@@ -30,6 +30,14 @@ The two checkers answer different questions and are worth running in that order:
 `check_credentials.py` tests the `.env` against the actual services (token valid? scopes
 complete? bot a moderator? intents on?), `check_config.py` tests the JSON against the code.
 
+Afterwards, `chatlog.py` is the way back into what was said:
+
+```bash
+python3 chatlog.py                        # which streams were recorded
+python3 chatlog.py 7                      # read the chat of stream #7
+python3 chatlog.py --alle --html          # the whole archive as pages to browse
+```
+
 Full walkthroughs: [Twitch](docs/twitch.md#tokens) · [Discord](docs/discord.md#setting-up-the-app)
 · [OBS](docs/obs.md#setup) · [Deployment](docs/deployment.md)
 
