@@ -128,24 +128,72 @@ class VariablesFeature(feature_api.Feature):
         self._apply_locale()
 
         values = {}
-        for key, value in self.config.section("variables").items():
-            if key in wanted and not key.startswith("_"):
-                values[key] = value
-
-        namespace = {**values, **context}
-        for key, code in self.config.section("python").items():
-            if key not in wanted or key.startswith("_"):
+        for name in wanted:
+            if name in context:
                 continue
-            value = await self._evaluate(key, code, namespace)
+            value = await self._value(name, context, values, set())
             if value is not None:
-                values[key] = value
+                values[name] = value
 
         values.update(context)
         return values
 
+    async def _value(self, name, context, values, resolving):
+        """Der Wert einer einzelnen Variablen, mit allem, was sie ihrerseits braucht.
+
+        Variablen dürfen Variablen benutzen - anders wäre es eine willkürliche Grenze:
+        wer {steam} definiert hat, will es auch in {chef} schreiben können, statt die URL
+        ein zweites Mal hinzuschreiben und beim nächsten Mal eine der beiden zu vergessen.
+        Deshalb wird hier nicht stur eine Liste durchgegangen, sondern von der gefragten
+        Variablen aus rückwärts aufgelöst, so tief wie nötig.
+
+        `resolving` sind die Variablen, die auf dem Weg hierher schon angefangen wurden.
+        Steht die gefragte selbst darin, hat sich jemand im Kreis definiert; das endete
+        ohne diese Prüfung in einer Endlosschleife, also mit einem stehenden Bot statt
+        einer Fehlermeldung."""
+        if name in context:
+            return context[name]
+        if name in values:
+            return values[name]
+
+        static = self.config.section("variables")
+        code = self.config.section("python")
+        if name.startswith("_") or (name not in static and name not in code):
+            return None
+
+        if name in resolving:
+            self.config.complain(
+                f"cycle:{name}",
+                f"Variable '{name}' benutzt sich am Ende selbst "
+                f"({' -> '.join([*resolving, name])}) - der Platzhalter bleibt stehen",
+            )
+            return None
+        resolving = resolving | {name}
+
+        if name in static:
+            value = await self._expand(name, str(static[name]), context, values, resolving)
+        else:
+            value = await self._evaluate(name, code[name], context, values, resolving)
+        if value is not None:
+            values[name] = value
+        return value
+
+    async def _expand(self, name, text, context, values, resolving):
+        """Ein fester Text aus "variables", dessen eigene {platzhalter} gefüllt sind.
+
+        Ohne diesen Schritt käme ein {steam} in einem festen Text wörtlich im Chat an -
+        lautlos und mit einer Klammer mitten im Satz, denn format() ersetzt nur einmal und
+        nicht, was dabei herauskommt."""
+        inner = {}
+        for dependency in runtime_config.placeholders(text):
+            value = await self._value(dependency, context, values, resolving)
+            if value is not None:
+                inner[dependency] = value
+        return self.config.render(text, **{**context, **inner})
+
     # --- Python-Ausdrücke ---------------------------------------------------------------
 
-    async def _evaluate(self, key, code, namespace):
+    async def _evaluate(self, key, code, context, values, resolving):
         """Wertet einen Ausdruck aus variables.json aus. None heißt "hat nicht geklappt";
         der Aufrufer lässt den Platzhalter dann stehen, statt Unsinn zu posten.
 
@@ -173,7 +221,17 @@ class VariablesFeature(feature_api.Feature):
             self.config.complain(f"python:{key}", f"Variable '{key}': {e.msg} - der Ausdruck bleibt ungenutzt")
             return None
 
-        environment = {**_SAFE_NAMES, **namespace, "now": self.now()}
+        # Welche anderen Variablen der Ausdruck benutzt, sagt er selbst: co_names sind die
+        # Namen, die er nachschlägt. Nur die werden aufgelöst - so kostet `steam + '?l=de'`
+        # genau die eine Variable und nicht die ganze Datei, und ein Ausdruck, der gar
+        # keine benutzt, löst gar nichts aus.
+        namespace = {}
+        for dependency in compiled.co_names:
+            value = await self._value(dependency, context, values, resolving)
+            if value is not None:
+                namespace[dependency] = value
+
+        environment = {**_SAFE_NAMES, **namespace, **context, "now": self.now()}
         try:
             value = await asyncio.wait_for(
                 asyncio.get_running_loop().run_in_executor(None, lambda: eval(compiled, environment)),

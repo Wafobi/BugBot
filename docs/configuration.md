@@ -136,6 +136,22 @@ An expression has `now` (in your timezone), `datetime`, `date`, `timedelta`, `Zo
 no `=`. Only variables the command actually mentions are evaluated, so an expensive one costs
 nothing until something uses it.
 
+**Variables may use variables**, in both directions and as deep as you like — so a URL you need
+in three places is written once:
+
+```json
+"variables": {
+  "steam": "https://store.steampowered.com/app/2758910/",
+  "chef": "Chef's Adventure — {steam}"
+},
+"python": { "steam_de": "steam + '?l=german'" }
+```
+
+A text under `variables` gets its own `{placeholders}` filled before it is inserted; an
+expression gets exactly the variables it names, resolved first. Define two that need each other
+and the cycle is reported by name (`a -> b -> a`) and the placeholder left standing — the one
+mistake here that would otherwise be a hanging bot rather than a log line.
+
 If an expression fails, takes too long or names something unknown, that placeholder alone stays
 as `{name}` in the text, the rest of the sentence is still filled, and the reason is logged once.
 A typo costs you a word, never the reply.
