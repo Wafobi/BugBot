@@ -53,6 +53,20 @@ def placeholders(template):
     return {name for _, name, _, _ in Formatter().parse(template) if name}
 
 
+class _Unfilled(dict):
+    """Ein Wörterbuch für format_map, das einen unbekannten Platzhalter unverändert
+    stehen lässt, statt eine KeyError zu werfen - und sich merkt, welche das waren, damit
+    der Aufrufer es melden kann. Siehe LiveConfig.render."""
+
+    def __init__(self, values):
+        super().__init__(values)
+        self.missing = set()
+
+    def __missing__(self, key):
+        self.missing.add(key)
+        return "{" + key + "}"
+
+
 class LiveConfig:
     """Lädt eine JSON-Datei und prüft bei jedem Zugriff per mtime, ob sie sich geändert
     hat - kein Polling-Task nötig, ein stat()-Aufruf ist billig genug, um ihn pro
@@ -154,17 +168,17 @@ class LiveConfig:
         if template is None:
             template = fallback
         if template is None:
-            self._complain(key, f"kein Text für '{key}' hinterlegt")
+            self.complain(key, f"kein Text für '{key}' hinterlegt")
             return key
         if not isinstance(template, str):
-            self._complain(key, f"Text '{key}' ist kein Text, sondern {type(template).__name__}")
+            self.complain(key, f"Text '{key}' ist kein Text, sondern {type(template).__name__}")
             template = fallback if isinstance(fallback, str) else key
 
         try:
             return template.format(**values)
         except (KeyError, IndexError, ValueError) as e:
             unknown = ", ".join(sorted(placeholders(template) - set(values))) or "?"
-            self._complain(key, f"Text '{key}' benutzt unbekannte Platzhalter ({unknown}) - {e}")
+            self.complain(key, f"Text '{key}' benutzt unbekannte Platzhalter ({unknown}) - {e}")
 
         # Der Default kann es noch richtig machen, wenn nur die eigene Fassung kaputt ist.
         if isinstance(fallback, str) and fallback != template:
@@ -173,6 +187,43 @@ class LiveConfig:
             except (KeyError, IndexError, ValueError):
                 pass
         return template
+
+    # --- Statische Befehle --------------------------------------------------------------
+
+    def render(self, template, **values):
+        """Füllt die {platzhalter} eines statischen Befehls aus der JSON.
+
+        Getrennt von text() und bewusst mit anderer Quelle: text() füllt Vorlagen, deren
+        Werte der Code kennt - er ruft sie ja mit genau diesen Werten auf. Hier bestimmt
+        der Betreiber beides, Vorlage *und* Platzhalter, und wer sich vertippt, soll dafür
+        nicht die Antwort verlieren. Vorher stand an den Aufrufstellen ein blankes
+        .format(u=...): ein {zeit} statt {time} warf dort eine KeyError, die weit oben als
+        "Fehler bei der Verarbeitung" landete, und der Befehl blieb im Chat still.
+
+        Woher die Werte kommen, steht hier bewusst nicht - das weiß features/variables,
+        und die Plattform reicht sie herein. Diese Klasse formatiert nur.
+
+        Ein unbekannter Platzhalter kostet nur sich selbst: er bleibt als {name} stehen,
+        alles andere im Satz wird gefüllt. Das ist der Unterschied, der zählt, wenn das
+        Variablen-Feature abgeschaltet ist - "Es ist {time} Uhr, @jens" ist eine
+        halbwegs brauchbare Antwort, "Es ist {time} Uhr, @{u}" ist keine."""
+        unfilled = _Unfilled(values)
+        try:
+            filled = template.format_map(unfilled)
+        except (IndexError, ValueError, AttributeError, TypeError) as e:
+            # Kaputte Vorlage statt fehlendem Wert: eine halbe Klammer, ein {0}, ein
+            # {name.attribut} ins Leere. Da ist nichts zu retten, der Text bleibt roh.
+            self.complain(f"render:{template[:60]}", f"Befehl ist keine gültige Vorlage - {e}")
+            return template
+        if unfilled.missing:
+            available = ", ".join("{%s}" % name for name in sorted(values)) or "keine"
+            self.complain(
+                f"render:{template[:60]}",
+                f"Befehl benutzt unbekannte Platzhalter "
+                f"({', '.join('{%s}' % name for name in sorted(unfilled.missing))}) - "
+                f"bekannt sind {available}",
+            )
+        return filled
 
     def color(self, key, default=0x3498DB):
         """Eine Farbe aus dem Abschnitt "colors" als Zahl, wie Announcement.color sie
@@ -184,10 +235,10 @@ class LiveConfig:
         try:
             return int(str(value).lstrip("#"), 16)
         except ValueError:
-            self._complain(f"color:{key}", f"Farbe '{key}': {value!r} ist keine Farbe wie \"#2ECC71\"")
+            self.complain(f"color:{key}", f"Farbe '{key}': {value!r} ist keine Farbe wie \"#2ECC71\"")
             return default
 
-    def _complain(self, key, message):
+    def complain(self, key, message):
         if key in self._complained:
             return
         self._complained.add(key)
@@ -213,7 +264,7 @@ class LiveConfig:
                 continue
             names = _normalize_command_setting(setting)
             if names is None:
-                self._complain(f"command:{default_name}",
+                self.complain(f"command:{default_name}",
                                f"Befehl '{default_name}': {setting!r} ist keine gültige Angabe")
                 continue
             resolved[_with_prefix(default_name)] = names
@@ -231,7 +282,7 @@ class LiveConfig:
             names = overrides.get(_with_prefix(default_name), (_with_prefix(default_name),))
             for name in names:
                 if name in resolved:
-                    self._complain(f"collision:{name}",
+                    self.complain(f"collision:{name}",
                                    f"Befehlsname '{name}' ist doppelt vergeben - der spätere wird ignoriert")
                     continue
                 resolved[name] = value

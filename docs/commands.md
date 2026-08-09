@@ -11,6 +11,11 @@ Commands come from three places, which is why "where does it work" varies:
 | **Platform commands** — code in a platform package | that platform only |
 | **Static commands** — plain text in the platform's JSON | that platform only |
 
+Adding, changing, renaming and deleting a static command all take effect while the bot runs — no
+restart. Their text can carry `{placeholders}`: `{u}` for the caller, `{time}`, and whatever you
+define yourself, including short Python expressions. See
+[Configuration → Variables](configuration.md#variables).
+
 `!commands` lists only what the caller may actually use: a non-moderator never sees mod commands
 suggested, because trying one would just get the message deleted.
 
@@ -46,6 +51,7 @@ otherwise sit permanently on top.
 | `!bits` | bits leaderboard |
 | `!hypetrain` | current or last hype train |
 | `!clip` | creates a clip; also posted to the Discord clip channel |
+| `!time` | the current time — a static command using `{time}`, see below |
 | `!discord`, `!lurk`, `!chef`, `!socials` | static text from `twitch.json` |
 
 ### Discord

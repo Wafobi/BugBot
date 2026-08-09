@@ -60,8 +60,30 @@ def find_channel(guild, key):
     return discord.utils.get(guild.text_channels, name=name) if name else None
 
 
+async def _render(template, author):
+    """Ein statischer Befehl aus discord.json, fertig zum Absenden - dieselben Platzhalter
+    wie auf Twitch, aus demselben Feature (features/variables). Genau dafür ist es eines:
+    wer sich {steam} einmal definiert, hat es auf beiden Plattformen.
+
+    Nur der Kontext ist plattformeigen: {u} bleibt die Erwähnung, damit der Befehl den
+    Angesprochenen anpingt, {user} ist der reine Name für Sätze, in denen ein Ping stört,
+    und {channel} ist hier der Server."""
+    values = {
+        "u": author.mention,
+        "user": author.display_name,
+        "channel": author.guild.name if author.guild else "",
+    }
+    for variables in events.bus.features_with(feature_api.VARIABLES):
+        values.update(await variables.resolve(template, **values))
+    return DISCORD_CONFIG.render(template, **values)
+
+
 def get_discord_commands():
-    commands_map = dict(DISCORD_CONFIG.get("commands", {}))
+    # "_..."-Schlüssel sind Kommentare für den Bearbeiter der Datei, keine Befehle.
+    commands_map = {
+        name: value for name, value in DISCORD_CONFIG.get("commands", {}).items()
+        if not name.startswith("_")
+    }
     commands_map.setdefault("!rules", DISCORD_CONFIG.get("rules", ""))
     return commands_map
 
@@ -603,7 +625,7 @@ async def on_message(message):
     elif msg_lower in mod_commands:
         if is_discord_mod(message.author):
             await _record_command(msg_lower, message.author.name)
-            await message.channel.send(mod_commands[msg_lower].format(u=message.author.mention))
+            await message.channel.send(await _render(mod_commands[msg_lower], message.author))
     elif feature_command is not None and feature_command.mod_only:
         # Mod-Befehle der Features verhalten sich wie die eigenen: überall erlaubt,
         # aber nur für Moderatoren.
@@ -623,7 +645,7 @@ async def on_message(message):
             commands_map = get_discord_commands()
             if msg_lower in commands_map:
                 await _record_command(msg_lower, message.author.name)
-                await message.channel.send(commands_map[msg_lower].format(u=message.author.mention))
+                await message.channel.send(await _render(commands_map[msg_lower], message.author))
 
     await bot.process_commands(message)
 

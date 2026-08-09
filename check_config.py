@@ -42,6 +42,7 @@ CONFIG_FOR = [
     ("platforms/discord", "platforms/discord/discord.json"),
     ("features/stats", "features/stats/stats.json"),
     ("features/moderation", "features/moderation/moderation.json"),
+    ("features/variables", "features/variables/variables.json"),
     ("features/chat_log", "features/chat_log/chat_log.json"),
     ("features/sql_db", "features/sql_db/sql_db.json"),
 ]

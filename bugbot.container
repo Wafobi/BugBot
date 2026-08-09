@@ -29,6 +29,7 @@ Volume=/path/to/bugbot/platforms/obs/obs.json:/app/platforms/obs/obs.json:Z
 # Die Konfiguration der neutralen Features - ohne diese Mounts wäre im Container die im
 # Image eingebackene Fassung wirksam, und eine Änderung auf dem Host bliebe folgenlos.
 Volume=/path/to/bugbot/features/moderation/moderation.json:/app/features/moderation/moderation.json:Z
+Volume=/path/to/bugbot/features/variables/variables.json:/app/features/variables/variables.json:Z
 Volume=/path/to/bugbot/features/stats/stats.json:/app/features/stats/stats.json:Z
 Volume=/path/to/bugbot/features/chat_log/chat_log.json:/app/features/chat_log/chat_log.json:Z
 Volume=/path/to/bugbot/features/sql_db/sql_db.json:/app/features/sql_db/sql_db.json:Z

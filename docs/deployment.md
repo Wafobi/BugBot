@@ -101,7 +101,7 @@ restarts — including the automatic Twitch token refresh writing rotated tokens
 and every database write.
 
 Note that **each config file gets its own `Volume=` line**. Without the mounts for the neutral
-features' JSON (`moderation`, `stats`, `chat_log`, `sql_db`), the version baked into the image
+features' JSON (`moderation`, `stats`, `chat_log`, `sql_db`, `variables`), the version baked into the image
 would be the effective one and edits on the host would quietly do nothing.
 
 Three details in `bugbot.container` that exist because of a specific failure:

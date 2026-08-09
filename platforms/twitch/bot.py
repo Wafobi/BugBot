@@ -85,8 +85,28 @@ TWITCH_CONFIG = config.TWITCH_CONFIG
 text = config.text
 
 
+async def _render(template, user_name):
+    """Ein statischer Befehl aus twitch.json, fertig für den Chat.
+
+    Was die Plattform selbst weiß, setzt sie selbst ein: {u}/{user} ist der, der den
+    Befehl geschrieben hat, {channel} der Kanal. Alles Weitere - {time}, {date} und was
+    der Betreiber sich in features/variables/variables.json definiert hat - kommt vom
+    VARIABLES-Feature, und zwar über seine Fähigkeit, nicht über einen Import: läuft der
+    Bot ohne dieses Feature, bleiben eben nur die drei hier, und der Rest steht als Text
+    da. Ein Befehl fällt dadurch nie ganz aus."""
+    values = {"u": user_name, "user": user_name, "channel": config.TWITCH_CHANNEL}
+    for variables in events.bus.features_with(feature_api.VARIABLES):
+        values.update(await variables.resolve(template, **values))
+    return TWITCH_CONFIG.render(template, **values)
+
+
 def get_twitch_commands():
-    commands_map = dict(TWITCH_CONFIG.get("commands", {}))
+    # Schlüssel mit Unterstrich sind Erklärungen für den, der die Datei bearbeitet (JSON
+    # kennt keine Kommentare), kein Befehl - sonst stünde "_comment" gleich in !commands.
+    commands_map = {
+        name: value for name, value in TWITCH_CONFIG.get("commands", {}).items()
+        if not name.startswith("_")
+    }
     rules = TWITCH_CONFIG.get("rules", "")
     # u bleibt absichtlich ein Platzhalter: die Befehlstabelle wird einmal gebaut, den
     # Namen setzt erst der Aufrufer je Nachricht ein (wie bei jedem statischen Befehl).
@@ -1251,7 +1271,7 @@ async def _handle_privmsg(line):
         await _send_command_reply(await own_mod[command_word](ctx, user_name, arg_text))
     elif msg_lower in mod_commands:
         await _record_command(msg_lower, user_name)
-        await send_twitch_chat(mod_commands[msg_lower].format(u=user_name))
+        await send_twitch_chat(await _render(mod_commands[msg_lower], user_name))
     elif command_word in dynamic:
         await _record_command(command_word, user_name)
         await _send_command_reply(await dynamic[command_word](ctx, user_name, arg_text))
@@ -1263,4 +1283,4 @@ async def _handle_privmsg(line):
         await _send_command_reply(await feature_command.handler(msg))
     elif msg_lower in commands_map:
         await _record_command(msg_lower, user_name)
-        await send_twitch_chat(commands_map[msg_lower].format(u=user_name))
+        await send_twitch_chat(await _render(commands_map[msg_lower], user_name))

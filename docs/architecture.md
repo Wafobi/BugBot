@@ -149,7 +149,7 @@ anything. An entry naming something that doesn't exist is reported rather than s
 Features are found in two places, and the location carries meaning:
 
 - **`features/<name>/`** — neutral. Uses only topics any platform can publish, so it works
-  whatever is running: `moderation`, `stats`, `chat_log`, `sql_db`.
+  whatever is running: `moderation`, `stats`, `chat_log`, `sql_db`, `variables`.
 - **`platforms/<p>/features/<name>/`** — platform-owned. Lives on events only that one service
   emits, and is discovered *only when its platform is*. Twitch owns `stream_sessions` (nothing
   else has a stream) and `raw_log` (EventSub notifications); Discord owns `levels`; OBS owns

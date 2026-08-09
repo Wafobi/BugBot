@@ -1,0 +1,30 @@
+{
+  "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Hier stehen die {platzhalter}, die in den statischen Befehlen von twitch.json und discord.json benutzt werden dürfen - auf beiden Plattformen dieselben. Schreibweise ist immer eine einfache geschweifte Klammer: {time}, nicht {{time}} - doppelte Klammern bedeuten in Python eine *wörtliche* Klammer und kämen als {time} im Chat an.",
+
+  "_comment_von_der_plattform": "Drei Variablen stehen zusätzlich zu allen hier definierten bereit, und zwar aus der Nachricht selbst: {u} ist der, der den Befehl geschrieben hat (auf Discord als Erwähnung, die anpingt), {user} derselbe als reiner Name, {channel} der Kanal bzw. der Server. Die kommen von der Plattform und lassen sich hier nicht ändern - sie funktionieren auch dann, wenn dieses Feature abgeschaltet ist.",
+
+  "_comment_zeitzone": "Für 'now' in den Ausdrücken unten, also auch für {time} und {date}. Leer = die Zeit des Prozesses, und die ist im Container UTC (im Sommer also zwei Stunden zu früh). Namen wie in der IANA-Datenbank: Europe/Berlin, America/New_York, ...",
+  "timezone": "Europe/Berlin",
+
+  "_comment_locale": "Die Sprache ausgeschriebener Wochentage und Monate, also von strftime('%A') und ('%B'). Muss im Image erzeugt worden sein - das Dockerfile tut das für genau diesen einen Namen (ARG LOCALE). Wer eine andere Sprache will, baut mit `podman build --build-arg LOCALE=fr_FR.UTF-8 -t bugbot .` und trägt sie hier ein. Leer = die Sprache des Systems, im Container Englisch.",
+  "locale": "de_DE.UTF-8",
+
+  "variables": {
+    "_comment": "Feste Texte, die man an mehreren Stellen braucht: \"steam\": \"https://store.steampowered.com/app/2758910/\" - danach in jedem Befehl als {steam} benutzbar, auf Twitch wie auf Discord."
+  },
+
+  "python": {
+    "_comment": "VARNAME: ein Python-Ausdruck, ausgewertet, sobald ein Befehl die Variable benutzt. Ein Ausdruck, keine Anweisungen - kein import, kein '='. Verfügbar sind: now (jetzt, in der Zeitzone oben), datetime, date, timedelta, ZoneInfo, math, random sowie user, u und channel aus der Nachricht.",
+    "_comment_eingebaut": "time und date sind nichts Besonderes, sondern zwei ganz gewöhnliche Einträge dieser Liste - ändere den Ausdruck, und die Uhrzeit sieht überall anders aus. Löschst du sie, greift die Fassung aus features/variables/feature.py (DEFAULTS), damit ein !time nicht durch eine gelöschte Zeile stumm wird.",
+    "_comment_sprache": "%A und %B (Wochentag/Monat als Wort) folgen dem 'locale' oben - steht dort nichts oder ist es im Image nicht erzeugt, kommt Englisch heraus.",
+    "_comment_achtung": "Der Ausdruck läuft im Bot-Prozess mit dessen Rechten. Wer diese Datei schreiben darf, darf ohnehin alles - aber baue hier nie etwas ein, das Text aus dem Chat als Code behandelt (eval, exec). Was aus dem Chat kommt, steht als *Wert* in user/u/channel bereit; das ist der sichere Weg und der einzige nötige.",
+    "_comment_grenzen": "Ein Ausdruck, der scheitert oder länger als python_timeout_seconds braucht, wird gemeldet und übersprungen - der Befehl antwortet dann mit dem Platzhalter im Text, statt auszufallen. Das Ergebnis gilt cache_seconds lang, damit nicht jede Chat-Nachricht die Auswertung neu startet.",
+
+    "time": "now.strftime('%H:%M')",
+    "date": "now.strftime('%d.%m.%Y')",
+    "wochentag": "now.strftime('%A')"
+  },
+
+  "python_timeout_seconds": 2,
+  "cache_seconds": 3
+}

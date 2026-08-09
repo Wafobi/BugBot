@@ -22,6 +22,7 @@ rebuild, no reload command.
 | `platforms/discord/features/levels/levels.json` | `levels` feature | XP rate and cooldown, level-up texts |
 | `features/moderation/moderation.json` | `moderation` feature | thresholds, the banned-word list, violation labels |
 | `features/stats/stats.json` | `stats` feature | every label, field and line the statistics print |
+| `features/variables/variables.json` | `variables` feature | the `{placeholders}` usable in static commands, on every platform |
 | `features/chat_log/chat_log.json` | `chat_log` feature | which platforms get logged |
 | `features/sql_db/sql_db.json` | `sql_db` feature | where the database file lives |
 
@@ -82,6 +83,68 @@ Under `"colors"`, written the way colours are normally written:
 ```
 
 A plain number works too. Something that is neither is reported once and falls back.
+
+## Variables in static commands
+
+<a id="variables"></a>A static command is plain text in `twitch.json`/`discord.json`, and anything
+in `{braces}` is filled in when it is used:
+
+```json
+"commands": {
+  "!time": "🕒 Es ist {time} Uhr.",
+  "!lurk": "🍿 @{u} macht es sich im Lurk-Modus gemütlich."
+}
+```
+
+Single braces, always. `{{time}}` is Python's escape for a *literal* brace and would arrive in
+chat as `{time}`.
+
+Three of them the platform knows by itself, so they work even with the `variables` feature
+switched off: **`{u}`** (the caller — a mention on Discord, the name on Twitch), **`{user}`** (the
+plain name, for sentences where a ping would be noise) and **`{channel}`**.
+
+Everything else comes from `features/variables/variables.json` and is therefore the same on every
+platform — define `{steam}` once and use it in both chats:
+
+| Key | What it does |
+|---|---|
+| `timezone` | IANA name (`Europe/Berlin`) for `now`, and therefore for `{time}` and `{date}`. **Empty means the process timezone, which in the container is UTC** — the one setting you actually have to make |
+| `locale` | language of spelled-out weekdays and months (`%A`, `%B`). Must exist in the image — the `Dockerfile` generates exactly this one via `ARG LOCALE` |
+| `variables` | `NAME: text` — fixed strings you need in several places |
+| `python` | `NAME: expression` — evaluated when a command uses it |
+| `python_timeout_seconds` | 2 — after this the expression is abandoned |
+| `cache_seconds` | 3 — how long a result is reused, so chat spam can't re-run it per message |
+
+```json
+"variables": { "steam": "https://store.steampowered.com/app/2758910/" },
+"python": {
+  "time": "now.strftime('%H:%M')",
+  "date": "now.strftime('%d.%m.%Y')",
+  "wochentag": "now.strftime('%A')",
+  "bis_release": "(date(2027, 3, 1) - now.date()).days"
+}
+```
+
+**`{time}` and `{date}` are ordinary entries in that list**, not something the code holds back —
+change the expression and the clock looks different everywhere. Nothing in Python names a
+variable any more, so the file is the complete list of what exists. Delete them and the shipped
+expressions in `feature.py` (`DEFAULTS`) step in, so a `!time` can't go quiet because of one
+deleted line.
+
+An expression has `now` (in your timezone), `datetime`, `date`, `timedelta`, `ZoneInfo`, `math`,
+`random`, and the caller's `user`, `u` and `channel`. It must be an *expression* — no `import`,
+no `=`. Only variables the command actually mentions are evaluated, so an expensive one costs
+nothing until something uses it.
+
+If an expression fails, takes too long or names something unknown, that placeholder alone stays
+as `{name}` in the text, the rest of the sentence is still filled, and the reason is logged once.
+A typo costs you a word, never the reply.
+
+> **The expression runs inside the bot process, with the bot's rights.** That is a statement about
+> who may edit this file, not a sandbox — whoever can write it can already do anything. What the
+> limits above are for is *accidents*: a typo, a division by zero, something slow. Never build an
+> expression that treats chat text as code; what comes from chat is available as the *values*
+> `user`, `u` and `channel`, which is the safe way and the only one needed.
 
 ## Command names
 
@@ -199,6 +262,19 @@ See [Moderation](moderation.md) for the merge order and the escalation.
 | `leaderboard_limit` | 3 | entries per leaderboard |
 | `texts` | 47 keys | every label, field and line the statistics print |
 | `colors.summary`, `colors.stream` | | embed colours |
+
+### `features/variables/variables.json`
+
+See [Variables in static commands](#variables) above for the whole of it.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `timezone` | `Europe/Berlin` | IANA name; empty falls back to the process timezone (UTC in the container) |
+| `locale` | `de_DE.UTF-8` | language of `%A`/`%B`; must be generated in the image (`Dockerfile`, `ARG LOCALE`) |
+| `variables` | | `NAME: text` |
+| `python` | `time`, `date`, `wochentag` | `NAME: expression` — the built-ins live here too |
+| `python_timeout_seconds` | 2 | limit per expression |
+| `cache_seconds` | 3 | how long a result is reused |
 
 ### `features/chat_log/chat_log.json`
 

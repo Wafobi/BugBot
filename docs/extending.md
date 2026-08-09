@@ -206,6 +206,7 @@ The capabilities a feature can provide or require:
 | `SESSIONS` | knows the running stream session |
 | `CHAT_LOG` | keeps the full message text |
 | `RAW_LOG` | keeps platform notifications verbatim |
+| `VARIABLES` | fills the `{placeholders}` in static commands |
 
 ### Methods
 
