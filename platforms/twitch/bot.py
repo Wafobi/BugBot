@@ -100,6 +100,24 @@ async def _render(template, user_name):
     return TWITCH_CONFIG.render(template, **values)
 
 
+def _clock(moment):
+    """`moment` (mit Zeitzone) als Uhrzeit für den Chat.
+
+    In derselben Zeitzone wie {time}, und aus derselben Quelle: der Konfiguration des
+    VARIABLES-Features, geholt über dessen Fähigkeit statt über einen Import - wie in
+    _render darüber. Damit muss die Zeitzone nicht ein zweites Mal in twitch.json stehen,
+    und eine Änderung dort wirkt hier sofort mit.
+
+    Fehlt das Feature oder ist dort keine Zeitzone eingetragen, bleibt die des Prozesses.
+    Die ist im Container die des Hosts (bugbot.container, Timezone=), ohne diese Zeile
+    UTC - deshalb ist der Eintrag in variables.json die verlässlichere Angabe."""
+    for variables in events.bus.features_with(feature_api.VARIABLES):
+        zone = variables.zone()
+        if zone:
+            return moment.astimezone(zone).strftime("%H:%M:%S")
+    return moment.astimezone().strftime("%H:%M:%S")
+
+
 def get_twitch_commands():
     # Schlüssel mit Unterstrich sind Erklärungen für den, der die Datei bearbeitet (JSON
     # kennt keine Kommentare), kein Befehl - sonst stünde "_comment" gleich in !commands.
@@ -448,7 +466,7 @@ async def handle_ad_break_begin(event):
         start_at = datetime.fromisoformat(event["started_at"].replace("Z", "+00:00"))
     except (KeyError, ValueError):
         start_at = datetime.now(timezone.utc)
-    end_local = (start_at + timedelta(seconds=duration)).astimezone().strftime("%H:%M:%S")
+    end_local = _clock(start_at + timedelta(seconds=duration))
     print(f"📺 Werbepause gestartet: {duration}s, Ende ca. {end_local} Uhr.")
     await send_twitch_chat(text("ad_break.start", seconds=duration, end_time=end_local))
     await events.bus.publish(events.AD_BREAK, platform=NAME, duration_seconds=duration)

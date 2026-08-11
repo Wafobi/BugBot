@@ -94,22 +94,36 @@ class VariablesFeature(feature_api.Feature):
                 f"Im Container wird es beim Bauen erzeugt (Dockerfile, ARG LOCALE).",
             )
 
-    def now(self):
-        """Jetzt, in der Zeitzone aus variables.json ("timezone", z.B. "Europe/Berlin").
+    def zone(self):
+        """Die Zeitzone aus variables.json ("timezone", z.B. "Europe/Berlin"), oder None,
+        wenn dort keine oder eine unbekannte steht - dann gilt die Zeit des Prozesses.
 
         Die Zeitzone steht in der Konfiguration und nicht in der Container-Umgebung, weil
         sie zu dem gehört, was ein Betreiber einstellt - und weil sie so wie alles andere
-        hier zur Laufzeit änderbar ist. Fehlt sie, gilt die Zeit des Prozesses; im
-        Container ist das UTC, ein {time} ginge also im Sommer zwei Stunden falsch, ohne
-        dass irgendwo ein Fehler auftauchte."""
+        hier zur Laufzeit änderbar ist. Die Umgebung ist der schlechtere Ort dafür: fehlt
+        sie dort, ist es im Container UTC und damit im Sommer zwei Stunden zu früh, ohne
+        dass irgendwo ein Fehler auftaucht.
+
+        Gehört zur Fähigkeit VARIABLES und nicht nur zu now(), weil auch Zeitpunkte, die
+        nicht "jetzt" sind, in dieser Zeitzone ausgegeben werden sollen - das Ende der
+        Werbepause etwa, das Twitch in UTC meldet (platforms/twitch/bot.py). Sonst müsste
+        derselbe Ort ein zweites Mal konfiguriert werden, und die beiden könnten
+        auseinanderlaufen."""
         name = str(self.config.get("timezone", "") or "").strip()
         if not name:
-            return datetime.now()
+            return None
         try:
-            return datetime.now(ZoneInfo(name))
+            return ZoneInfo(name)
         except (ZoneInfoNotFoundError, ValueError, OSError) as e:
             self.config.complain("timezone", f"Zeitzone {name!r} ist unbekannt, nehme die des Servers - {e}")
-            return datetime.now()
+            return None
+
+    def now(self):
+        """Jetzt, in der Zeitzone aus variables.json - siehe zone().
+
+        datetime.now(None) ist die naive Ortszeit des Prozesses, also genau der Fall
+        "keine Zeitzone eingetragen"; deshalb braucht es hier keine Fallunterscheidung."""
+        return datetime.now(self.zone())
 
     # --- Auflösen -----------------------------------------------------------------------
 

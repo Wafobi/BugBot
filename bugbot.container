@@ -13,6 +13,18 @@ ContainerName=bugbot
 # Benutzer auf uid 1000 im Container ab, also auf genau den Benutzer 'bugbot' aus dem
 # Dockerfile - unabhängig davon, welche uid er auf dem Host selbst hat.
 UserNS=keep-id:uid=1000,gid=1000
+# Ohne das läuft der Container in UTC: das Image bringt keine Zeitzone mit, und die des
+# Hosts erbt es nicht. "local" übernimmt sie (podman --tz), der Container zeigt damit
+# dieselbe Uhrzeit wie `date` daneben.
+#
+# Ein Sicherheitsnetz, keine Voraussetzung: die beiden Uhrzeiten, die im Chat landen -
+# {time}/{date} und das Ende der Werbepause - nehmen ihre Zeitzone aus variables.json
+# ("timezone") und stimmen auch ohne diese Zeile. Sie gilt für alles, was danach einmal
+# ohne Zeitzone auf die Uhr sieht, und dafür, dass ein `podman exec bugbot date` nicht
+# zwei Stunden danebenliegt. Nichts sonst hängt daran: Moderationsfenster und Uptime
+# rechnen mit Zeitdifferenzen, und die Zeitstempel in bugbot.db schreibt SQLite mit
+# datetime('now') immer in UTC - chatlog.py rechnet sie beim Lesen um.
+Timezone=local
 # Replace /path/to/bugbot below with the absolute path of your clone of this repo.
 #
 # Jede dieser Dateien ist einzeln gemountet, und ein Bind-Mount auf eine Datei hängt an deren

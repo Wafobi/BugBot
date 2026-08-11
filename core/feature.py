@@ -45,7 +45,8 @@ LEVELS = "levels"          # XP/Level je User
 SESSIONS = "sessions"      # kennt die laufende Stream-Session (siehe features/stream_sessions)
 CHAT_LOG = "chat_log"      # Mitschnitt des vollen Nachrichtentextes
 RAW_LOG = "raw_log"        # Rohprotokoll der Plattform-Benachrichtigungen
-VARIABLES = "variables"    # füllt die {platzhalter} statischer Befehle (siehe features/variables)
+VARIABLES = "variables"    # füllt die {platzhalter} statischer Befehle (resolve), und kennt
+                           # die Zeitzone des Betreibers (zone) - siehe features/variables
 
 
 @dataclass

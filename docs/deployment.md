@@ -104,8 +104,13 @@ Note that **each config file gets its own `Volume=` line**. Without the mounts f
 features' JSON (`moderation`, `stats`, `chat_log`, `sql_db`, `variables`), the version baked into the image
 would be the effective one and edits on the host would quietly do nothing.
 
-Three details in `bugbot.container` that exist because of a specific failure:
+Four details in `bugbot.container` that exist because of a specific failure:
 
+- **`Timezone=local`** — the image carries no timezone and doesn't inherit the host's, so the
+  container otherwise runs in UTC. A safety net rather than a requirement: every clock time the
+  bot posts takes its timezone from `variables.json` (`timezone`) and is right without this
+  line. It covers whatever reads the clock without one later, and keeps `podman exec bugbot
+  date` honest.
 - **`UserNS=keep-id:uid=1000,gid=1000`** — without it, rootless Podman maps the calling host
   user to root inside the container, and the bot (uid 1000 per the `Dockerfile`) lands on a
   subuid that doesn't own the mounted `bugbot.db`. SQLite then reports "readonly database" and

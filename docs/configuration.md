@@ -108,7 +108,7 @@ platform — define `{steam}` once and use it in both chats:
 
 | Key | What it does |
 |---|---|
-| `timezone` | IANA name (`Europe/Berlin`) for `now`, and therefore for `{time}` and `{date}`. **Empty means the process timezone, which in the container is UTC** — the one setting you actually have to make |
+| `timezone` | IANA name (`Europe/Berlin`) for `now`, and therefore for `{time}` and `{date}` — and for every other clock time the bot posts, such as when an ad break ends. Empty means the process timezone, which in the container is the host's (`Timezone=local` in `bugbot.container`) and UTC without that line. Set it: it holds regardless of how the bot is started |
 | `locale` | language of spelled-out weekdays and months (`%A`, `%B`). Must exist in the image — the `Dockerfile` generates exactly this one via `ARG LOCALE` |
 | `variables` | `NAME: text` — fixed strings you need in several places |
 | `python` | `NAME: expression` — evaluated when a command uses it |
@@ -285,7 +285,7 @@ See [Variables in static commands](#variables) above for the whole of it.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `timezone` | `Europe/Berlin` | IANA name; empty falls back to the process timezone (UTC in the container) |
+| `timezone` | `Europe/Berlin` | IANA name; applies to `{time}`/`{date}` and to the ad-break end time in Twitch chat. Empty falls back to the process timezone (the host's, via `Timezone=local` in `bugbot.container`) |
 | `locale` | `de_DE.UTF-8` | language of `%A`/`%B`; must be generated in the image (`Dockerfile`, `ARG LOCALE`) |
 | `variables` | | `NAME: text` |
 | `python` | `time`, `date`, `wochentag` | `NAME: expression` — the built-ins live here too |

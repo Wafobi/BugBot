@@ -3,7 +3,7 @@
 
   "_comment_von_der_plattform": "Drei Variablen stehen zusätzlich zu allen hier definierten bereit, und zwar aus der Nachricht selbst: {u} ist der, der den Befehl geschrieben hat (auf Discord als Erwähnung, die anpingt), {user} derselbe als reiner Name, {channel} der Kanal bzw. der Server. Die kommen von der Plattform und lassen sich hier nicht ändern - sie funktionieren auch dann, wenn dieses Feature abgeschaltet ist.",
 
-  "_comment_zeitzone": "Für 'now' in den Ausdrücken unten, also auch für {time} und {date}. Leer = die Zeit des Prozesses, und die ist im Container UTC (im Sommer also zwei Stunden zu früh). Namen wie in der IANA-Datenbank: Europe/Berlin, America/New_York, ...",
+  "_comment_zeitzone": "Für 'now' in den Ausdrücken unten, also für {time} und {date} - und für jede weitere Uhrzeit, die der Bot ausgibt, etwa das Ende einer Werbepause im Twitch-Chat. Leer = die Zeit des Prozesses; die übernimmt der Container vom Host (bugbot.container, Timezone=local), ohne diese Zeile wäre sie UTC und im Sommer zwei Stunden zu früh. Ein Name hier gilt unabhängig davon. Namen wie in der IANA-Datenbank: Europe/Berlin, America/New_York, ...",
   "timezone": "Europe/Berlin",
 
   "_comment_locale": "Die Sprache ausgeschriebener Wochentage und Monate, also von strftime('%A') und ('%B'). Muss im Image erzeugt worden sein - das Dockerfile tut das für genau diesen einen Namen (ARG LOCALE). Wer eine andere Sprache will, baut mit `podman build --build-arg LOCALE=fr_FR.UTF-8 -t bugbot .` und trägt sie hier ein. Leer = die Sprache des Systems, im Container Englisch.",
