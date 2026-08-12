@@ -26,6 +26,20 @@ class OverlayStore:
         with self._db.connect() as conn:
             conn.executescript(SCHEMA)
 
+    def under(self, prefix):
+        """{Name: Stand} aller Zähler unter einem Präfix.
+
+        substr() statt LIKE: der Präfix käme zwar nur aus dem Code, aber mit LIKE hinge an
+        dieser Zeile die stille Annahme, dass darin nie ein % oder _ steht. So hängt an ihr
+        gar nichts."""
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                "SELECT name, value FROM overlay_counters WHERE substr(name, 1, ?) = ?"
+                " ORDER BY name",
+                (len(prefix), prefix),
+            ).fetchall()
+        return {row[0]: int(row[1]) for row in rows}
+
     def get(self, name):
         with self._db.connect() as conn:
             row = conn.execute(

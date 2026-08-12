@@ -29,6 +29,9 @@
     "deaths.added_no_game": "☠️ Und tschüss. Das war Nummer {count}.",
     "deaths.set": "☠️ Todeszähler für {game} steht jetzt auf {count}.",
     "deaths.set_no_game": "☠️ Todeszähler steht jetzt auf {count}.",
+    "_comment_unknown": "Antwort auf '!tode <Spiel>' für ein Spiel ohne Zähler. Hier darf bewusst KEIN {game} hinein: der Name käme aus dem Chat, und was der Bot ausspricht, geht an der Moderation vorbei - '!tode <Schimpfwort>' wäre sonst ein Weg, ihn Beliebiges sagen zu lassen.",
+    "deaths.unknown_game": "☠️ Zu dem Spiel habe ich keinen Zähler.",
+
     "deaths.usage": "So geht das: !todsetzen <Zahl>"
   }
 }

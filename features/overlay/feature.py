@@ -182,8 +182,19 @@ class OverlayFeature(feature_api.Feature):
 
     async def cmd_deaths_show(self, message):
         """Ohne Argument der laufende Titel, mit Argument ein beliebiger anderer - so lässt
-        sich "wie oft bin ich in X gestorben" fragen, ohne X gerade zu spielen."""
-        game = (message.arg_text or "").strip() or self._game()
+        sich "wie oft bin ich in X gestorben" fragen, ohne X gerade zu spielen.
+
+        Das Argument wird *nachgeschlagen*, nicht übernommen, und geantwortet wird mit dem
+        gespeicherten Namen. Sonst spräche der Bot beliebigen Chattext aus - und was er
+        sagt, geht an der Moderation vorbei, weil nicht der Nutzer schreibt, sondern er.
+        Ein unbekanntes Spiel bekommt deshalb eine Antwort ohne jede Eingabe darin."""
+        asked = (message.arg_text or "").strip()
+        if asked:
+            game = await self._find_game(asked)
+            if game is None:
+                return self.config.text("deaths.unknown_game")
+        else:
+            game = self._game()
         count = await self._read_deaths(self._deaths_key(game))
         return self._say("deaths.show", game, count=count)
 
@@ -219,6 +230,24 @@ class OverlayFeature(feature_api.Feature):
         """"deaths:Elden Ring" je Spiel, "deaths" für alles ohne bekannte Kategorie."""
         game = (self._game() if game is None else game).strip()
         return f"{DEATHS}:{game}" if game else DEATHS
+
+    async def _find_game(self, asked):
+        """Der gespeicherte Name zu einer Anfrage, oder None.
+
+        Groß-/Kleinschreibung egal, damit "!tode elden ring" trifft - zurück kommt aber
+        immer der Name aus der Ablage, nie der getippte. Das ist der ganze Schutz: was der
+        Bot ausspricht, stammt dann aus der Kategorie, die die Plattform gemeldet hat."""
+        prefix = f"{DEATHS}:"
+        if self.store is None:
+            known = [k[len(prefix):] for k in self._memory if k.startswith(prefix)]
+        else:
+            known = [k[len(prefix):] for k in (await asyncio.to_thread(self.store.under, prefix))]
+
+        asked = asked.casefold()
+        for game in known:
+            if game.casefold() == asked:
+                return game
+        return None
 
     async def _refresh_deaths(self):
         """Den Stand des jetzt laufenden Spiels ins Bild holen."""
