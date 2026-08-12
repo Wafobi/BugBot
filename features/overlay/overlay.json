@@ -17,13 +17,18 @@
   "texts": {
     "_comment": "Alles, was der Bot im Chat sagt. Die Platzhalter in geschweiften Klammern füllt der Code - {count} ist überall der Stand des Zählers nach der Aktion.",
 
-    "help.show": "zeigt den Todeszähler",
+    "_comment_spiel": "Gezählt wird je Spiel: die Kategorie, die die Plattform meldet, ist der Schlüssel. Jede Meldung gibt es deshalb zweimal - mit {game}, wenn ein Spiel bekannt ist, und als '..._no_game' für alles außerhalb (offline, oder keine Kategorie gesetzt). Ein einzelner Text mit {game} ginge nicht: ohne Spiel stünde dort ein Platzhalterwort und der Satz läse sich schief.",
+
+    "help.show": "zeigt den Todeszähler des laufenden Spiels",
     "help.add": "zählt einen Tod dazu",
     "help.set": "setzt den Todeszähler auf einen Wert",
 
-    "deaths.show": "☠️ Heute schon {count} mal gestorben.",
-    "deaths.added": "☠️ Und tschüss. Das war Nummer {count}.",
-    "deaths.set": "☠️ Todeszähler steht jetzt auf {count}.",
+    "deaths.show": "☠️ {game}: schon {count} mal gestorben.",
+    "deaths.show_no_game": "☠️ Schon {count} mal gestorben.",
+    "deaths.added": "☠️ Und tschüss. Das war Nummer {count} in {game}.",
+    "deaths.added_no_game": "☠️ Und tschüss. Das war Nummer {count}.",
+    "deaths.set": "☠️ Todeszähler für {game} steht jetzt auf {count}.",
+    "deaths.set_no_game": "☠️ Todeszähler steht jetzt auf {count}.",
     "deaths.usage": "So geht das: !todsetzen <Zahl>"
   }
 }

@@ -26,8 +26,13 @@ from . import config as env
 from .server import OverlayServer
 from .store import OverlayStore
 
-# Schlüssel des Todeszählers in overlay_counters. Kein Konfigurationswert: er steht in
-# der Datenbank und würde beim Umbenennen einen leeren Zähler zeigen.
+# Schlüsselstamm des Todeszählers in overlay_counters. Kein Konfigurationswert: er steht
+# in der Datenbank und würde beim Umbenennen einen leeren Zähler zeigen.
+#
+# Gezählt wird je Spiel: "deaths:Elden Ring". Der Stamm allein bleibt der Topf für alles,
+# was außerhalb eines bekannten Spiels passiert - offline, oder wenn die Plattform keine
+# Kategorie meldet. Deshalb behält der alte Schlüssel aus der Zeit vor den Spielständen
+# genau seine bisherige Bedeutung, und es gibt nichts zu migrieren.
 DEATHS = "deaths"
 
 
@@ -47,6 +52,8 @@ class OverlayFeature(feature_api.Feature):
         self.store = None
         self._server = None
         self._bus = None
+        # Ersatzablage ohne STORAGE: {Schlüssel: Stand}, nur bis zum Neustart.
+        self._memory = {}
         self._state = {
             "live": False,
             "started_at": None,   # Unix-Sekunden; die Uptime rechnet das Overlay selbst
@@ -68,7 +75,8 @@ class OverlayFeature(feature_api.Feature):
         if db is not None:
             self.store = OverlayStore(db)
             await asyncio.to_thread(self.store.init_schema)
-            self._state["deaths"] = await asyncio.to_thread(self.store.get, DEATHS)
+            # Beim Start ist noch kein Spiel bekannt - das holt der erste STREAM_START nach.
+            self._state["deaths"] = await self._read_deaths(self._deaths_key())
         else:
             print("⚠️  Overlay ohne STORAGE: der Todeszähler beginnt bei jedem Start neu.")
 
@@ -143,12 +151,18 @@ class OverlayFeature(feature_api.Feature):
 
     async def on_stream_start(self, platform=None, title="", category="", **_):
         await self._patch(live=True, started_at=time.time(), title=title or "", game=category or "")
+        await self._refresh_deaths()
 
     async def on_stream_end(self, platform=None, **_):
         await self._patch(live=False, started_at=None, viewers=0)
 
     async def on_segment(self, platform=None, title="", category="", **_):
+        """Titel- oder Kategoriewechsel. Beim Spielwechsel gehört ein anderer Zählerstand
+        ins Bild - stehen bliebe sonst der des vorigen Spiels."""
+        before = self._state["game"]
         await self._patch(title=title or "", game=category or "")
+        if self._state["game"] != before:
+            await self._refresh_deaths()
 
     async def on_viewers(self, platform=None, count=0, **_):
         await self._patch(viewers=int(count or 0))
@@ -167,30 +181,67 @@ class OverlayFeature(feature_api.Feature):
     # --- Befehle --------------------------------------------------------------------
 
     async def cmd_deaths_show(self, message):
-        return self.config.text("deaths.show", count=self._state["deaths"])
+        """Ohne Argument der laufende Titel, mit Argument ein beliebiger anderer - so lässt
+        sich "wie oft bin ich in X gestorben" fragen, ohne X gerade zu spielen."""
+        game = (message.arg_text or "").strip() or self._game()
+        count = await self._read_deaths(self._deaths_key(game))
+        return self._say("deaths.show", game, count=count)
 
     async def cmd_deaths_add(self, message):
-        count = await self._store_deaths(delta=1)
+        game = self._game()
+        count = await self._add_deaths(self._deaths_key(game), 1)
         await self._patch(deaths=count)
-        return self.config.text("deaths.added", count=count)
+        return self._say("deaths.added", game, count=count)
 
     async def cmd_deaths_set(self, message):
         raw = (message.arg_text or "").strip()
         if not raw.lstrip("-").isdigit():
             return self.config.text("deaths.usage")
-        count = await self._store_deaths(value=int(raw))
+        game = self._game()
+        count = await self._set_deaths(self._deaths_key(game), int(raw))
         await self._patch(deaths=count)
-        return self.config.text("deaths.set", count=count)
+        return self._say("deaths.set", game, count=count)
 
-    async def _store_deaths(self, delta=None, value=None):
-        """Der Zähler in einem: mit STORAGE über die Ablage, ohne sie im Zustand. Beide
-        Wege geben den neuen Stand zurück, damit die Aufrufer oben nichts unterscheiden
-        müssen."""
-        if self.store is not None:
-            if value is not None:
-                return await asyncio.to_thread(self.store.set, DEATHS, value)
-            return await asyncio.to_thread(self.store.add, DEATHS, delta)
-        return value if value is not None else self._state["deaths"] + delta
+    def _say(self, key, game, **values):
+        """Dieselbe Meldung in zwei Fassungen: mit Spielnamen und ohne. Ein einzelner Text
+        mit {game} ginge nicht - ohne bekanntes Spiel stünde dort ein Platzhalterwort, und
+        der Satz läse sich schief."""
+        if game:
+            return self.config.text(key, game=game, **values)
+        return self.config.text(f"{key}_no_game", **values)
+
+    # --- Der Zähler ------------------------------------------------------------------
+
+    def _game(self):
+        return self._state["game"].strip()
+
+    def _deaths_key(self, game=None):
+        """"deaths:Elden Ring" je Spiel, "deaths" für alles ohne bekannte Kategorie."""
+        game = (self._game() if game is None else game).strip()
+        return f"{DEATHS}:{game}" if game else DEATHS
+
+    async def _refresh_deaths(self):
+        """Den Stand des jetzt laufenden Spiels ins Bild holen."""
+        await self._patch(deaths=await self._read_deaths(self._deaths_key()))
+
+    # Drei schmale Hüllen um die Ablage, damit die Aufrufer oben nicht wissen müssen, ob
+    # es ein STORAGE-Feature gibt. Ohne eines lebt der Stand nur bis zum Neustart.
+    async def _read_deaths(self, key):
+        if self.store is None:
+            return self._memory.get(key, 0)
+        return await asyncio.to_thread(self.store.get, key)
+
+    async def _add_deaths(self, key, delta):
+        if self.store is None:
+            self._memory[key] = self._memory.get(key, 0) + delta
+            return self._memory[key]
+        return await asyncio.to_thread(self.store.add, key, delta)
+
+    async def _set_deaths(self, key, value):
+        if self.store is None:
+            self._memory[key] = value
+            return value
+        return await asyncio.to_thread(self.store.set, key, value)
 
     def commands(self):
         return (

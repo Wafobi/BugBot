@@ -234,11 +234,23 @@ command rather than a file on the OBS machine — which a bot on a server could 
 
 | | | |
 |---|---|---|
-| `!tode` | everyone | shows the count |
+| `!tode` | everyone | the count for the game running now |
+| `!tode <game>` | everyone | …or for any other one, without playing it |
 | `!tod` | mods | one more |
 | `!todsetzen <n>` | mods | set it |
 
-Names, like everywhere, are renameable in `overlay.json` under `command_names`. The value lives
-in `overlay_counters` and survives restarts; the table is kept general so the next counter
-(wins, crashes, coffee) needs no new one. Without a `STORAGE` feature the counter still works,
-but only until the bot restarts.
+**Counted per game.** The key is the category the platform reports, so a row reads
+`deaths:Elden Ring`. Switching games swaps the number on screen and leaves each total where it
+was; switching back brings it straight back. Nothing is reset automatically — a game's count is
+its all-time total, which is the only reading of "how often have I died in this game" that
+survives a second evening.
+
+The bare key `deaths` stays the pot for everything outside a known game: offline, or when the
+platform reports no category. That is exactly what the counter meant before it knew about games,
+so there was nothing to migrate.
+
+Names, like everywhere, are renameable in `overlay.json` under `command_names`, and each message
+exists twice — with `{game}` and as `…_no_game`, because a single text would leave a placeholder
+word in the sentence whenever no game is known. The values live in `overlay_counters` and survive
+restarts; the table is kept general so the next counter (wins, crashes, coffee) needs no new one.
+Without a `STORAGE` feature the counter still works, but only until the bot restarts.
