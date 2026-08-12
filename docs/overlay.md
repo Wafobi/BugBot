@@ -85,11 +85,20 @@ The `127.0.0.1:` is the first lock. The bot inside the container still binds `0.
 restriction belongs on the host side. The token is the second lock, and the one still standing if
 that prefix is ever forgotten.
 
-**3. The tunnel**, from the OBS machine — the same one that already carries the OBS relay:
+**3. The tunnel**, on the OBS machine — the same one that already carries the OBS relay:
 
 ```bash
-ssh -N -L 4456:127.0.0.1:4456 -L 4457:127.0.0.1:4457 user@your-server
+./setup-tunnel.sh user@your-server
 ```
+
+That writes an `~/.ssh/config` entry with both forwards, installs a systemd user service so
+the tunnel survives a dropped link and a reboot, and checks that the far end answers before
+it calls itself done. Re-running updates the entry rather than adding a second one, and it
+refuses to touch a `Host` block someone wrote by hand. `./disable-tunnel.sh` takes it back
+out.
+
+By hand it would be `ssh -N -L 4456:127.0.0.1:4456 -L 4457:127.0.0.1:4457 user@your-server`
+— worth knowing for a one-off, but not something to retype before every stream.
 
 **4. The browser source.** Width `2560`, height `1440`, position `(0,0)`, and as URL:
 

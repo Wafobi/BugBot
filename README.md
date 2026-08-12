@@ -158,6 +158,10 @@ Where a feature lives says what it depends on: `features/` is neutral and works 
 The bot runs in a container via Podman, with systemd managing it through Quadlet. Four scripts:
 `./setup-systemd.sh` (once), `./start.sh`, `./update.sh` (day-to-day), `./disable-systemd.sh`.
 
+Two more run **on the OBS machine** rather than on the server, because that is the end the tunnel
+to the bot's listeners is dialled from: `./setup-tunnel.sh user@server` installs it as a systemd
+user service, `./disable-tunnel.sh` takes it back out. → [Overlay](docs/overlay.md#setup)
+
 The `Dockerfile` does `COPY . .`, so **the code is baked into the image** while configs and the
 DB are mounted over it from your clone:
 
