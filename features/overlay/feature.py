@@ -110,19 +110,23 @@ class OverlayFeature(feature_api.Feature):
 
         mod_only fällt raus: was der Zuschauer nicht benutzen darf, muss er auch nicht
         lesen. Die Namen kommen aus dem Bus und tragen damit schon die Umbenennungen aus
-        den JSON-Dateien."""
+        den JSON-Dateien - deshalb .values() und nicht die Schlüssel: bus.commands()
+        liefert {Name: Command}, und der Command darin trägt den tatsächlichen Namen.
+
+        Alles in einem try: fällt die Liste aus, soll das den Ticker kosten und nicht den
+        ganzen Zustand. Vorher lag die Schleife außerhalb, und eine Ausnahme darin hat den
+        state-Frame mitgenommen - die Seite verband sich dann und bekam nie Daten."""
         if self._bus is None:
             return []
         try:
-            commands = self._bus.commands()
+            return [
+                {"name": command.name, "help": command.help}
+                for command in self._bus.commands().values()
+                if not command.mod_only
+            ]
         except Exception as error:
             print(f"⚠️  Overlay: Befehlsliste nicht lesbar: {error}")
             return []
-        return [
-            {"name": command.name, "help": command.help}
-            for command in commands
-            if not command.mod_only
-        ]
 
     async def _patch(self, **changes):
         """Nur das schicken, was sich wirklich geändert hat. Zuschauerzahlen kommen im
