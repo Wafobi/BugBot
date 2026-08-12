@@ -46,7 +46,7 @@ Volume=/path/to/bugbot/features/stats/stats.json:/app/features/stats/stats.json:
 Volume=/path/to/bugbot/features/chat_log/chat_log.json:/app/features/chat_log/chat_log.json:Z
 Volume=/path/to/bugbot/features/sql_db/sql_db.json:/app/features/sql_db/sql_db.json:Z
 Volume=/path/to/bugbot/bugbot.db:/app/bugbot.db:Z
-# Der einzige eingehende Port: hier wählt sich das OBS-Relais vom Rechner des Streamers ein
+# Der erste eingehende Port: hier wählt sich das OBS-Relais vom Rechner des Streamers ein
 # (siehe platforms/obs/). Muss zum OBS_BRIDGE_PORT aus der .env passen. Wer OBS nicht
 # anbindet, lässt die Zeile weg.
 #
@@ -60,6 +60,18 @@ Volume=/path/to/bugbot/bugbot.db:/app/bugbot.db:Z
 # dessen Loopback an. Die Einschränkung auf Loopback gehört deshalb hierhin, auf die
 # Host-Seite der Weiterleitung.
 PublishPort=127.0.0.1:4456:4456
+
+# Der zweite: hier hängen die Overlays (siehe features/overlay). Muss zum OVERLAY_PORT aus
+# der .env passen. Wer keine Browser-Quelle einbindet, lässt die Zeile weg.
+#
+# Derselbe Aufbau und dieselbe Loopback-Beschränkung wie oben - auch hierhin führt ein
+# SSH-Tunnel vom OBS-Rechner, und auch hier lauscht der Bot im Container auf 0.0.0.0.
+#
+# Was hier hinausgeht, ist nur lesbar (Zuschauerzahl, letzter Follower, Spiel, Todeszähler),
+# und der Lauscher nimmt von der Gegenseite nichts entgegen. Trotzdem steht auch davor ein
+# Token: das `127.0.0.1:` in dieser Zeile ist das erste Schloss, und es ist genau ein
+# vergessenes Präfix davon entfernt, keines mehr zu sein.
+PublishPort=127.0.0.1:4457:4457
 
 [Service]
 # always statt on-failure: der Bot soll auch dann wieder hochkommen, wenn der Prozess

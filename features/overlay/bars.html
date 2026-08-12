@@ -1,0 +1,507 @@
+<meta charset="utf-8">
+<title>BugBot Overlay</title>
+
+<!--
+  Die Browser-Quelle. Gehört auf den OBS-Rechner, nicht auf den Server - wie
+  platforms/obs/obs_bridge.py liegt sie hier, weil sie zum Gegenstück gehört, und läuft
+  woanders.
+
+  Einrichten: Quelle "Browser" anlegen, Breite 2560, Höhe 1440, Position (0,0), und als
+  URL die Datei mit Token:
+
+    file:///home/jens/git/bugbot/features/overlay/bars.html?token=DEIN_OVERLAY_TOKEN
+
+  Parameter (alle optional):
+    token=   das OVERLAY_TOKEN aus der .env des Bots. Ohne ihn keine Daten.
+    port=    Port des Tunnels auf diesem Rechner (Default 4457)
+    host=    Default 127.0.0.1 - der Tunnel endet hier, nicht beim Server
+    off=     Bausteine ausblenden, mit Komma: off=clock,deaths
+    only=    umgekehrt - nur diese stehen lassen: only=game,viewers
+             Bausteine: top, bottom, uptime, game, viewers, clock,
+                        deaths, ticker, last, cam
+    bar=     Höhe der Balken in Pixeln. 184 ohne Crop-Filter, 110 mit (Default 184)
+    cam=     Durchmesser des Kamerarings (Default 300). cam=0 blendet ihn aus
+    camx=    Mittelpunkt des Rings von links (Default 230)
+    accent=  Akzentfarbe, URL-kodiert: %23FFE100 für #FFE100
+    t.NAME=  jedes einzelne Gestaltungs-Token überschreiben, z.B. t.bar-line-h=4px
+    link=1   Verbindungsampel oben rechts einblenden (Standard: aus)
+    demo=1   Beispieldaten ohne Verbindung - zum Anschauen im normalen Browser
+
+  Die Gestaltung steht vollständig in den Tokens im :root hier unten. Von außen ändern
+  lässt sich jedes einzelne über ?t.<token>=<wert> - das landet als Inline-Stil am
+  Wurzelelement und gewinnt damit gegen jede Regel im Stylesheet.
+
+  Es gibt bewusst keinen Theme-Mechanismus mehr: bei genau einem Aussehen war die Datei
+  daneben plus ein ?theme=-Parameter nur ein Umweg. Wer wieder mehrere Looks umschalten
+  will, braucht dafür ein <link>, das eine Datei mit einem :root-Block nachlädt - rund
+  zehn Zeilen.
+
+  Der Ring ist nur ein Rahmen: die Kamera selbst ist eine OBS-Quelle, die *unter* dieser
+  hier liegt und mit Advanced Masks rund geschnitten wird. Die Konsole der Quelle
+  (Rechtsklick -> Interagieren) meldet die Mitte und den Durchmesser, damit man die
+  Kamera darauf legen kann, ohne zu raten.
+-->
+
+<style>
+  /* --- Das Aussehen ------------------------------------------------------------------
+     Nach dem Kanalbild: Nebel in Indigo und Karmin, Blitze in elektrischem Cyan, Magenta
+     als Kontur. Zwei Farben tragen alles, genau wie im Logo - Cyan füllt, Magenta umreißt.
+
+     Jede Zeile hier ist ein Griff, an dem sich von außen drehen lässt: ?t.<name>=<wert>
+     landet als Inline-Stil am Wurzelelement und schlägt damit alles hier. Die Regeln
+     darunter bleiben davon unberührt - deshalb kann man das Aussehen ändern, aber nie
+     das Layout zerlegen. */
+  :root {
+    /* Maße */
+    --bar: 184px;
+    --pad: 40px;
+    --gap: 32px;
+
+    /* Schrift */
+    --font: "Roboto", "DejaVu Sans", system-ui, sans-serif;
+    --value-size: 46px;
+    --value-small: 34px;
+    --value-weight: 700;
+    --label-size: 22px;
+    --label-weight: 600;
+    --label-spacing: .2em;
+    --label-transform: uppercase;
+    --ticker-size: 32px;
+    /* Sehr schwach: das Logo leuchtet, die Zahlen sollen es nur andeuten, nicht schmieren. */
+    --text-shadow: 0 0 16px rgba(95, 234, 245, .16);
+
+    /* Farben */
+    --accent: #5FEAF5;
+    --ink: #EAF7FF;
+    --dim: rgba(234, 247, 255, .5);
+    /* Das Karmin der Nebelwolken - der Live-Punkt ist eine der drei Stellen, an denen
+       etwas leuchten darf (die anderen zwei: Ring und Haarlinie). */
+    --dot-live: #D6453A;
+    --dot-glow: rgba(214, 69, 58, .85);
+    --dot-off: #2A2C50;
+
+    /* Balken. Die zweite Farbe ist die innere Kante, also die zum Spiel hin - dort
+       entscheidet sich, wie schwer der Balken wirkt. Zu durchlässig, und ein helles
+       Spielbild schlägt durch und lässt ihn ausgewaschen aussehen. */
+    --bar-bg-top: linear-gradient(180deg, rgba(7, 8, 22, .97), rgba(10, 10, 30, .82));
+    --bar-bg-bottom: linear-gradient(0deg, rgba(7, 8, 22, .97), rgba(10, 10, 30, .82));
+
+    /* Die Kante im Logo-Aufbau: Cyan und Magenta als laufende Kachel.
+     *
+     * Der Verlauf wiederholt sich alle 240px und wandert genau um diese 240px - deshalb
+     * ist der Rücksprung nicht zu sehen. --bar-line-tile MUSS der Kachelbreite
+     * entsprechen; stehen die auseinander, ruckelt es einmal pro Runde. Ändere für ein
+     * anderes Tempo nur die Sekunden in --bar-line-anim.
+     *
+     * Warum die vielen Stützstellen statt der drei naheliegenden (Cyan/Magenta/Cyan):
+     * drei ergeben eine Dreieckswelle. Die ist im Wert stetig, in der *Steigung* aber
+     * nicht - an jedem Farbscheitel kippt sie schlagartig um, und dieser Knick wandert
+     * als harte Spitze durchs Bild. Die Stützstellen folgen einer Kosinuskurve, dadurch
+     * läuft die Steigung an den Scheiteln gegen null und der Wechsel ist weich.
+     * Neu erzeugen mit: w = (1 - cos(2*pi*t/240)) / 2, Mischung Cyan -> Magenta nach w. */
+    --bar-line-h: 2px;
+    --bar-line: repeating-linear-gradient(90deg,
+                #5FEAF5 0px, rgba(105, 221, 237, .993) 20px, rgba(132, 186, 216, .975) 40px,
+                rgba(168, 138, 187, .95) 60px, rgba(205, 90, 157, .925) 80px, rgba(232, 55, 136, .907) 100px,
+                rgba(242, 42, 128, .9) 120px, rgba(232, 55, 136, .907) 140px, rgba(205, 90, 157, .925) 160px,
+                rgba(168, 138, 186, .95) 180px, rgba(132, 186, 216, .975) 200px, rgba(105, 221, 237, .993) 220px,
+                #5FEAF5 240px);
+    --bar-line-opacity: .9;
+    --bar-line-tile: 240px;
+    --bar-line-anim: bar-line-run 8s linear infinite;
+    /* Blendet die Linie zu den Rändern aus. Bei einer laufenden Kachel nötig, weil der
+       Verlauf sein Ausfransen nicht mehr selbst mitbringen kann. */
+    --bar-line-mask: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+    /* Gegenläufig, damit die beiden Kanten nicht wie ein Förderband wirken. */
+    --bar-line-dir-bottom: reverse;
+
+    /* Das Halbtonraster aus den Ecken des Kanalbilds. Ein statischer Verlauf, kostet die
+       GPU nichts, und liegt nur auf den Balken - dazwischen liegt das Spiel. */
+    --fx: radial-gradient(rgba(95, 234, 245, .11) 1px, transparent 1.6px) 0 0 / 7px 7px;
+    --fx-opacity: 1;
+
+    /* Kameraring - Cyan innen, Magenta außen: die Kontur des Schriftzugs als Ring. */
+    --cam: 300px;
+    --camx: 230px;
+    /* Radius des Lochs, das der untere Balken für die Kamera freilässt - etwas größer
+       als der Ring, damit dessen Rand nicht angeschnitten wird. */
+    --cam-cut: calc(var(--cam) / 2 + 10px);
+    --cam-ring: var(--accent);
+    --cam-ring-w: 3px;
+    --cam-halo: 0 0 0 10px rgba(11, 12, 32, .85),
+                0 0 30px rgba(95, 234, 245, .42),
+                inset 0 0 24px rgba(11, 12, 32, .5);
+    --cam-outer: rgba(242, 42, 128, .6);
+    --cam-outer-w: 2px;
+    --cam-gap: 20px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 2560px; height: 1440px;
+    background: transparent;
+    overflow: hidden;
+    font-family: var(--font);
+    color: var(--ink);
+    text-shadow: var(--text-shadow);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- Die beiden Balken ------------------------------------------------------- */
+  .bar {
+    position: absolute; left: 0; right: 0;
+    height: var(--bar);
+    display: flex; align-items: center;
+    padding: 0 var(--pad);
+    gap: var(--gap);
+  }
+  .bar.top    { top: 0;    background: var(--bar-bg-top); }
+  .bar.bottom { bottom: 0; background: var(--bar-bg-bottom); }
+
+  /* Muster-Ebene, von einem Thema über --fx gefüllt. */
+  .bar::before {
+    content: ""; position: absolute; inset: 0;
+    background: var(--fx);
+    opacity: var(--fx-opacity);
+    pointer-events: none;
+  }
+
+  /* Die Haarlinie sitzt an der Kante zum Spielbild und ist das Einzige, was den Balken
+     als gewollt statt als übrig aussehen lässt. */
+  .bar::after {
+    content: ""; position: absolute; left: 0; right: 0;
+    height: var(--bar-line-h);
+    background: var(--bar-line);
+    -webkit-mask: var(--bar-line-mask);
+    mask: var(--bar-line-mask);
+    opacity: var(--bar-line-opacity);
+    animation: var(--bar-line-anim);
+  }
+  .bar.top::after    { bottom: 0; }
+  .bar.bottom::after { top: 0; animation-direction: var(--bar-line-dir-bottom); }
+
+  /* Verschiebt das Muster um genau eine Kachel - dadurch sieht der Sprung zurück wie
+     eine Fortsetzung aus. Bewegt wird nur die Hintergrundposition eines 2px hohen
+     Streifens, nicht Geometrie: kein Layout, kein Reflow. */
+  @keyframes bar-line-run {
+    from { background-position-x: 0; }
+    to   { background-position-x: var(--bar-line-tile); }
+  }
+
+  /* Der Balken bekommt dort ein Loch, wo die Kamera sitzt.
+     Nötig, weil die Kamera eine OBS-Quelle *unter* dieser Seite ist: ohne das Loch legt
+     sich der halbdurchsichtige Balkenhintergrund über ihre untere Hälfte und dunkelt sie
+     ab. Der Mittelpunkt liegt auf der Oberkante des Balkens, also y=0 in dessen eigenem
+     Koordinatensystem - genau da, wo der Ring die Kante schneidet. Nebenbei bekommt auch
+     die Haarlinie ihre Kerbe, was den Ring eingesetzt statt aufgeklebt aussehen lässt. */
+  .bar.bottom {
+    -webkit-mask: var(--bar-mask, none);
+    mask: var(--bar-mask, none);
+  }
+  :root {
+    --bar-mask: radial-gradient(circle at var(--camx) 0,
+                transparent var(--cam-cut), #000 calc(var(--cam-cut) + 2px));
+    /* Der linke Platz im unteren Balken, den der Ring beansprucht. Eigenes Token, damit
+       ihn ?cam=0 zurücknehmen kann - sonst bliebe dort eine leere Lücke stehen. */
+    --bottom-pad: calc(var(--camx) + var(--cam) / 2 + 48px);
+  }
+
+  /* space-between greift erst, wenn der Ticker ausgeschaltet ist: solange er da ist,
+     schluckt sein flex:1 den freien Raum ohnehin. Ohne die Zeile klebten Todeszähler und
+     letzter Follower dann beide links. */
+  .bottom { padding-left: var(--bottom-pad); justify-content: space-between; }
+
+  .spacer { flex: 1; }
+
+  /* --- Bausteine --------------------------------------------------------------- */
+  .block { display: flex; align-items: baseline; gap: 14px; white-space: nowrap; }
+  .label {
+    font-size: var(--label-size); font-weight: var(--label-weight);
+    letter-spacing: var(--label-spacing); text-transform: var(--label-transform);
+    color: var(--dim);
+  }
+  .value { font-size: var(--value-size); font-weight: var(--value-weight); line-height: 1; }
+  .value.accent { color: var(--accent); }
+  .value.small  { font-size: var(--value-small); font-weight: 600; }
+
+  /* Live-Punkt: pulsiert nur über opacity, das kostet die GPU praktisch nichts. */
+  .dot {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--dot-live); align-self: center;
+    box-shadow: 0 0 18px var(--dot-glow);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  .dot.off { background: var(--dot-off); box-shadow: none; animation: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+
+  /* --- Ticker ------------------------------------------------------------------- */
+  #ticker {
+    flex: 1; overflow: hidden; text-align: center;
+    font-size: var(--ticker-size); font-weight: 500; color: var(--dim);
+  }
+  #ticker b { color: var(--accent); font-weight: 700; }
+  #ticker > span {
+    display: inline-block;
+    transition: opacity .5s ease, transform .5s ease;
+  }
+  #ticker > span.out { opacity: 0; transform: translateY(-12px); }
+
+  /* --- Kamera-Ring --------------------------------------------------------------- */
+  /* Nur ein Rahmen. Innen bleibt alles durchsichtig, damit die Kamera-Quelle, die
+     darunter liegt, zu sehen ist. */
+  #cam {
+    position: absolute;
+    /* Über die Balken: der Ring schneidet die Kante, und was die Kante schneidet, darf
+       nicht von ihr übermalt werden. */
+    z-index: 3;
+    left: var(--camx); bottom: var(--bar);
+    width: var(--cam); height: var(--cam);
+    transform: translate(-50%, 50%);
+    border-radius: 50%;
+    border: var(--cam-ring-w) solid var(--cam-ring);
+    box-shadow: var(--cam-halo);
+  }
+  /* Zweiter, dünnerer Ring außen - macht aus dem Kreis einen Rahmen statt einer Linie. */
+  #cam::after {
+    content: ""; position: absolute; inset: calc(var(--cam-gap) * -1);
+    border-radius: 50%; border: var(--cam-outer-w) solid var(--cam-outer);
+  }
+
+  /* Verbindungsampel, nur beim Einrichten interessant: mit ?link=1 sichtbar, sonst nicht.
+     Standardmäßig aus, weil ein roter Punkt in der Ecke sonst genau dann im Bild steht,
+     wenn der Bot mitten im Stream neu startet. Dass die Verbindung fehlt, sieht man
+     ohnehin: die Uptime steht auf "offline" und die Zuschauerzahl auf "—". */
+  #link { display: none; }
+  #link.shown {
+    display: block;
+    position: absolute; right: 6px; top: 6px; z-index: 4;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #FF3B30; opacity: .5;
+  }
+  #link.ok { background: #34C759; }
+</style>
+
+<!-- data-part ist der Name, unter dem sich ein Baustein ein- und ausschalten lässt:
+     ?off=clock,deaths blendet aus, ?only=game,viewers lässt nur diese stehen. -->
+<div class="bar top" data-part="top">
+  <div class="block" data-part="uptime"><span class="dot off" id="dot"></span><span class="value small" id="uptime">--:--:--</span></div>
+  <div class="spacer"></div>
+  <div class="block" data-part="game"><span class="value" id="game">—</span></div>
+  <div class="spacer"></div>
+  <div class="block" data-part="viewers"><span class="label">Zuschauer</span><span class="value accent" id="viewers">0</span></div>
+  <div class="block" data-part="clock"><span class="value small" id="clock">--:--</span></div>
+</div>
+
+<div id="cam" data-part="cam"></div>
+
+<div class="bar bottom" data-part="bottom">
+  <div class="block" data-part="deaths"><span class="label">Tode</span><span class="value accent" id="deaths">0</span></div>
+  <div id="ticker" data-part="ticker"><span></span></div>
+  <div class="block" data-part="last"><span class="label" id="lastLabel">Zuletzt</span><span class="value small" id="last">—</span></div>
+</div>
+
+<div id="link"></div>
+
+<script>
+"use strict";
+
+const params = new URLSearchParams(location.search);
+const root = document.documentElement.style;
+
+// --- Gestaltung ---------------------------------------------------------------------
+// Ebene 3 der Gestaltung (siehe Kommentar oben): alles hier landet als Inline-Stil am
+// Wurzelelement und schlägt damit sowohl :root als auch die Theme-Datei - unabhängig
+// davon, wann diese fertig geladen ist.
+
+// Bequeme Kurznamen für das, was man am häufigsten dreht.
+const ALIASES = { bar: "--bar", cam: "--cam", camx: "--camx", accent: "--accent" };
+for (const [name, token] of Object.entries(ALIASES)) {
+  if (!params.has(name)) continue;
+  const raw = params.get(name);
+  // Die Maße dürfen ohne Einheit geschrieben werden, Farben nicht angefasst werden.
+  root.setProperty(token, /^-?\d+$/.test(raw) ? raw + "px" : raw);
+}
+
+// Und der allgemeine Weg: ?t.<token>=<wert> für jedes Token aus :root, auch die, für die
+// es keinen Kurznamen gibt. So braucht eine neue Stellschraube keinen neuen Parameter.
+for (const [name, value] of params) {
+  if (name.startsWith("t.") && name.length > 2) root.setProperty("--" + name.slice(2), value);
+}
+
+// --- Bausteine ein- und ausschalten ---------------------------------------------------
+// Jeder Baustein trägt ein data-part. ?off=a,b blendet aus, ?only=a,b lässt nur diese
+// stehen. Die beiden Balken zählen mit ("top", "bottom"), müssen aber selten genannt
+// werden: ein Balken, in dem nichts mehr sichtbar ist, verschwindet von allein.
+const PARTS = ["top", "bottom", "uptime", "game", "viewers", "clock",
+               "deaths", "ticker", "last", "cam"];
+const BARS = ["top", "bottom"];
+
+const list = (name) => (params.get(name) || "").split(",").map(s => s.trim()).filter(Boolean);
+const hidden = new Set(list("off"));
+
+const only = list("only");
+if (only.length) {
+  // Die Balken hier bewusst auslassen: wer ?only=clock schreibt, meint die Uhr *im*
+  // oberen Balken, nicht die Uhr ohne ihn. Was übrig leer bleibt, räumt die Regel unten ab.
+  for (const part of PARTS) {
+    if (!BARS.includes(part) && !only.includes(part)) hidden.add(part);
+  }
+}
+
+// Einen Balken beim Namen zu nennen heißt: den will ich, auch leer. Ohne diese Ausnahme
+// wäre ?only=top,bottom - die nackten Balken als Rahmen - nicht erreichbar, weil die
+// Aufräumregel unten sie mangels Inhalt wieder abräumte.
+const keepEmpty = new Set(only.filter(part => BARS.includes(part)));
+
+// cam=0 bleibt als eigener Schalter erhalten, weil er dokumentiert ist und kürzer bleibt.
+if (params.get("cam") === "0") hidden.add("cam");
+
+for (const element of document.querySelectorAll("[data-part]")) {
+  if (hidden.has(element.dataset.part)) element.style.display = "none";
+}
+
+// Ein Balken ohne sichtbaren Inhalt ist nur noch eine dunkle Fläche - der geht mit, außer
+// er wurde ausdrücklich angefordert.
+for (const bar of document.querySelectorAll(".bar")) {
+  if (keepEmpty.has(bar.dataset.part)) continue;
+  const parts = [...bar.querySelectorAll("[data-part]")];
+  if (!parts.some(element => element.style.display !== "none")) bar.style.display = "none";
+}
+
+// Ohne Ring fällt beides mit weg, was nur seinetwegen da ist: das Loch im Balken - sonst
+// stünde dort ein Kreis Spielbild mitten in einer dunklen Fläche - und der freigehaltene
+// Platz links, aus dem sonst eine leere Lücke würde.
+if (hidden.has("cam")) {
+  root.setProperty("--bar-mask", "none");
+  root.setProperty("--bottom-pad", "var(--pad)");
+}
+
+if (params.get("link") === "1") document.getElementById("link").classList.add("shown");
+
+const $ = (id) => document.getElementById(id);
+
+// Der Zustand, wie ihn der Bot schickt. Die Startwerte sind dieselben Felder wie in
+// features/overlay/feature.py - was dort dazukommt, muss hier nur gerendert werden.
+let state = {
+  live: false, started_at: null, title: "", game: "",
+  viewers: 0, last_follower: "", last_sub: "", last_raid: "", deaths: 0, commands: [],
+};
+
+// --- Rendern ---------------------------------------------------------------------
+// Ein Durchgang zeichnet alles. Bei den paar Feldern lohnt kein Diffing, und es kann
+// nichts auseinanderlaufen.
+function render() {
+  $("dot").className = "dot" + (state.live ? "" : " off");
+  $("viewers").textContent = state.live ? state.viewers : "—";
+  $("deaths").textContent = state.deaths;
+  $("game").textContent = state.game || state.title || "—";
+
+  const [label, who] = state.last_raid ? ["Raid", state.last_raid]
+                     : state.last_sub  ? ["Letzter Sub", state.last_sub]
+                     : state.last_follower ? ["Letzter Follow", state.last_follower]
+                     : ["Zuletzt", "—"];
+  $("lastLabel").textContent = label;
+  $("last").textContent = who;
+}
+
+function renderUptime() {
+  if (!state.live || !state.started_at) { $("uptime").textContent = "offline"; return; }
+  const total = Math.max(0, Math.floor(Date.now() / 1000 - state.started_at));
+  const pad = (n) => String(n).padStart(2, "0");
+  $("uptime").textContent =
+    `${pad(Math.floor(total / 3600))}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`;
+}
+
+function renderClock() {
+  $("clock").textContent = new Date().toLocaleTimeString("de-DE",
+    { hour: "2-digit", minute: "2-digit" });
+}
+
+// --- Ticker ------------------------------------------------------------------------
+// Zeigt reihum die Befehle, die einem normalen Zuschauer offenstehen. Welche das sind,
+// entscheidet der Bot (mod_only fällt dort schon raus).
+let tickIndex = 0;
+function tick(immediate) {
+  const list = state.commands || [];
+  const slot = $("ticker").firstElementChild;
+  if (!list.length) { slot.innerHTML = ""; return; }
+
+  const show = () => {
+    const command = list[tickIndex++ % list.length];
+    slot.innerHTML = command.help
+      ? `<b>${escapeHtml(command.name)}</b> — ${escapeHtml(command.help)}`
+      : `<b>${escapeHtml(command.name)}</b>`;
+    slot.classList.remove("out");
+  };
+
+  // Beim ersten Mal ohne Ausblenden: sonst steht der Platz eine halbe Sekunde leer, und
+  // genau die sieht man, wenn die Szene frisch eingeblendet wird.
+  if (immediate) return show();
+  slot.classList.add("out");
+  setTimeout(show, 500);
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// --- Verbindung ----------------------------------------------------------------------
+// Der Bot schickt, wir hören zu. Bricht die Verbindung ab, wird sie wieder aufgebaut -
+// ein Overlay muss einen Bot-Neustart mitten im Stream überstehen, ohne dass jemand die
+// Quelle anfassen muss.
+function connect() {
+  const token = params.get("token") || "";
+  const host = params.get("host") || "127.0.0.1";
+  const port = params.get("port") || "4457";
+  if (!token) { console.warn("Kein ?token= in der URL - keine Verbindung."); return; }
+
+  const socket = new WebSocket(`ws://${host}:${port}/?token=${encodeURIComponent(token)}`);
+
+  socket.onopen = () => $("link").classList.add("ok");
+  socket.onclose = () => {
+    $("link").classList.remove("ok");
+    setTimeout(connect, 3000);
+  };
+  socket.onerror = () => socket.close();
+  socket.onmessage = (message) => {
+    let frame;
+    try { frame = JSON.parse(message.data); } catch { return; }
+    // Die Befehlsliste kommt erst mit dem Zustand, der Ticker war bis hier also leer.
+    if (frame.type === "state") { state = { ...state, ...frame.data }; render(); tick(true); }
+    else if (frame.type === "patch") { Object.assign(state, frame.data); render(); }
+  };
+}
+
+// --- Start -----------------------------------------------------------------------------
+if (params.get("demo") === "1") {
+  state = {
+    live: true, started_at: Date.now() / 1000 - 4517, title: "Ultrawide-Test",
+    game: "Elden Ring", viewers: 42, last_follower: "Kevin", last_sub: "", last_raid: "",
+    deaths: 19,
+    commands: [
+      { name: "!tode", help: "zeigt den Todeszähler" },
+      { name: "!rank", help: "dein Level" },
+      { name: "!top", help: "die aktivsten Chatter" },
+    ],
+  };
+}
+
+render();
+renderUptime();
+renderClock();
+tick(true);
+setInterval(renderUptime, 1000);
+setInterval(renderClock, 10000);
+setInterval(tick, 8000);
+connect();
+
+// Die Maße des Rings, damit die Kamera-Quelle darauf gelegt werden kann, ohne zu raten.
+{
+  const ring = $("cam").getBoundingClientRect();
+  console.log(`Kamera-Ring: Mitte (${Math.round(ring.x + ring.width / 2)}, ` +
+              `${Math.round(ring.y + ring.height / 2)}), Durchmesser ${Math.round(ring.width)} px`);
+  console.log("Aussehen ändern: ?t.<token>=<wert>, z.B. ?t.accent=%2356B893 - Liste in README.md");
+}
+</script>

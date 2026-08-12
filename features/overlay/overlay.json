@@ -1,0 +1,29 @@
+{
+  "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Was hier steht, entscheidet, was im Bild landet - die Adresse und das Geheimnis des Lauschers stehen dagegen in der .env (OVERLAY_TOKEN, OVERLAY_PORT, OVERLAY_BIND), weil Geheimnisse in keiner Konfigurationsdatei etwas verloren haben.",
+
+  "command_names": {
+    "_comment": "Befehle umbenennen, ihnen Aliase geben oder sie abschalten: \"!tod\": \"!death\" | \"!tod\": [\"!death\", \"!rip\"] | \"!tod\": false"
+  },
+
+  "_comment_event_slots": "Welcher Ereignistyp welches Feld im Bild füllt. Links steht der event_type, wie ihn die Plattform auf PLATFORM_EVENT publiziert, rechts der Name des Feldes im Overlay. Ein neuer Ereignistyp braucht damit keine Codeänderung, sondern eine Zeile hier - und ein Feld, das die HTML-Seite kennt (last_follower, last_sub, last_raid).",
+  "event_slots": {
+    "follow": "last_follower",
+    "sub": "last_sub",
+    "resub": "last_sub",
+    "gift_sub": "last_sub",
+    "raid": "last_raid"
+  },
+
+  "texts": {
+    "_comment": "Alles, was der Bot im Chat sagt. Die Platzhalter in geschweiften Klammern füllt der Code - {count} ist überall der Stand des Zählers nach der Aktion.",
+
+    "help.show": "zeigt den Todeszähler",
+    "help.add": "zählt einen Tod dazu",
+    "help.set": "setzt den Todeszähler auf einen Wert",
+
+    "deaths.show": "☠️ Heute schon {count} mal gestorben.",
+    "deaths.added": "☠️ Und tschüss. Das war Nummer {count}.",
+    "deaths.set": "☠️ Todeszähler steht jetzt auf {count}.",
+    "deaths.usage": "So geht das: !todsetzen <Zahl>"
+  }
+}

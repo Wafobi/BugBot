@@ -58,6 +58,7 @@ The [`docs/`](docs/) folder is the long version.
 | [Commands](docs/commands.md) | every command, its arguments, and who may use it |
 | [Moderation](docs/moderation.md) | the filters, the thresholds, the escalation |
 | [Database](docs/database.md) | every table and column, and how the stream session stamps them |
+| [Overlay](docs/overlay.md) | the browser sources in the picture: what the bot pushes, and how to wire one up |
 | [Twitch](docs/twitch.md) · [Discord](docs/discord.md) · [OBS](docs/obs.md) | per-platform specifics |
 | [Deployment](docs/deployment.md) | Podman, systemd, logs, and what to run after changing what |
 

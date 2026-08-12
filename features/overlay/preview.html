@@ -1,0 +1,169 @@
+<meta charset="utf-8">
+<title>BugBot Overlay — Vorschau</title>
+
+<!--
+  Zum Anschauen im normalen Browser. Einfach öffnen:
+
+    file:///home/jens/git/bugbot/features/overlay/preview.html
+
+  Warum es diese Datei gibt: bars.html ist fest 2560x1440 groß und hat einen
+  durchsichtigen Hintergrund - direkt aufgerufen sieht man die linke obere Ecke auf Weiß,
+  und beurteilen kann man so nichts. Hier steckt sie in einem Rahmen, der auf die
+  Fenstergröße skaliert, mit einem Spielbild-Ersatz und einer angedeuteten Kamera
+  dahinter. Genau der Aufbau, in dem sie später in OBS liegt.
+
+  Alle Parameter von bars.html funktionieren auch hier und werden durchgereicht:
+    preview.html?off=clock&bar=110
+-->
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0e0f14; color: #cfd6e0; overflow: hidden; height: 100vh;
+    font: 14px/1.5 system-ui, sans-serif;
+  }
+
+  /* --- Bedienleiste ------------------------------------------------------------ */
+  #bar {
+    position: fixed; inset: 0 0 auto 0; z-index: 10; height: 46px;
+    display: flex; align-items: center; gap: 18px; padding: 0 16px;
+    background: #16181f; border-bottom: 1px solid #262a34;
+  }
+  #bar label { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  #bar select, #bar input[type=text] {
+    background: #0e0f14; color: #cfd6e0; border: 1px solid #333846;
+    border-radius: 5px; padding: 4px 7px; font: inherit;
+  }
+  #bar input[type=text] { width: 260px; }
+  #bar .hint { margin-left: auto; opacity: .5; font-size: 12px; }
+
+  /* --- Bühne -------------------------------------------------------------------- */
+  /* safe center: bei 100% ist die Bühne größer als das Fenster - ohne "safe" würde die
+     Zentrierung oben und links abschneiden, statt scrollen zu lassen. */
+  #wrap {
+    position: absolute; inset: 46px 0 0 0; overflow: auto;
+    display: flex; align-items: safe center; justify-content: safe center;
+  }
+  #sizer { position: relative; flex: none; }
+  #stage {
+    position: absolute; top: 0; left: 0; width: 2560px; height: 1440px;
+    transform-origin: top left;
+    box-shadow: 0 0 0 1px #262a34, 0 18px 60px rgba(0, 0, 0, .6);
+  }
+
+  /* Das Spielbild-Ersatzbild: farbig und unterschiedlich hell, damit man sieht, ob die
+     Balken tragen. Es endet dort, wo bei 1440p das letterboxte Bild endet. */
+  #game {
+    position: absolute; left: 0; right: 0; top: var(--bar, 184px); bottom: var(--bar, 184px);
+    background:
+      radial-gradient(circle at 22% 32%, #6b4b2a 0%, transparent 42%),
+      radial-gradient(circle at 74% 62%, #2b4a63 0%, transparent 48%),
+      linear-gradient(155deg, #3a3227 0%, #1b232b 55%, #241d29 100%);
+  }
+  /* Die Kamera - eine OBS-Quelle *unter* dem Overlay, hier als Streifenmuster. */
+  #cam {
+    position: absolute; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: repeating-linear-gradient(45deg, #7dd3a0 0 26px, #4aa678 26px 52px);
+  }
+  #frame {
+    position: absolute; inset: 0; width: 2560px; height: 1440px;
+    border: 0; background: transparent;
+  }
+</style>
+
+<div id="bar">
+  <label>Balken
+    <select id="barh"><option>184</option><option>110</option></select>
+  </label>
+  <label><input type="checkbox" id="camOn" checked> Kamera</label>
+  <label>Zoom
+    <select id="zoom">
+      <option value="fit">anpassen</option>
+      <option value="1">100 % (echte Pixel)</option>
+      <option value="0.5">50 %</option>
+    </select>
+  </label>
+  <label>weitere Parameter
+    <input type="text" id="extra" placeholder="off=clock,deaths">
+  </label>
+  <span class="hint">bars.html?demo=1 &middot; alle Parameter werden durchgereicht</span>
+</div>
+
+<div id="wrap"><div id="sizer"><div id="stage">
+  <div id="game"></div>
+  <div id="cam"></div>
+  <iframe id="frame"></iframe>
+</div></div></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const incoming = new URLSearchParams(location.search);
+
+// Was in der Adresse steht, füllt die Bedienleiste vor - so ist ein Link auf eine
+// bestimmte Fassung teilbar, und die Knöpfe zeigen trotzdem den richtigen Stand.
+if (incoming.has("bar")) $("barh").value = incoming.get("bar");
+if (incoming.get("cam") === "0") $("camOn").checked = false;
+{
+  const rest = new URLSearchParams(incoming);
+  ["bar", "cam", "demo"].forEach((k) => rest.delete(k));
+  $("extra").value = decodeURIComponent(rest.toString().replace(/&/g, "&"));
+}
+
+function build() {
+  const params = new URLSearchParams("demo=1");
+  params.set("bar", $("barh").value);
+  if (!$("camOn").checked) params.set("cam", "0");
+
+  // Freitext dahinter, damit er alles überschreiben kann, was oben gesetzt wurde.
+  let query = params.toString();
+  const extra = $("extra").value.trim().replace(/^[?&]+/, "");
+  if (extra) query += "&" + extra;
+
+  $("frame").src = "bars.html?" + query;
+
+  // Bühne und Kamera-Attrappe an dieselben Maße hängen, die das Overlay benutzt.
+  const bar = parseInt($("barh").value, 10) || 184;
+  const settings = new URLSearchParams(query);
+  const size = parseInt(settings.get("cam"), 10) || 300;
+  const x = parseInt(settings.get("camx"), 10) || 230;
+
+  $("stage").style.setProperty("--bar", bar + "px");
+  const cam = $("cam");
+  const visible = $("camOn").checked && !/(^|[&?])off=[^&]*\bcam\b/.test(query);
+  cam.style.display = visible ? "block" : "none";
+  // Etwas kleiner als der Ring: die Kamera sitzt innerhalb seiner Innenkante.
+  cam.style.width = cam.style.height = (size - 10) + "px";
+  cam.style.left = x + "px";
+  cam.style.top = (1440 - bar) + "px";
+}
+
+// Auf die Fenstergröße skalieren - 2560x1440 passt sonst in kein Browserfenster.
+//
+// Zum Beurteilen feiner Linien taugt das skalierte Bild allerdings nicht: eine 2px-Linie
+// landet je nach Zeile mal auf einer ganzen, mal auf einer halben Pixelgrenze und wird
+// dann unterschiedlich gerundet - zwei gleich dicke Linien sehen verschieden dick aus.
+// Dafür ist die Stufe "100 %" da; dann scrollt das Fenster.
+function fit() {
+  const zoom = $("zoom").value;
+  const wrap = $("wrap").getBoundingClientRect();
+  const scale = zoom === "fit"
+    ? Math.min(wrap.width / 2560, wrap.height / 1440) * 0.97
+    : parseFloat(zoom);
+
+  $("stage").style.transform = `scale(${scale})`;
+  // Der Platzhalter trägt die *skalierte* Größe - sonst wüsste das Layout nichts von der
+  // Verkleinerung und würde weder richtig zentrieren noch bei 100 % scrollen lassen.
+  $("sizer").style.width = 2560 * scale + "px";
+  $("sizer").style.height = 1440 * scale + "px";
+}
+
+for (const id of ["barh", "camOn", "extra"]) {
+  $(id).addEventListener(id === "extra" ? "change" : "input", build);
+}
+$("zoom").addEventListener("input", fit);
+addEventListener("resize", fit);
+build();
+fit();
+</script>
