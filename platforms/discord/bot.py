@@ -15,7 +15,22 @@ intents.message_content = True
 intents.members = True
 intents.reactions = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+# Der Bot darf einzelne Leute erwähnen, aber niemals alle.
+#
+# discord.py pingt ohne diese Angabe alles, was in einem Text nach einer Erwähnung aussieht
+# - auch das, was gerade aus dem Chat kam. Ein "!announce @everyone ..." wäre damit ein Weg,
+# sich das Recht des Bots zu leihen: Wer @everyone selbst nicht darf, dürfte es über ihn.
+# Dasselbe über die Begründungen von !warn, !timeout und !ban, die freier Text sind.
+#
+# users bleibt an, everyone und roles gehen aus. Die Grenze verläuft dort, weil eine
+# einzelne Erwähnung das ist, was diese Befehle sollen - ein !warn benachrichtigt den
+# Verwarnten -, während @everyone und ein Rollen-Ping die halbe Gilde aufwecken. Wo eine
+# Nachricht wirklich alle erreichen soll, gibt man am send() ein eigenes allowed_mentions
+# mit; dann steht die Absicht an der Stelle, an der sie gilt.
+bot = commands.Bot(
+    command_prefix="!", intents=intents,
+    allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
+)
 
 # Läuft gerade ein Stream? Wird ausschließlich über den Event-Bus gepflegt (siehe
 # _on_stream_online/_on_stream_offline weiter unten) - der Discord-Bot fragt Twitch dafür

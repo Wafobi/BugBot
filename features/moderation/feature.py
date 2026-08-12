@@ -29,6 +29,27 @@ DEFAULTS = {
 }
 
 
+def _mask(found):
+    """Der Fund, unlesbar gemacht: "Idiot" -> "I****".
+
+    Nötig, weil `detail` bei einem verbotenen Wort das Wort selbst ist (filters.py) und die
+    Plattformen es in ihre Verstoßmeldung schreiben. Ungekürzt hieße das: Der Bot löscht die
+    Nachricht und sagt das Wort anschließend selbst - und auf ihn wendet kein Filter etwas
+    an. Ein Troll bräuchte dafür nicht einmal einen Befehl, nur das Wort.
+
+    Maskiert wird hier und nicht in den Plattformen, damit keine von ihnen den Fund je
+    ungefiltert in die Hand bekommt - eine dritte Plattform erbt den Schutz dadurch, ohne
+    etwas dafür zu tun.
+
+    Der erste Buchstabe bleibt stehen, damit ein Mod die Meldung noch zuordnen kann. Bei
+    einem einzelnen Zeichen bleibt nichts - sonst wäre die Maske der Fund.
+    """
+    found = (found or "").strip()
+    if not found:
+        return ""
+    return found[0] + "*" * (len(found) - 1) if len(found) > 1 else "*"
+
+
 class ModerationFeature(feature_api.Feature):
     name = "moderation"
     provides = frozenset({feature_api.MODERATION})
@@ -68,7 +89,7 @@ class ModerationFeature(feature_api.Feature):
         return feature_api.Verdict(
             reason=reason,
             label=self.config.text(f"reason.{reason}"),
-            detail=detail or "",
+            detail=_mask(detail),
             delete=True,
             timeout_seconds=settings["timeout_duration_seconds"] if over_threshold else 0,
             violation_count=count,
