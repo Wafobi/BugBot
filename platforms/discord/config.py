@@ -1,7 +1,7 @@
-"""Discord-Konfiguration aus der Umgebung/.env.
+"""Discord configuration from the environment/.env.
 
-Gegenstück zu platforms/twitch/config.py: core bleibt plattformneutral, jede Plattform
-bringt ihre eigenen Zugangsdaten mit.
+Counterpart to platforms/twitch/config.py: core stays platform-neutral, and every platform
+brings its own credentials.
 """
 
 import os
@@ -9,8 +9,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Idempotent und unabhängig von der Import-Reihenfolge - platforms/twitch/config.py lädt
-# dieselbe Datei, load_dotenv überschreibt bereits gesetzte Variablen aber nicht.
+# Idempotent and independent of import order - platforms/twitch/config.py loads the same
+# file, but load_dotenv does not overwrite variables that are already set.
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 TOKEN = os.environ["DISCORD_TOKEN"]

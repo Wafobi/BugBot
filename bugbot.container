@@ -6,78 +6,77 @@ Wants=network-online.target
 [Container]
 Image=localhost/bugbot:latest
 ContainerName=bugbot
-# Ohne das mappt rootless Podman den aufrufenden Host-Benutzer auf root im Container, und
-# der Bot (der laut Dockerfile als uid 1000 läuft) landet auf einer subuid, der die vom
-# Host gemountete bugbot.db nicht gehört - SQLite meldet dann "readonly database" und die
-# Features, die eine Ablage brauchen, fallen beim Start aus. Das hier bildet den Host-
-# Benutzer auf uid 1000 im Container ab, also auf genau den Benutzer 'bugbot' aus dem
-# Dockerfile - unabhängig davon, welche uid er auf dem Host selbst hat.
+# Without this, rootless Podman maps the calling host user onto root in the container, and the
+# bot (which runs as uid 1000 per the Dockerfile) ends up on a subuid that does not own the
+# bugbot.db mounted from the host - SQLite then reports "readonly database" and the features
+# needing storage fail at startup. This maps the host user onto uid 1000 in the container, i.e.
+# onto exactly the user 'bugbot' from the Dockerfile - regardless of which uid they have on the
+# host itself.
 UserNS=keep-id:uid=1000,gid=1000
-# Ohne das läuft der Container in UTC: das Image bringt keine Zeitzone mit, und die des
-# Hosts erbt es nicht. "local" übernimmt sie (podman --tz), der Container zeigt damit
-# dieselbe Uhrzeit wie `date` daneben.
+# Without this the container runs in UTC: the image brings no timezone along, and it does not
+# inherit the host's. "local" adopts it (podman --tz), so the container shows the same time as
+# `date` next to it.
 #
-# Ein Sicherheitsnetz, keine Voraussetzung: die beiden Uhrzeiten, die im Chat landen -
-# {time}/{date} und das Ende der Werbepause - nehmen ihre Zeitzone aus variables.json
-# ("timezone") und stimmen auch ohne diese Zeile. Sie gilt für alles, was danach einmal
-# ohne Zeitzone auf die Uhr sieht, und dafür, dass ein `podman exec bugbot date` nicht
-# zwei Stunden danebenliegt. Nichts sonst hängt daran: Moderationsfenster und Uptime
-# rechnen mit Zeitdifferenzen, und die Zeitstempel in bugbot.db schreibt SQLite mit
-# datetime('now') immer in UTC - chatlog.py rechnet sie beim Lesen um.
+# A safety net, not a prerequisite: the two times that end up in chat - {time}/{date} and the
+# end of an ad break - take their timezone from variables.json ("timezone") and are right
+# without this line too. It applies to anything that later looks at the clock without a
+# timezone, and to keeping a `podman exec bugbot date` from being two hours out. Nothing else
+# hangs on it: moderation windows and uptime work with time differences, and SQLite always
+# writes the timestamps in bugbot.db in UTC via datetime('now') - chatlog.py converts them on
+# reading.
 Timezone=local
 # Replace /path/to/bugbot below with the absolute path of your clone of this repo.
 #
-# Jede dieser Dateien ist einzeln gemountet, und ein Bind-Mount auf eine Datei hängt an deren
-# Inode, nicht am Namen. Überschreiben greift sofort (dafür ist es da); *Ersetzen* dagegen -
-# vim mit Default-backupcopy, VS Code, sed -i, mv, git pull - lässt hier die alte Datei
-# stehen, und der Container sieht ab da keine Änderung mehr. `python3 check_config.py` auf
-# dem Host meldet das, `systemctl --user restart bugbot.service` behebt es. Siehe
+# Each of these files is mounted individually, and a bind mount onto a file hangs on its inode,
+# not on its name. Overwriting takes effect immediately (that is what it is for); *replacing*,
+# by contrast - vim with the default backupcopy, VS Code, sed -i, mv, git pull - leaves the old
+# file standing here, and the container sees no change from then on. `python3 check_config.py`
+# on the host reports that, `systemctl --user restart bugbot.service` fixes it. See
 # docs/deployment.md#editing-in-place.
 Volume=/path/to/bugbot/.env:/app/.env:Z
 Volume=/path/to/bugbot/platforms/discord/discord.json:/app/platforms/discord/discord.json:Z
 Volume=/path/to/bugbot/platforms/twitch/twitch.json:/app/platforms/twitch/twitch.json:Z
 Volume=/path/to/bugbot/platforms/discord/features/levels/levels.json:/app/platforms/discord/features/levels/levels.json:Z
 Volume=/path/to/bugbot/platforms/obs/obs.json:/app/platforms/obs/obs.json:Z
-# Die Konfiguration der neutralen Features - ohne diese Mounts wäre im Container die im
-# Image eingebackene Fassung wirksam, und eine Änderung auf dem Host bliebe folgenlos.
+# The neutral features' configuration - without these mounts the version baked into the image
+# would apply in the container, and a change on the host would have no effect.
 Volume=/path/to/bugbot/features/moderation/moderation.json:/app/features/moderation/moderation.json:Z
 Volume=/path/to/bugbot/features/variables/variables.json:/app/features/variables/variables.json:Z
 Volume=/path/to/bugbot/features/stats/stats.json:/app/features/stats/stats.json:Z
 Volume=/path/to/bugbot/features/chat_log/chat_log.json:/app/features/chat_log/chat_log.json:Z
 Volume=/path/to/bugbot/features/sql_db/sql_db.json:/app/features/sql_db/sql_db.json:Z
 Volume=/path/to/bugbot/features/overlay/overlay.json:/app/features/overlay/overlay.json:Z
-Volume=/path/to/bugbot/bugbot.db:/app/bugbot.db:Z
-# Der erste eingehende Port: hier wählt sich das OBS-Relais vom Rechner des Streamers ein
-# (siehe platforms/obs/). Muss zum OBS_BRIDGE_PORT aus der .env passen. Wer OBS nicht
-# anbindet, lässt die Zeile weg.
+Volume=/path/to/bugbot/features/sql_db/bugbot.db:/app/features/sql_db/bugbot.db:Z
+# The first incoming port: this is where the OBS relay from the streamer's machine dials in
+# (see platforms/obs/). Has to match OBS_BRIDGE_PORT from the .env. Anyone not connecting OBS
+# leaves the line out.
 #
-# Absichtlich an 127.0.0.1 gebunden und nicht an alle Adressen: der Weg von außen ist ein
-# SSH-Tunnel vom OBS-Rechner (ssh -L 4456:127.0.0.1:4456 ...), nicht ein offener Port. Damit
-# steht im Internet nichts, was eine laufende Sendung fernsteuern könnte, und die Strecke ist
-# zusätzlich verschlüsselt - obs-websocket selbst spricht unverschlüsseltes ws://.
+# Deliberately bound to 127.0.0.1 and not to every address: the way in from outside is an SSH
+# tunnel from the OBS machine (ssh -L 4456:127.0.0.1:4456 ...), not an open port. That way
+# nothing stands on the internet that could remote-control a live broadcast, and the leg is
+# encrypted on top - obs-websocket itself speaks unencrypted ws://.
 #
-# Der Bot *im* Container lauscht trotzdem auf 0.0.0.0 (OBS_BRIDGE_BIND) - er hat seinen
-# eigenen Netzwerk-Namensraum, und die Portweiterleitung von Podman kommt dort nicht über
-# dessen Loopback an. Die Einschränkung auf Loopback gehört deshalb hierhin, auf die
-# Host-Seite der Weiterleitung.
+# The bot *inside* the container nevertheless listens on 0.0.0.0 (OBS_BRIDGE_BIND) - it has its
+# own network namespace, and Podman's port forwarding does not arrive there via its loopback.
+# The restriction to loopback therefore belongs here, on the host side of the forward.
 PublishPort=127.0.0.1:4456:4456
 
-# Der zweite: hier hängen die Overlays (siehe features/overlay). Muss zum OVERLAY_PORT aus
-# der .env passen. Wer keine Browser-Quelle einbindet, lässt die Zeile weg.
+# The second: this is where the overlays hang (see features/overlay). Has to match OVERLAY_PORT
+# from the .env. Anyone not embedding a browser source leaves the line out.
 #
-# Derselbe Aufbau und dieselbe Loopback-Beschränkung wie oben - auch hierhin führt ein
-# SSH-Tunnel vom OBS-Rechner, und auch hier lauscht der Bot im Container auf 0.0.0.0.
+# The same arrangement and the same loopback restriction as above - an SSH tunnel from the OBS
+# machine leads here too, and here too the bot in the container listens on 0.0.0.0.
 #
-# Was hier hinausgeht, ist nur lesbar (Zuschauerzahl, letzter Follower, Spiel, Todeszähler),
-# und der Lauscher nimmt von der Gegenseite nichts entgegen. Trotzdem steht auch davor ein
-# Token: das `127.0.0.1:` in dieser Zeile ist das erste Schloss, und es ist genau ein
-# vergessenes Präfix davon entfernt, keines mehr zu sein.
+# What goes out here is read-only (viewer count, last follower, game, death counter), and the
+# listener accepts nothing from the far side. There is a token in front of it nonetheless: the
+# `127.0.0.1:` in this line is the first lock, and it is exactly one forgotten prefix away from
+# no longer being one.
 PublishPort=127.0.0.1:4457:4457
 
 [Service]
-# always statt on-failure: der Bot soll auch dann wieder hochkommen, wenn der Prozess
-# sauber mit Exit-Code 0 endet (z.B. wenn discord.py die Verbindung endgültig aufgibt und
-# main() regulär durchläuft). Bei "systemctl stop" greift die Policy nicht.
+# always rather than on-failure: the bot should come back up even when the process ends cleanly
+# with exit code 0 (e.g. when discord.py gives up on the connection for good and main() runs
+# through normally). On "systemctl stop" the policy does not apply.
 Restart=always
 RestartSec=5
 

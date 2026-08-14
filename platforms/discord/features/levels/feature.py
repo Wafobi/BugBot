@@ -1,23 +1,22 @@
 # feature.py
-# XP/Level als Feature von Discord (Fähigkeiten RECORDING und LEVELS).
+# XP/levels as a feature of Discord (capabilities RECORDING and LEVELS).
 #
-# Steckte vorher in core/stats.py und wurde vom Discord-Bot aufgerufen - abschalten ging nur
-# durch Auskommentieren. Jetzt hängt es an MESSAGE_ACCEPTED, bringt seine Befehle selbst mit
-# und lässt sich über BUGBOT_FEATURES ganz weglassen.
+# This used to sit in core/stats.py and was called by the Discord bot - switching it off
+# meant commenting it out. Now it hangs on MESSAGE_ACCEPTED, brings its own commands along and
+# can be left out entirely via BUGBOT_FEATURES.
 #
-# Es liegt bei Discord, weil es Discords XP-System ist: die Punktestände gehören zu diesem
-# Server, und die Rollen, die daran hängen, gibt es nur dort. Zwischenzeitlich war es
-# neutral und über levels.json auf Plattformen umschaltbar - eine Beweglichkeit, die
-# niemand benutzt hat und die die Frage offenließ, was ein gemeinsamer Punktestand über
-# zwei Dienste hinweg überhaupt bedeuten soll.
+# It lives with Discord because it is Discord's XP system: the scores belong to that server,
+# and the roles hanging off them exist only there. For a while it was neutral and switchable
+# across platforms via levels.json - a flexibility nobody used, and one that left open the
+# question of what a shared score across two services would even mean.
 #
-# MESSAGE_ACCEPTED meldet weiterhin *jede* Plattform, deshalb wird hier gefiltert: ein
-# Feature bekommt die Topics des ganzen Bots zu sehen, auch wenn es einer Plattform gehört.
+# MESSAGE_ACCEPTED is still reported by *every* platform, which is why there is a filter here:
+# a feature gets to see the whole bot's topics, even when it belongs to one platform.
 #
-# Die Rollenvergabe beim Levelaufstieg bleibt bewusst nicht hier, obwohl beides jetzt unter
-# platforms/discord/ liegt: welche Rolle es ab Level 5 gibt, steht in discord.json und ist
-# Sache des Bots. Das Feature meldet nur LEVEL_UP auf den Bus - dieselbe Trennung wie
-# vorher, nur kürzere Wege.
+# Handing out the role on a level-up deliberately does not live here, although both now sit
+# under platforms/discord/: which role you get from level 5 on is in discord.json and is the
+# bot's business. The feature only reports LEVEL_UP onto the bus - the same separation as
+# before, just over shorter distances.
 
 import asyncio
 from pathlib import Path
@@ -26,14 +25,14 @@ from core import events, feature as feature_api, runtime_config
 
 from .store import LevelsStore
 
-# XP-Werte, Texte und Befehlsnamen: levels.json, bei Änderung neu gelesen.
+# XP values, texts and command names: levels.json, re-read on change.
 CONFIG = runtime_config.LiveConfig(Path(__file__).parent / "levels.json")
 
-# Welche Plattform gemeint ist, steht nirgends in dieser Datei: `self.owner` kommt von
-# core/registry.py aus dem Ordner, in dem das Feature liegt (platforms/discord/features/...
-# -> "discord"). Vorher stand der Name hier als Konstante - richtig, solange niemand den
-# Ordner umbenennt, und eine der Stellen, an denen ein Feature mehr über die Welt behauptet,
-# als es wissen kann.
+# Which platform is meant is written nowhere in this file: `self.owner` comes from
+# core/registry.py, out of the folder the feature lives in (platforms/discord/features/...
+# -> "discord"). The name used to stand here as a constant - correct as long as nobody renames
+# the folder, and one of the places where a feature claims more about the world than it can
+# know.
 
 
 class LevelsFeature(feature_api.Feature):
@@ -42,8 +41,8 @@ class LevelsFeature(feature_api.Feature):
     requires = frozenset({feature_api.STORAGE})
 
     def __init__(self):
-        # Auch der Bus greift darauf zu: er wendet den Abschnitt "command_names" beim
-        # Einsammeln der Befehle an (siehe core/events.py).
+        # The bus reaches for this too: it applies the "command_names" section when
+        # collecting the commands (see core/events.py).
         self.config = CONFIG
         self.store = None
         self._bus = None
@@ -51,7 +50,7 @@ class LevelsFeature(feature_api.Feature):
     async def setup(self, bus):
         db = bus.feature_with(feature_api.STORAGE)
         if db is None:
-            raise RuntimeError("kein Feature mit der Fähigkeit STORAGE geladen")
+            raise RuntimeError("no feature with the STORAGE capability loaded")
         self.store = LevelsStore(db, self.owner)
         self._bus = bus
         await self._run(self.store.init_schema)
@@ -72,11 +71,11 @@ class LevelsFeature(feature_api.Feature):
             CONFIG.get("xp_max", 25),
         )
         if leveled_up and CONFIG.get("announce_level_up", True):
-            # Die auslösende Message wandert mit: nur sie weiß, in welchem Kanal der
-            # Aufstieg gefeiert werden soll.
+            # The triggering message travels along: only it knows which channel the level-up
+            # should be celebrated in.
             await self._bus.publish(events.LEVEL_UP, message=message, level=level)
 
-    # --- Befehle --------------------------------------------------------------------
+    # --- Commands -------------------------------------------------------------------
 
     def commands(self):
         return (
@@ -85,10 +84,10 @@ class LevelsFeature(feature_api.Feature):
         )
 
     async def cmd_rank(self, message):
-        """Die Befehle hängen wie alle Feature-Befehle in *jeder* Plattform - gefragt wird
-        aber immer der Discord-Punktestand, denn einen anderen gibt es nicht. Nur der Blick
-        auf sich selbst geht von außerhalb nicht: wer im Twitch-Chat schreibt, ist von dort
-        aus keinem Discord-Konto zuzuordnen."""
+        """Like all feature commands these hang in *every* platform - but what is asked for
+        is always the Discord score, because there is no other. Only the look at yourself does
+        not work from outside: somebody writing in Twitch chat cannot be matched to a Discord
+        account from there."""
         target = message.arg_text.strip()
         if not target:
             if not self.handles(message.platform):
@@ -96,7 +95,7 @@ class LevelsFeature(feature_api.Feature):
             xp, level = await self._run(self.store.get_level, message.user_id)
             return CONFIG.text("rank.self", user=message.user_name, level=level, xp=xp)
 
-        # @-Erwähnungen kommen je nach Plattform als <@123456> oder @name herein.
+        # @-mentions arrive as <@123456> or @name, depending on the platform.
         cleaned = target.lstrip("<@!").rstrip(">").lstrip("@")
         if cleaned.isdigit():
             xp, level = await self._run(self.store.get_level, cleaned)

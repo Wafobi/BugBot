@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
-"""Prüft die JSON-Konfigurationen gegen den Code, der sie liest.
+"""Checks the JSON configurations against the code that reads them.
 
     python3 check_config.py
 
-Gedacht für nach dem Ändern einer der *.json-Dateien - und für den, der den Bot zum
-ersten Mal auf seinen eigenen Server anpasst. Der Bot selbst stürzt an einer kaputten
-Konfiguration nicht ab (fehlende Texte fallen auf die mitgelieferte Fassung zurück,
-unbekannte Platzhalter bleiben stehen), aber gemerkt hätte man es erst, wenn der Befehl
-im Chat merkwürdig aussieht. Das hier sagt es vorher.
+Meant for after changing one of the *.json files - and for whoever is adapting the bot to
+their own server for the first time. The bot itself does not crash on a broken configuration
+(missing texts fall back to the shipped version, unknown placeholders stay standing), but you
+would only notice once the command looks odd in chat. This says so beforehand.
 
-Geprüft wird:
-  * lässt sich jede Datei überhaupt lesen (JSON-Syntax),
-  * hat jeder text("...")-Aufruf im Code einen Schlüssel in der zugehörigen Datei,
-  * passen die {platzhalter} eines Textes zu dem, was der Aufrufer mitgibt,
-  * gibt es Texte, die niemand mehr benutzt,
-  * nennt "command_names" nur Befehle, die es gibt, und ist danach keiner doppelt,
-  * sieht der laufende Container dieselben Dateien - oder editiert man ins Leere.
+What is checked:
+  * can every file be read at all (JSON syntax),
+  * does every text("...") call in the code have a key in the corresponding file,
+  * do a text's {placeholders} match what the caller passes in,
+  * are there texts nobody uses any more,
+  * does "command_names" name only commands that exist, and is none of them duplicated after,
+  * does the running container see the same files - or are you editing into nothing.
 
-Die Zuordnung Code -> Datei folgt der Konvention aus core/runtime_config.py: eine JSON je
-Paket, benannt wie das Paket. Ausnahme sind die plattformeigenen Features, die sich die
-Datei ihrer Plattform teilen (obs_control), und die beiden Twitch-Module, die dieselbe
-twitch.json lesen.
+The mapping code -> file follows the convention from core/runtime_config.py: one JSON per
+package, named after the package. The exceptions are the platform-owned features, which share
+their platform's file (obs_control), and the two Twitch modules, which read the same
+twitch.json.
 """
 
 import ast
@@ -33,8 +32,8 @@ ROOT = Path(__file__).resolve().parent
 # Muss zu ContainerName in bugbot.container passen - siehe check_live_mounts.
 CONTAINER = "bugbot"
 
-# Welche Konfigurationsdatei zu welchem Modul gehört. Der erste passende Präfix gewinnt,
-# deshalb stehen die spezielleren Pfade oben.
+# Which configuration file belongs to which module. The first matching prefix wins, which is
+# why the more specific paths are at the top.
 CONFIG_FOR = [
     ("platforms/discord/features/levels", "platforms/discord/features/levels/levels.json"),
     ("platforms/obs", "platforms/obs/obs.json"),
@@ -47,8 +46,8 @@ CONFIG_FOR = [
     ("features/sql_db", "features/sql_db/sql_db.json"),
 ]
 
-# Dateien, die zwar Texte ausgeben, aber nicht zum Bot gehören (laufen auf dem OBS-PC).
-SKIP = {"platforms/obs/obs_bridge.py", "platforms/obs/obs_bridge_script.py"}
+# Files that do print texts but are not part of the bot (they run on the OBS machine).
+SKIP = {"platforms/obs/client/obs_bridge.py", "platforms/obs/client/obs_bridge_script.py"}
 
 problems = []
 notes = []
@@ -68,7 +67,7 @@ def load(path):
     except json.JSONDecodeError as e:
         problems.append(f"{path.relative_to(ROOT)}: kaputtes JSON - {e}")
     except OSError as e:
-        problems.append(f"{path.relative_to(ROOT)}: nicht lesbar - {e}")
+        problems.append(f"{path.relative_to(ROOT)}: not readable - {e}")
     return None
 
 
@@ -81,9 +80,9 @@ def placeholders(template):
 
 
 def _literal_keys(node):
-    """Die wörtlichen Schlüssel eines Text-Aufrufs. Meist genau einer; bei
-    text("a" if x else "b") sind es zwei, und ein zusammengesetzter Schlüssel
-    (f"reason.{reason}") hat keinen - der lässt sich von außen nicht prüfen."""
+    """The literal keys of a text call. Usually exactly one; with text("a" if x else "b") there
+    are two, and a composed key (f"reason.{reason}") has none - that one cannot be checked from
+    outside."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return [node.value]
     if isinstance(node, ast.IfExp):
@@ -92,7 +91,7 @@ def _literal_keys(node):
 
 
 def text_calls(tree):
-    """Alle Aufrufe, die einen Text holen: text("k", ...), CONFIG.text("k", ...),
+    """Every call that fetches a text: text("k", ...), CONFIG.text("k", ...),
     self.config.text("k", ...)."""
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -107,10 +106,10 @@ def text_calls(tree):
 
 
 def string_constants(tree):
-    """Jede Zeichenkette im Modul. Für die Frage "benutzt das noch jemand?": Textschlüssel
-    stehen nicht immer im Aufruf selbst, sondern auch mal in einer Tabelle daneben
-    (requests = {"start": ("StartRecord", "rec.started")}). Als Beleg für "wird benutzt"
-    reicht das - für die strengere Prüfung der Platzhalter oben nicht."""
+    """Every string in the module. For the question "is anybody still using this?": text keys
+    do not always stand in the call itself, but sometimes in a table next to it
+    (requests = {"start": ("StartRecord", "rec.started")}). As evidence of "is used" that is
+    enough - for the stricter placeholder check above it is not."""
     return {
         node.value for node in ast.walk(tree)
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
@@ -118,9 +117,8 @@ def string_constants(tree):
 
 
 def dynamic_key_shapes(tree):
-    """(Präfixe, Suffixe) der zusammengesetzten Schlüssel, z.B. f"highscore.{metric}" ->
-    Präfix "highscore.", f"{key}.value" -> Suffix ".value". Alles, was dazu passt, gilt
-    als benutzt."""
+    """(prefixes, suffixes) of the composed keys, e.g. f"highscore.{metric}" -> prefix
+    "highscore.", f"{key}.value" -> suffix ".value". Anything matching those counts as used."""
     prefixes, suffixes = set(), set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.JoinedStr) or not node.values:
@@ -166,14 +164,14 @@ def check_texts():
                 continue
             template = texts[key]
             if not isinstance(template, str):
-                problems.append(f"{config_path.relative_to(ROOT)}: '{key}' ist kein Text")
+                problems.append(f"{config_path.relative_to(ROOT)}: '{key}' is not text")
                 continue
             needed = placeholders(template)
             missing = needed - given
             if missing:
                 problems.append(
-                    f"{config_path.relative_to(ROOT)}: '{key}' verlangt {{{', '.join(sorted(missing))}}}, "
-                    f"aber {relative}:{line} gibt das nicht mit"
+                    f"{config_path.relative_to(ROOT)}: '{key}' demands {{{', '.join(sorted(missing))}}}, "
+                    f"but {relative}:{line} does not pass it"
                 )
     return used
 
@@ -191,8 +189,8 @@ def check_unused(used):
 
 
 def check_commands():
-    """Umbenennungen prüfen: nennt "command_names" nur Befehle, die es gibt, und kommt
-    danach kein Name doppelt vor?"""
+    """Check the renames: does "command_names" name only commands that exist, and does no name
+    occur twice afterwards?"""
     sys.path.insert(0, str(ROOT))
     from core import registry, runtime_config
 
@@ -202,7 +200,7 @@ def check_commands():
             module = __import__(f"{package}.{name}.feature", fromlist=["create_feature"])
             feature = module.create_feature()
         except Exception as e:
-            notes.append(f"Feature '{name}' nicht ladbar, Befehle ungeprüft: {e!r}")
+            notes.append(f"feature '{name}' not loadable, commands unchecked: {e!r}")
             continue
         config = getattr(feature, "config", None)
         if config is None:
@@ -216,29 +214,28 @@ def check_commands():
         for default_name in overrides:
             if default_name not in names:
                 problems.append(
-                    f"{path.relative_to(ROOT)}: command_names nennt '{default_name}', "
-                    f"den es nicht gibt (vorhanden: {', '.join(sorted(names))})"
+                    f"{path.relative_to(ROOT)}: command_names names '{default_name}', "
+                    f"which does not exist (present: {', '.join(sorted(names))})"
                 )
         for name, command in config.resolve_commands({n: n for n in names}).items():
             if name in seen:
-                problems.append(f"Befehl '{name}' ist doppelt vergeben ({seen[name]} und {path.name})")
+                problems.append(f"command '{name}' is assigned twice ({seen[name]} and {path.name})")
             seen[name] = path.name
 
 
 def check_live_mounts():
-    """Sieht der laufende Bot überhaupt die Dateien, die hier liegen?
+    """Does the running bot see the files that are lying here at all?
 
-    Im Container ist jede JSON einzeln hereingemountet (siehe bugbot.container), und ein
-    Bind-Mount auf eine *Datei* hängt an deren Inode, nicht an ihrem Namen. Wer sie
-    ersetzt statt sie zu überschreiben - `vim` mit dem voreingestellten backupcopy, VS
-    Code, `sed -i`, `mv`, jedes `git pull`, das die Datei anfasst -, bekommt eine neue
-    Datei unter dem alten Namen. Der Container behält die alte und sieht ab da *keine*
-    Änderung mehr, auch keine spätere: die Hot-Reload-Prüfung in core/runtime_config.py
-    schaut auf eine Datei, die niemand mehr bearbeitet.
+    In the container every JSON is mounted in individually (see bugbot.container), and a bind
+    mount onto a *file* hangs on its inode, not on its name. Whoever replaces it instead of
+    overwriting it - `vim` with the default backupcopy, VS Code, `sed -i`, `mv`, any `git pull`
+    that touches the file - gets a new file under the old name. The container keeps the old one
+    and from then on sees *no* change any more, not even a later one: the hot-reload check in
+    core/runtime_config.py is looking at a file nobody edits.
 
-    Von innen ist das nicht zu erkennen - die Datei ist ja da und wirkt unverändert.
-    Deshalb steht die Prüfung hier, auf der Host-Seite, wo sich beide Stände vergleichen
-    lassen. Ohne Podman oder ohne laufenden Container ist einfach nichts zu prüfen."""
+    From the inside this is undetectable - the file is there and appears unchanged. Which is
+    why the check sits here, on the host side, where both states can be compared. Without
+    Podman or without a running container there is simply nothing to check."""
     import shutil
     import subprocess
 
@@ -254,11 +251,11 @@ def check_live_mounts():
             capture_output=True, text=True, timeout=30,
         )
     except (OSError, subprocess.SubprocessError) as e:
-        notes.append(f"Mounts des laufenden Containers ungeprüft: {e}")
+        notes.append(f"mounts of the running container unchecked: {e}")
         return
     if result.returncode != 0 and not result.stdout.strip():
-        # Kein Container namens 'bugbot' - hier läuft der Bot nicht im Container, oder er
-        # läuft gerade nicht. Beides ist kein Problem dieser Konfiguration.
+        # No container named 'bugbot' - either the bot does not run in a container here, or it
+        # is not running right now. Neither is a problem of this configuration.
         return
 
     for line in result.stdout.splitlines():
@@ -273,15 +270,15 @@ def check_live_mounts():
         host = path.stat()
         if inode != host.st_ino:
             problems.append(
-                f"{path.relative_to(ROOT)}: der laufende Container sieht eine andere Datei "
-                f"als diese hier (Inode {inode} statt {host.st_ino}). Etwas hat sie ersetzt "
-                f"statt sie zu überschreiben (Editor, `sed -i`, `git pull`); seitdem greift "
-                f"keine Änderung mehr. Behebt: systemctl --user restart bugbot.service"
+                f"{path.relative_to(ROOT)}: the running container sees a different file than "
+                f"this one (inode {inode} instead of {host.st_ino}). Something replaced it "
+                f"instead of overwriting it (editor, `sed -i`, `git pull`); no change has taken "
+                f"effect since. Fix: systemctl --user restart bugbot.service"
             )
         elif mtime != int(host.st_mtime):
             problems.append(
-                f"{path.relative_to(ROOT)}: Container und Host sind sich über den Stand der "
-                f"Datei nicht einig (mtime {mtime} statt {int(host.st_mtime)})"
+                f"{path.relative_to(ROOT)}: container and host disagree about the state of the "
+                f"file (mtime {mtime} instead of {int(host.st_mtime)})"
             )
 
 
@@ -299,7 +296,7 @@ def main():
             print(f"❌ {problem}")
         print(f"\n{len(problems)} Problem(e) gefunden.")
         return 1
-    print("✅ Konfiguration und Code passen zusammen.")
+    print("✅ Configuration and code fit together.")
     return 0
 
 

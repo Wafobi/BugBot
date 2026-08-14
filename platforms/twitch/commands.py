@@ -1,13 +1,12 @@
 # commands.py
-# Dynamische Befehle mit Argumenten/Live-API-Aufrufen für Twitch - also alles, was
-# wirklich Helix braucht (Uptime, Titel ändern, Raid, Timeout, ...). Die statischen
-# Text-Befehle, Mod-Befehle und Regeln sind kein Python-Code mehr, sondern leben in
-# twitch.json (siehe core/runtime_config.py) - so lassen sie sich zur Laufzeit editieren,
-# ohne den Bot neu zu starten.
+# Dynamic commands with arguments/live API calls for Twitch - that is, everything genuinely
+# needing Helix (uptime, change title, raid, timeout, ...). The static text commands, mod
+# commands and rules are no longer Python code but live in twitch.json (see
+# core/runtime_config.py) - so they can be edited at runtime without restarting the bot.
 #
-# Nicht mehr hier: !stats, !streamstats, !highscores und !leaderboard. Die brauchen kein
-# Twitch, sondern nur die aufgezeichneten Zahlen - sie kommen jetzt aus features/stats und
-# funktionieren dadurch auf jeder Plattform (siehe core/feature.py).
+# No longer here: !stats, !streamstats, !highscores and !leaderboard. Those need no Twitch,
+# only the recorded numbers - they now come from features/stats and therefore work on every
+# platform (see core/feature.py).
 
 import asyncio
 from dataclasses import dataclass
@@ -20,9 +19,9 @@ from .config import text
 
 @dataclass
 class TwitchContext:
-    """Live-Zustand, den twitch_bot.py den Befehlen unten pro Nachricht mitgibt -
-    kein Import von twitch_bot.py hier, sonst gäbe es einen Zirkelimport
-    (twitch_bot.py importiert bereits commands.py)."""
+    """Live state that twitch_bot.py passes to the commands below per message - no import of
+    twitch_bot.py here, which would be a circular import (twitch_bot.py already imports
+    commands.py)."""
     broadcaster_id: str
     moderator_id: str
     access_token: str
@@ -30,10 +29,9 @@ class TwitchContext:
     is_privileged: bool = False
 
 
-# Befehle mit Argumenten/Live-API-Aufrufen - anders als die statischen Text-Maps in
-# twitch.json, da sie echte Helix-Calls brauchen (Uptime, Titel ändern, Raid, ...).
-# Handler bekommen (ctx, user_name, arg_text) und geben den zu postenden Text zurück
-# (oder None).
+# Commands with arguments/live API calls - unlike the static text maps in twitch.json,
+# because they need real Helix calls (uptime, change title, raid, ...). Handlers receive
+# (ctx, user_name, arg_text) and return the text to post (or None).
 
 async def cmd_uptime(ctx, user_name, arg_text):
     if not ctx.broadcaster_id:
@@ -73,8 +71,8 @@ async def cmd_clip(ctx, user_name, arg_text):
     clip_url = await loop.run_in_executor(None, twitch_api.create_clip, ctx.broadcaster_id, ctx.access_token)
     if not clip_url:
         return text("clip.failed")
-    # Über den Event-Bus statt direkt an Discord: dieses Modul weiß nicht (und muss
-    # nicht wissen), wer den Clip am Ende wo postet.
+    # Over the event bus rather than straight to Discord: this module does not know (and need
+    # not know) who finally posts the clip and where.
     await events.bus.announce(platform_api.Announcement(
         kind=platform_api.CLIP,
         title=text("clip.title"),

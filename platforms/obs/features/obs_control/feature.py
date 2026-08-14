@@ -1,22 +1,22 @@
 # feature.py
-# Die Fernsteuerung von OBS als Feature - also das, was Menschen im Chat tippen: !obs,
-# !scene, !rec, !replay, !obssource.
+# The remote control of OBS as a feature - that is, what people type in chat: !obs, !scene,
+# !rec, !replay, !obssource.
 #
-# Warum ein Feature und keine Befehle in platforms/obs/bot.py: Befehle einer *Plattform*
-# gelten nur auf ihr selbst (siehe platforms/twitch/commands.py), und OBS hat gar keinen
-# Chat, auf dem man tippen könnte. Als Feature landen sie dagegen im Befehlsverzeichnis
-# des Bus - und funktionieren damit überall, wo jemand Befehle eingibt: im Twitch-Chat wie
-# auf Discord, ohne dass eine der beiden Plattformen OBS kennt.
+# Why a feature and not commands in platforms/obs/bot.py: a *platform's* commands only apply
+# on itself (see platforms/twitch/commands.py), and OBS has no chat to type in at all. As a
+# feature they land in the bus's command directory instead - and therefore work everywhere
+# somebody enters commands: in Twitch chat as well as on Discord, without either of the two
+# platforms knowing OBS.
 #
-# Der Ort (platforms/obs/features/) sorgt zugleich dafür, dass sie nur existieren, wenn es
-# die OBS-Plattform überhaupt gibt - core/registry.py lädt plattformeigene Features nur
-# mit ihrer Plattform. Und weil dieses Feature bot.py importiert, gilt dasselbe Alles-oder-
-# nichts wie für die Plattform: fehlt OBS_BRIDGE_TOKEN in der .env, lässt sich schon
-# config.py nicht laden, und die Befehle tauchen erst gar nicht auf, statt bei jedem
-# Aufruf ins Leere zu greifen.
+# The location (platforms/obs/features/) at the same time ensures that they only exist when
+# the OBS platform exists at all - core/registry.py loads platform-owned features only
+# together with their platform. And because this feature imports bot.py, the same all-or-
+# nothing applies as for the platform: if OBS_BRIDGE_TOKEN is missing from the .env, config.py
+# already fails to load, and the commands do not show up in the first place instead of
+# reaching into nothing on every call.
 #
-# Alle Befehle sind mod_only: sie greifen in einen laufenden Stream ein. Ein !scene aus
-# dem offenen Chat wäre eine Fernbedienung für jeden Zuschauer.
+# All commands are mod_only: they intervene in a running stream. A !scene from the open chat
+# would be a remote control for every viewer.
 
 from core import feature as feature_api
 
@@ -28,13 +28,13 @@ from ...link import OBSError
 class OBSControlFeature(feature_api.Feature):
     name = "obs_control"
 
-    # Texte und Befehlsnamen teilt es sich mit der Plattform: beides steht in obs.json,
-    # und den Abschnitt "command_names" wendet der Bus beim Einsammeln an (core/events.py).
+    # Texts and command names are shared with the platform: both live in obs.json, and the
+    # bus applies the "command_names" section when collecting them (core/events.py).
     config = OBS_CONFIG
 
-    # Meldet keine Fähigkeit an: es schreibt nichts mit und beantwortet keine Abfragen
-    # anderer Features - es bringt nur Befehle mit. Genau dafür ist `provides` leer
-    # erlaubt (siehe core/feature.py).
+    # Declares no capability: it records nothing and answers no queries from other features
+    # - it only brings commands along. That is exactly what an empty `provides` is allowed
+    # for (see core/feature.py).
 
     def commands(self):
         return (
@@ -45,9 +45,9 @@ class OBSControlFeature(feature_api.Feature):
             feature_api.Command("!obssource", self.cmd_source, mod_only=True, help=text("help.source")),
         )
 
-    # Jeder Befehl kann auf eine Leitung treffen, die es gerade nicht gibt (OBS-PC aus,
-    # Relais nicht gestartet) - deshalb überall dieselbe Antwort statt eines Fehlers im
-    # Log und einer stummen Chatzeile.
+    # Every command can meet a line that does not currently exist (OBS machine off, relay
+    # not started) - hence the same answer everywhere instead of an error in the log and a
+    # silent chat line.
     @staticmethod
     def _offline():
         return text("offline")
@@ -104,8 +104,8 @@ class OBSControlFeature(feature_api.Feature):
             answer = await bot.link.request(request_type)
         except OBSError as e:
             return text("rec.failed", action=action, error=e)
-        # StopRecord verrät, wohin geschrieben wurde - für Clips/Nachbearbeitung die
-        # einzige Information, die man danach noch sucht.
+        # StopRecord reveals where it was written to - for clips/post-processing the one
+        # piece of information you go looking for afterwards.
         reply = text(reply_key)
         path = answer.get("outputPath")
         return text("rec.file", reply=reply, path=path) if path else reply
@@ -116,7 +116,7 @@ class OBSControlFeature(feature_api.Feature):
         try:
             await bot.link.request("SaveReplayBuffer")
         except OBSError as e:
-            # Der häufigste Fall: der Replay-Puffer ist in OBS gar nicht aktiv.
+            # The most common case: the replay buffer is not active in OBS at all.
             return text("replay.failed", error=e)
         return text("replay.saved")
 
@@ -126,6 +126,8 @@ class OBSControlFeature(feature_api.Feature):
 
         name, _, state = message.arg_text.rpartition(" ")
         state = state.strip().lower()
+        # "an"/"aus" stay alongside "on"/"off": they are chat input, and dropping them would
+        # break the command for anyone already typing it that way.
         if not name or state not in ("on", "off", "an", "aus"):
             return text("source.usage")
 

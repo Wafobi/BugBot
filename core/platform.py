@@ -1,41 +1,40 @@
 # platform.py
-# Die Platform-API - der Vertrag zwischen bugbot.py und den einzelnen Plattformen.
+# The Platform API - the contract between bugbot.py and the individual platforms.
 #
-# Konvention: jede Plattform lebt in einem eigenen Paket platforms/<name>/ und stellt in
-# platforms/<name>/platform.py eine Funktion create_platform() bereit, die eine
-# Unterklasse von Platform zurückgibt (siehe core/registry.py). bugbot.py kennt danach
-# weder Discord noch Twitch namentlich - es findet, startet und stoppt nur noch
-# Platform-Objekte.
+# Convention: every platform lives in its own package platforms/<name>/ and provides a
+# create_platform() function in platforms/<name>/platform.py returning a subclass of
+# Platform (see core/registry.py). After that bugbot.py knows neither Discord nor Twitch by
+# name - it only finds, starts and stops Platform objects.
 #
-# Warum das so gebaut ist: vorher rief der Twitch-Bot direkt platforms/discord/bot.py auf
-# (Bug-Reports, Clips, Live-Ankündigung) und der Discord-Bot direkt platforms/twitch/bot.py
-# bzw. api.py (Live-Status, Zuschauer-Sampling). Beide Richtungen ließen sich nur mit verzögerten
-# Imports *innerhalb* der Funktionen bauen, weil ein Import auf Modulebene ein
-# Zirkelimport gewesen wäre. Alles Plattformübergreifende läuft jetzt über
-# core/events.py, und die beiden Pakete kennen einander nicht mehr.
+# Why it is built this way: previously the Twitch bot called platforms/discord/bot.py
+# directly (bug reports, clips, live announcement) and the Discord bot called
+# platforms/twitch/bot.py resp. api.py (live status, viewer sampling). Both directions
+# could only be built with deferred imports *inside* the functions, because an import at
+# module level would have been a circular import. Everything cross-platform now goes
+# through core/events.py, and the two packages no longer know each other.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 
-# --- Fähigkeiten -------------------------------------------------------------------
-# Was eine Plattform kann. core fragt danach, statt Plattformen am Namen zu erkennen -
-# eine neue Plattform muss also nicht alles können, sondern nur angeben, was sie kann.
-CHAT = "chat"          # kann freien Text in ihren Hauptkanal schreiben (send_text)
-ANNOUNCE = "announce"  # kann strukturierte Ankündigungen posten (announce)
-STREAM = "stream"      # meldet Stream-Beginn/-Ende (siehe STREAM_ONLINE/STREAM_OFFLINE)
-MODERATE = "moderate"  # moderiert eingehende Nachrichten selbst (core.moderation)
+# --- Capabilities ----------------------------------------------------------------------
+# What a platform can do. core asks for this instead of recognising platforms by name - so
+# a new platform need not be able to do everything, only to declare what it can.
+CHAT = "chat"          # can write free text into its main channel (send_text)
+ANNOUNCE = "announce"  # can post structured announcements (announce)
+STREAM = "stream"      # reports stream start/end (see STREAM_ONLINE/STREAM_OFFLINE)
+MODERATE = "moderate"  # moderates incoming messages itself (core.moderation)
 
-#: Alle Fähigkeiten - damit "ist das eine Fähigkeit oder ein Plattformname?" (siehe
-#: EventBus.resolve_platforms) an einer Stelle beantwortet wird und nicht an dreien.
+#: All capabilities - so that "is this a capability or a platform name?" (see
+#: EventBus.resolve_platforms) is answered in one place rather than three.
 CAPABILITIES = frozenset({CHAT, ANNOUNCE, STREAM, MODERATE})
 
 
-# --- Ankündigungs-Arten ------------------------------------------------------------
-# Der `kind` einer Announcement. Absender und Empfänger einigen sich allein auf diese
-# Strings; wie eine Plattform sie darstellt - Discord-Embed, Twitch-Chatzeile oder gar
-# nicht - ist ihre eigene Entscheidung. Dieselben Strings sind auch die Topics, unter
-# denen EventBus.announce publiziert (siehe core/events.py).
+# --- Kinds of announcement ---------------------------------------------------------------
+# The `kind` of an Announcement. Sender and receiver agree on these strings alone; how a
+# platform presents them - Discord embed, Twitch chat line, or not at all - is its own
+# decision. The same strings are also the topics EventBus.announce publishes under (see
+# core/events.py).
 STREAM_ONLINE = "stream.online"
 STREAM_OFFLINE = "stream.offline"
 BUG_REPORT = "bug.report"
@@ -45,8 +44,8 @@ STATUS = "status"
 
 @dataclass(frozen=True)
 class Field:
-    """Ein benanntes Detail einer Announcement - auf Discord ein Embed-Field, auf rein
-    textbasierten Plattformen ein "Name: Wert"-Abschnitt (siehe Announcement.as_text)."""
+    """A named detail of an Announcement - an embed field on Discord, a "name: value"
+    section on purely text-based platforms (see Announcement.as_text)."""
     name: str
     value: str
     inline: bool = False
@@ -54,16 +53,17 @@ class Field:
 
 @dataclass(frozen=True)
 class Announcement:
-    """Eine plattformneutrale Ankündigung: "das ist passiert, postet es, wo ihr könnt".
+    """A platform-neutral announcement: "this happened, post it wherever you can".
 
-    Bewusst nur so viel Struktur, wie sich überall darstellen lässt - Titel, Text, Link,
-    Bild, ein paar benannte Felder. Alles Discord-Spezifische (Embed, Kanalwahl,
-    @everyone) entsteht erst im Discord-Renderer, alles Twitch-Spezifische in as_text.
+    Deliberately only as much structure as can be presented everywhere - title, text, link,
+    image, a few named fields. Everything Discord-specific (embed, channel choice,
+    @everyone) only comes into being in the Discord renderer, everything Twitch-specific in
+    as_text.
 
-    highlight  - die Ankündigung ist wichtig genug für eine Benachrichtigung (Discord
-                 macht daraus ein @everyone). Nur für echte Ereignisse wie Streamstart.
-    log        - zusätzlich ins Mod-Protokoll der Plattform, sofern sie eines führt.
-    source     - Name der auslösenden Plattform ("twitch"), author der auslösende User.
+    highlight  - the announcement is important enough for a notification (Discord turns it
+                 into an @everyone). Only for real events such as a stream start.
+    log        - additionally into the platform's mod log, if it keeps one.
+    source     - name of the triggering platform ("twitch"), author the triggering user.
     """
     kind: str
     title: str
@@ -78,9 +78,9 @@ class Announcement:
     fields: tuple = ()
 
     def as_text(self, max_fields=None):
-        """Einzeilige Darstellung für rein textbasierte Plattformen (z.B. Twitch-Chat).
-        `max_fields` begrenzt die Detailfelder - eine IRC-Zeile darf nur ~500 Zeichen
-        lang sein, ein Stream-Abschlussbericht hätte sonst keine Chance."""
+        """Single-line rendering for purely text-based platforms (e.g. Twitch chat).
+        `max_fields` limits the detail fields - an IRC line may only be about 500
+        characters long, and a stream summary would otherwise stand no chance."""
         parts = [self.title, self.text]
         parts += [f"{f.name}: {f.value}" for f in self.fields[:max_fields]]
         parts.append(self.url)
@@ -88,17 +88,17 @@ class Announcement:
 
 
 class Platform(ABC):
-    """Basisklasse jeder Plattform.
+    """Base class of every platform.
 
-    Pflicht sind nur start() und close() - eine Plattform, die sonst nichts kann, ist
-    trotzdem eine gültige Plattform. Alles Weitere wird über `capabilities` angemeldet;
-    die Default-Implementierungen unten sagen schlicht "kann ich nicht"."""
+    Only start() and close() are mandatory - a platform that can do nothing else is still a
+    valid platform. Everything further is declared via `capabilities`; the default
+    implementations below simply say "I cannot"."""
 
-    #: kurzer, eindeutiger Name ("twitch", "discord"). Taucht so auch in core/stats.py
-    #: als platform-Spalte und in den Logs auf.
+    #: short, unique name ("twitch", "discord"). Also appears as the platform column in
+    #: core/stats.py and in the logs.
     name = ""
 
-    #: frozenset der oben definierten Fähigkeiten.
+    #: frozenset of the capabilities defined above.
     capabilities = frozenset()
 
     def supports(self, capability):
@@ -106,35 +106,35 @@ class Platform(ABC):
 
     @abstractmethod
     async def start(self):
-        """Fährt die Plattform hoch. Darf zurückkehren, sobald sie läuft (eigene
-        Hintergrundtasks laufen dann weiter), oder für ihre gesamte Laufzeit blockieren -
-        bugbot.py wartet über ein gemeinsames gather() auf beides gleichermaßen."""
+        """Brings the platform up. May return as soon as it is running (its own background
+        tasks then keep going), or block for its entire lifetime - bugbot.py waits on both
+        alike through a shared gather()."""
 
     @abstractmethod
     async def close(self):
-        """Fährt sauber herunter: Hintergrundtasks abbrechen, Verbindungen schließen.
-        Muss auch dann funktionieren, wenn start() nie oder nur halb durchgelaufen ist -
-        beim Absturz einer anderen Plattform wird close() trotzdem aufgerufen."""
+        """Shuts down cleanly: cancel background tasks, close connections. Must work even
+        when start() never ran, or only halfway - when another platform crashes, close() is
+        called regardless."""
 
     async def wait_ready(self):
-        """Wartet, bis die Plattform Ankündigungen entgegennehmen kann. Default: sofort.
+        """Waits until the platform can accept announcements. Default: immediately.
 
-        Discord wartet hier auf on_ready - vorher kennt es seine Server noch nicht und
-        würde jede Ankündigung stillschweigend verwerfen. Genau deshalb gibt es das:
-        der Live-Abgleich beim Start (Bot-Neustart mitten im Stream) meldet sonst in
-        einen Bot hinein, der noch gar nicht eingeloggt ist."""
+        Discord waits for on_ready here - before that it does not know its guilds yet and
+        would silently discard every announcement. That is exactly why this exists: the
+        live reconciliation at startup (bot restart mid-stream) would otherwise report into
+        a bot that is not even logged in yet."""
         return
 
     async def send_text(self, text):
-        """Schreibt freien Text in den Hauptkanal der Plattform. True bei Erfolg.
-        Default: kann die Plattform nicht (Fähigkeit CHAT fehlt)."""
+        """Writes free text into the platform's main channel. True on success.
+        Default: the platform cannot (capability CHAT missing)."""
         return False
 
     async def announce(self, announcement):
-        """Postet eine Ankündigung, sofern die Plattform diese `kind` darstellen will.
-        True, wenn sie tatsächlich gepostet wurde - der Aufrufer zählt damit, ob die
-        Ankündigung überhaupt irgendwo angekommen ist (siehe !bug).
-        Default: kann die Plattform nicht (Fähigkeit ANNOUNCE fehlt)."""
+        """Posts an announcement, provided the platform wants to present this `kind`. True
+        if it actually got posted - the caller uses that to count whether the announcement
+        arrived anywhere at all (see !bug).
+        Default: the platform cannot (capability ANNOUNCE missing)."""
         return False
 
     def __repr__(self):

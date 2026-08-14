@@ -1,25 +1,25 @@
 # bot.py
-# Die OBS-Logik. Was hier passiert, zerfällt in vier Teile:
+# The OBS logic. What happens here falls into four parts:
 #
-#   Melden      OBS-Ereignisse (Szenenwechsel, Aufnahme, Stream-Ausgabe, Replay) gehen auf
-#               den Bus - als RAW_EVENT wortwörtlich und als PLATFORM_EVENT in der
-#               neutralen Sprache aus core/events.py. Damit zählt features/stats sie mit
-#               und raw_log hebt sie auf, ohne dass eines der beiden OBS kennen muss.
-#   Werbepanel  Twitch meldet den Beginn einer Werbepause auf dem Bus (AD_BREAK); OBS
-#               blendet daraufhin eine Quelle ein und nach Ablauf wieder aus. Die beiden
-#               Plattformen wissen weiterhin nichts voneinander - Twitch publiziert nur,
-#               dass Werbung läuft, und hier hört jemand zu.
-#   Ankündigen  Ankündigungen aus dem Bus (Bug-Report, Clip, Streamstart) in eine
-#               Text-Quelle schreiben und kurz einblenden - die ANNOUNCE-Fähigkeit der
-#               Plattform, siehe platform.py.
-#   Steuern     die Helfer, aus denen platforms/obs/features/obs_control seine Befehle
-#               baut (!obs, !scene, !rec, ...).
+#   Reporting   OBS events (scene change, recording, stream output, replay) go onto the bus -
+#               verbatim as RAW_EVENT and in the neutral language of core/events.py as
+#               PLATFORM_EVENT. That way features/stats counts them and raw_log keeps them,
+#               without either of the two having to know OBS.
+#   Ad panel    Twitch reports the start of an ad break on the bus (AD_BREAK); OBS then shows
+#               a source and hides it again when the break is over. The two platforms still
+#               know nothing of each other - Twitch only publishes that ads are running, and
+#               somebody here is listening.
+#   Announcing  writing announcements from the bus (bug report, clip, stream start) into a
+#               text source and showing it briefly - the platform's ANNOUNCE capability, see
+#               platform.py.
+#   Controlling the helpers platforms/obs/features/obs_control builds its commands from
+#               (!obs, !scene, !rec, ...).
 #
-# Was hier bewusst *nicht* passiert: STREAM_START/STREAM_END publizieren. OBS weiß zwar,
-# wann die Ausgabe läuft, aber die Stream-Session gehört Twitch (siehe
-# platforms/twitch/features/stream_sessions) - zwei Melder wären zwei Sessions für
-# denselben Stream. Der Zustand der OBS-Ausgabe wird stattdessen als gewöhnliches
-# PLATFORM_EVENT gemeldet und ist im !obs-Status zu sehen.
+# What deliberately does *not* happen here: publishing STREAM_START/STREAM_END. OBS does know
+# when the output is running, but the stream session belongs to Twitch (see
+# platforms/twitch/features/stream_sessions) - two reporters would mean two sessions for the
+# same stream. The state of the OBS output is reported as an ordinary PLATFORM_EVENT instead
+# and can be seen in the !obs status.
 
 import asyncio
 from pathlib import Path
@@ -30,34 +30,34 @@ from core import platform as platform_api
 from . import config
 from .link import OBSError, OBSLink
 
-# Plattformname, wie er in jeder Bus-Meldung und in der DB auftaucht. Muss zu
-# platform.py:OBSPlatform.name passen.
+# Platform name as it appears in every bus notification and in the DB. Has to match
+# platform.py:OBSPlatform.name.
 NAME = "obs"
 
-# Werbepanel, Ankündigungen und Rohprotokoll-Schalter kommen aus obs.json und können zur
-# Laufzeit editiert werden (siehe core/runtime_config.py) - kein Neustart nötig.
+# Ad panel, announcements and the raw-log switch come from obs.json and can be edited at
+# runtime (see core/runtime_config.py) - no restart needed.
 OBS_CONFIG = runtime_config.LiveConfig(Path(__file__).parent / "obs.json")
 
-# Laufende Ausblend-Tasks je Quelle (Werbepanel, Ankündigungstext).
+# Running hide tasks per source (ad panel, announcement text).
 _hide_tasks = {}
 
-# Wo eine Quelle überall liegt: Quellenname -> ((Szene, sceneItemId), ...). OBS hat keine
-# Anfrage "wo steckt diese Quelle?", das kostet also eine Anfrage je Szene - und Ein- und
-# Ausblenden kommen immer als Paar. Der Cache wird verworfen, sobald OBS meldet, dass sich
-# an Szenen oder deren Inhalt etwas geändert hat (siehe _CACHE_INVALIDATING).
+# Everywhere a source sits: source name -> ((scene, sceneItemId), ...). OBS has no request
+# for "where is this source?", so it costs one request per scene - and showing and hiding
+# always come as a pair. The cache is discarded as soon as OBS reports that something about
+# the scenes or their contents has changed (see _CACHE_INVALIDATING).
 _item_cache = {}
 
-# Zuletzt gemeldete Programm-Szene, für den Statusbefehl.
+# Most recently reported program scene, for the status command.
 _current_scene = ""
 
-# OBS-Ereignisse, nach denen die Fundorte im Cache falsch sein können.
+# OBS events after which the cached locations may be wrong.
 _CACHE_INVALIDATING = frozenset({
     "SceneListChanged", "SceneCreated", "SceneRemoved", "SceneNameChanged",
     "SceneItemCreated", "SceneItemRemoved", "CurrentSceneCollectionChanged",
 })
 
-# outputState der Stream-/Aufnahme-Ereignisse -> unser Kurzname. Die Zwischenzustände
-# (STARTING/STOPPING) sind bewusst nicht dabei: sie melden eine Absicht, kein Ereignis.
+# outputState of the stream/record events -> our short name. The intermediate states
+# (STARTING/STOPPING) are deliberately absent: they report an intention, not an event.
 _OUTPUT_STATES = {
     "OBS_WEBSOCKET_OUTPUT_STARTED": "started",
     "OBS_WEBSOCKET_OUTPUT_STOPPED": "stopped",
@@ -72,7 +72,7 @@ def _settings(section):
 
 
 def text(key, **values):
-    """Kurzform für OBS_CONFIG.text - alle Sätze stehen in obs.json."""
+    """Shorthand for OBS_CONFIG.text - every sentence lives in obs.json."""
     return OBS_CONFIG.text(key, **values)
 
 
@@ -84,12 +84,12 @@ def announce_text_source():
     return _settings("announce").get("text_source", "")
 
 
-# --- Melden -------------------------------------------------------------------------
+# --- Reporting ----------------------------------------------------------------------
 
 def _neutral_event(event_type, data):
-    """Der Name, unter dem ein OBS-Ereignis als PLATFORM_EVENT gezählt wird - oder "",
-    wenn es nur ins Rohprotokoll gehört. Die Spalte platform sagt bereits "obs", der
-    Ereignisname muss das nicht wiederholen."""
+    """The name an OBS event is counted under as a PLATFORM_EVENT - or "" when it belongs
+    in the raw log only. The platform column already says "obs", so the event name need not
+    repeat it."""
     if event_type == "CurrentProgramSceneChanged":
         return "scene_changed"
     if event_type == "StreamStateChanged":
@@ -109,9 +109,9 @@ def _neutral_event(event_type, data):
 
 
 async def _on_obs_event(event_type, data):
-    """Jedes Ereignis von OBS. Erst wegschreiben, dann auswerten - genau wie im
-    EventSub-Listener von Twitch: ein Fehler weiter unten darf nicht dazu führen, dass das
-    Ereignis nirgends dokumentiert ist."""
+    """Every event from OBS. Write it away first, evaluate afterwards - exactly as in
+    Twitch's EventSub listener: an error further down must not result in the event being
+    documented nowhere."""
     global _current_scene
 
     if OBS_CONFIG.get("raw_events", True):
@@ -126,25 +126,25 @@ async def _on_obs_event(event_type, data):
     counted = _neutral_event(event_type, data)
     if counted:
         print(f"🎛️ OBS: {counted}" + (f" ({_current_scene})" if counted == "scene_changed" else ""))
-        # user_name bleibt leer: OBS-Ereignisse haben keinen Urheber im Chat. Die Spalte
-        # ist NOT NULL, nicht "immer eine Person" (siehe features/stats/store.py).
+        # user_name stays empty: OBS events have no originator in chat. The column is NOT
+        # NULL, not "always a person" (see features/stats/store.py).
         await events.bus.publish(
             events.PLATFORM_EVENT, platform=NAME, event_type=counted, user_name="", amount=0,
         )
 
 
 async def _on_connected():
-    """Nach jeder Anmeldung den Zustand angleichen. Wichtig ist vor allem das Ausblenden:
-    fällt die Leitung mitten in einer Werbepause weg (OBS-Neustart, Bot-Neustart), stünde
-    das Werbepanel sonst für den Rest des Streams im Bild."""
+    """Reconcile the state after every sign-in. The hiding matters most: if the line drops
+    in the middle of an ad break (OBS restart, bot restart), the ad panel would otherwise
+    stand on screen for the rest of the stream."""
     global _current_scene
     _item_cache.clear()
     try:
         scenes = await link.request("GetSceneList")
         _current_scene = scenes.get("currentProgramSceneName", "")
-        print(f"🎬 OBS-Szene: '{_current_scene}' ({len(scenes.get('scenes', []))} Szenen).")
+        print(f"🎬 OBS scene: '{_current_scene}' ({len(scenes.get('scenes', []))} scenes).")
     except OBSError as e:
-        print(f"⚠️ OBS-Szenenliste nicht abrufbar: {e}")
+        print(f"⚠️ OBS scene list not retrievable: {e}")
 
     if OBS_CONFIG.get("hide_on_connect", True):
         for source in {ad_break_source(), announce_text_source()} - {""}:
@@ -155,12 +155,12 @@ async def _on_connected():
     )
 
 
-# --- Quellen ein- und ausblenden -----------------------------------------------------
+# --- Showing and hiding sources ------------------------------------------------------
 
 async def _locate_source(source):
-    """Alle Fundorte einer Quelle als ((Szene, sceneItemId), ...). Quellen in Gruppen
-    zählen mit: für sie ist der Gruppenname der "Szenenname", mit dem OBS sie ansprechen
-    lässt. Ergebnis wird gecacht (siehe _item_cache)."""
+    """All locations of a source as ((scene, sceneItemId), ...). Sources inside groups count
+    too: for them the group name is the "scene name" OBS lets you address them by. The result
+    is cached (see _item_cache)."""
     cached = _item_cache.get(source)
     if cached is not None:
         return cached
@@ -174,8 +174,8 @@ async def _locate_source(source):
             if item.get("sourceName") == source:
                 found.append((scene_name, item["sceneItemId"]))
             elif item.get("isGroup"):
-                # Gruppen brauchen ihre eigene Anfrage; verschachtelte Gruppen gibt es in
-                # OBS nicht, eine Ebene reicht also.
+                # Groups need their own request; nested groups do not exist in OBS, so one
+                # level is enough.
                 group = item.get("sourceName", "")
                 members = (await link.request("GetGroupSceneItemList", {"sceneName": group})).get("sceneItems", [])
                 found += [(group, member["sceneItemId"]) for member in members if member.get("sourceName") == source]
@@ -185,18 +185,18 @@ async def _locate_source(source):
 
 
 async def set_source_visible(source, visible, quiet=False):
-    """Blendet eine Quelle überall ein oder aus, wo sie liegt. Rückgabe: Anzahl der
-    Stellen, an denen es geklappt hat (0 = Quelle gibt es nicht oder OBS ist weg)."""
+    """Shows or hides a source everywhere it sits. Returns the number of places where it
+    worked (0 = the source does not exist, or OBS is gone)."""
     try:
         locations = await _locate_source(source)
     except OBSError as e:
         if not quiet:
-            print(f"⚠️ OBS: Quelle '{source}' nicht auffindbar: {e}")
+            print(f"⚠️ OBS: source '{source}' not locatable: {e}")
         return 0
 
     if not locations:
         if not quiet:
-            print(f"⚠️ OBS: Quelle '{source}' liegt in keiner Szene - nichts ein-/auszublenden.")
+            print(f"⚠️ OBS: source '{source}' is in no scene - nothing to show or hide.")
         return 0
 
     changed = 0
@@ -208,14 +208,14 @@ async def set_source_visible(source, visible, quiet=False):
             changed += 1
         except OBSError as e:
             if not quiet:
-                print(f"⚠️ OBS: '{source}' in '{scene}' nicht umschaltbar: {e}")
+                print(f"⚠️ OBS: '{source}' in '{scene}' not switchable: {e}")
     return changed
 
 
 async def show_source(source, hide_after=0):
-    """Blendet eine Quelle ein und (bei hide_after > 0) nach so vielen Sekunden wieder
-    aus. Ein noch laufender Ausblend-Task für dieselbe Quelle wird abgelöst: sonst würde
-    die zweite Ankündigung von der Uhr der ersten wieder weggeräumt."""
+    """Shows a source and (for hide_after > 0) hides it again after that many seconds. A
+    hide task still running for the same source is replaced: otherwise the second
+    announcement would be cleared away by the first one's clock."""
     _cancel_hide(source)
     if not await set_source_visible(source, True):
         return False
@@ -231,9 +231,9 @@ async def _hide_later(source, delay):
     except asyncio.CancelledError:
         raise
     except Exception as e:
-        print(f"⚠️ OBS: '{source}' konnte nicht ausgeblendet werden: {e}")
+        print(f"⚠️ OBS: '{source}' could not be hidden: {e}")
     finally:
-        # Nur den eigenen Eintrag entfernen - inzwischen kann ein neuer Task dort stehen.
+        # Remove only our own entry - a new task may be sitting there by now.
         if _hide_tasks.get(source) is asyncio.current_task():
             _hide_tasks.pop(source, None)
 
@@ -244,28 +244,28 @@ def _cancel_hide(source):
         task.cancel()
 
 
-# --- Werbepanel ----------------------------------------------------------------------
+# --- Ad panel ------------------------------------------------------------------------
 
 async def _on_ad_break(platform, duration_seconds):
-    """Werbepause auf dem Bus (gemeldet von Twitch): Panel für die Dauer der Werbung
-    einblenden. Läuft gerade kein Relais, passiert schlicht nichts."""
+    """Ad break on the bus (reported by Twitch): show the panel for the duration of the
+    ads. If no relay is running, simply nothing happens."""
     source = ad_break_source()
     if not source or not link.connected:
         return
     seconds = max(0, int(duration_seconds or 0)) + int(_settings("ad_break").get("extra_seconds", 0) or 0)
     if await show_source(source, seconds):
-        print(f"📺 OBS: '{source}' für {seconds}s eingeblendet (Werbepause).")
+        print(f"📺 OBS: '{source}' shown for {seconds}s (ad break).")
 
 
-# --- Ankündigen ----------------------------------------------------------------------
+# --- Announcing ----------------------------------------------------------------------
 
 async def show_announcement(announcement):
-    """Erfüllt core.platform.Platform.announce für OBS: Text in eine Text-Quelle schreiben
-    und sie kurz einblenden. True, wenn sie tatsächlich im Bild gelandet ist.
+    """Fulfils core.platform.Platform.announce for OBS: write text into a text source and
+    show it briefly. True when it actually made it on screen.
 
-    Welche Arten überhaupt auf dem Stream erscheinen, steht in obs.json unter
-    announce.kinds - Default ist leer, aus demselben Grund wie bei Twitch: was der Chat
-    ohnehin schon sieht, muss nicht zusätzlich ins Bild."""
+    Which kinds appear on stream at all is in obs.json under announce.kinds - the default is
+    empty, for the same reason as on Twitch: what the chat already sees need not additionally
+    go on screen."""
     settings = _settings("announce")
     if announcement.kind not in (settings.get("kinds") or []):
         return False
@@ -276,23 +276,23 @@ async def show_announcement(announcement):
 
     text = announcement.as_text(max_fields=int(settings.get("max_fields", 2)))
     try:
-        # overlay=True: nur den Text ändern, alle übrigen Einstellungen der Quelle
-        # (Schrift, Farbe, Umbruch) bleiben, wie der Streamer sie eingerichtet hat.
+        # overlay=True: change only the text; all the source's other settings (font,
+        # colour, wrapping) stay as the streamer set them up.
         await link.request("SetInputSettings", {
             "inputName": source, "inputSettings": {"text": text}, "overlay": True,
         })
     except OBSError as e:
-        print(f"⚠️ OBS: Text-Quelle '{source}' nicht beschreibbar: {e}")
+        print(f"⚠️ OBS: text source '{source}' not writable: {e}")
         return False
 
     return await show_source(source, int(settings.get("hide_after_seconds", 20) or 0))
 
 
-# --- Steuern (benutzt von platforms/obs/features/obs_control) -------------------------
+# --- Controlling (used by platforms/obs/features/obs_control) -------------------------
 
 async def scene_list():
-    """(aktuelle Szene, [alle Szenennamen]) - OBS liefert sie in umgekehrter Reihenfolge
-    zur Anzeige in OBS, hier also einmal gedreht."""
+    """(current scene, [all scene names]) - OBS returns them in reverse order compared with
+    its own display, so they are flipped once here."""
     global _current_scene
     data = await link.request("GetSceneList")
     _current_scene = data.get("currentProgramSceneName", "")
@@ -301,10 +301,10 @@ async def scene_list():
 
 
 async def switch_scene(wanted):
-    """Wechselt die Programm-Szene und gibt den tatsächlich geschalteten Namen zurück,
-    oder None, wenn keine Szene passt. Gesucht wird nachsichtig: exakt, dann ohne
-    Groß-/Kleinschreibung, dann als Anfang, dann als Teilstück - im Chat tippt niemand
-    "🎮 Gameplay (Vollbild)" fehlerfrei ab."""
+    """Switches the program scene and returns the name actually switched to, or None when
+    no scene matches. The search is forgiving: exact, then case-insensitively, then as a
+    prefix, then as a substring - nobody in chat types "🎮 Gameplay (fullscreen)" without a
+    mistake."""
     _, names = await scene_list()
     needle = wanted.strip()
     if not needle:
@@ -329,8 +329,8 @@ def _timecode(value):
 
 
 async def status_announcement():
-    """Der Zustand von OBS als Announcement - Discord macht daraus ein Embed, Twitch eine
-    Chatzeile (siehe core/platform.py)."""
+    """The state of OBS as an Announcement - Discord turns it into an embed, Twitch into a
+    chat line (see core/platform.py)."""
     if not link.connected:
         return platform_api.Announcement(
             kind=platform_api.STATUS, source=NAME,
@@ -345,8 +345,9 @@ async def status_announcement():
     scene, names = await scene_list()
 
     if stream.get("outputActive"):
-        # Bitrate aus Bytes und Dauer statt aus einem Momentanwert - obs-websocket liefert
-        # keinen, und über die ganze Ausgabe gemittelt ist er ohnehin aussagekräftiger.
+        # Bitrate from bytes and duration rather than from an instantaneous value -
+        # obs-websocket provides none, and averaged over the whole output it is more
+        # meaningful anyway.
         seconds = max(1, int(stream.get("outputDuration", 0)) // 1000)
         kbit = int(stream.get("outputBytes", 0)) * 8 / seconds / 1000
         streaming = text("status.stream.live",
@@ -393,19 +394,19 @@ async def status_announcement():
     )
 
 
-# --- Start/Stop ----------------------------------------------------------------------
+# --- Start/stop ----------------------------------------------------------------------
 
 async def start_obs():
-    """Öffnet den Port und kehrt sofort zurück.
+    """Opens the port and returns immediately.
 
-    Bewusst kein Warten auf das Relais: der OBS-PC ist beim Start des Bots meistens aus.
-    Aus demselben Grund überschreibt platform.py auch wait_ready() nicht - sonst hinge der
-    Live-Abgleich von Twitch bis zu zwei Minuten an einem Rechner, der erst am Abend
-    angeht."""
+    Deliberately no waiting for the relay: the OBS machine is usually off when the bot
+    starts. For the same reason platform.py does not override wait_ready() either - otherwise
+    Twitch's live reconciliation would hang for up to two minutes on a machine that only
+    comes on in the evening."""
     await link.start()
     print(
-        f"🎛️ OBS-Anbindung bereit: warte auf {config.OBS_BRIDGE_BIND}:{config.OBS_BRIDGE_PORT} "
-        f"auf das Relais vom OBS-PC (platforms/obs/obs_bridge.py)."
+        f"🎛️ OBS link ready: waiting on {config.OBS_BRIDGE_BIND}:{config.OBS_BRIDGE_PORT} "
+        f"for the relay from the OBS machine (platforms/obs/client/obs_bridge.py)."
     )
 
 
@@ -413,12 +414,12 @@ async def close():
     for source in list(_hide_tasks):
         _cancel_hide(source)
     await link.close()
-    print("🔌 OBS-Lauscher geschlossen.")
+    print("🔌 OBS listener closed.")
 
 
-# --- Verdrahtung ---------------------------------------------------------------------
-# Steht am Ende, weil die Leitung die Handler oben braucht. Das Abonnement wird beim
-# Import gesetzt - dieselbe Stelle wie in platforms/discord/bot.py.
+# --- Wiring --------------------------------------------------------------------------
+# Sits at the end, because the line needs the handlers above. The subscription is set at
+# import time - the same place as in platforms/discord/bot.py.
 
 link = OBSLink(
     token=config.OBS_BRIDGE_TOKEN,

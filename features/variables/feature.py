@@ -1,34 +1,32 @@
 # feature.py
-# Variablen als Feature (Fähigkeit VARIABLES).
+# Variables as a feature (capability VARIABLES).
 #
-# Füllt die {platzhalter} in den statischen Befehlen aus twitch.json/discord.json. Vorher
-# stand an den Aufrufstellen ein blankes `.format(u=user_name)`: {u} war der einzig
-# mögliche Platzhalter, und alles andere - ein {zeit} statt {time}, ein Tippfehler - warf
-# eine KeyError, die weit oben als "Fehler bei der Verarbeitung" landete. Der Befehl blieb
-# im Chat einfach still.
+# Fills the {placeholders} in the static commands from twitch.json/discord.json. Previously
+# the call sites held a bare `.format(u=user_name)`: {u} was the only possible placeholder,
+# and everything else - a {zeit} instead of {time}, a typo - raised a KeyError that landed
+# far above as "error while processing". The command simply stayed silent in chat.
 #
-# Ein Feature und keine Methode in core/runtime_config.py, weil hier genau das steht, was
-# ein Feature ausmacht: es ist auf jeder Plattform dasselbe, es bringt seine eigene
-# Konfiguration mit, und es darf fehlen. Ohne dieses Feature funktionieren {u} und {user}
-# weiter (die weiß die Plattform selbst), nur {time} und die selbstdefinierten Variablen
-# bleiben dann als Text stehen - siehe platforms/twitch/bot.py:_render.
+# A feature and not a method in core/runtime_config.py, because what stands here is exactly
+# what makes a feature: it is the same on every platform, it brings its own configuration,
+# and it may be absent. Without this feature {u} and {user} keep working (the platform knows
+# those itself), only {time} and the self-defined variables then stay standing as text - see
+# platforms/twitch/bot.py:_render.
 #
-# Zwei Quellen, die zweite schlägt die erste:
+# Two sources, the second beating the first:
 #
-#   "variables" feste Zeichenketten: {steam}, {socials}, was der Betreiber eben braucht.
-#   "python"    ein Python-Ausdruck je Variable, ausgewertet beim Benutzen des Befehls.
+#   "variables" fixed strings: {steam}, {socials}, whatever the operator happens to need.
+#   "python"    one Python expression per variable, evaluated when the command is used.
 #
-# Auch {time} und {date} sind nichts Besonderes, sondern zwei ganz normale Ausdrücke in
-# variables.json - hier steht kein einziger Variablenname mehr. Wer wissen will, was es
-# gibt, liest die Datei, und wer die Uhrzeit anders formatiert haben will, ändert dort den
-# Ausdruck, statt einen Formatierungs-Schlüssel zu suchen, den erst der Code kennt. Damit
-# ein kaputte oder fehlende Datei nicht auch noch die Uhr abschaltet, stehen genau diese
-# zwei zusätzlich in DEFAULTS unten (siehe core/runtime_config.py: Defaults sind das, was
-# ein Modul zum Arbeiten braucht).
+# {time} and {date} are nothing special either, but two perfectly ordinary expressions in
+# variables.json - not a single variable name is left in here. Anyone wanting to know what
+# exists reads the file, and anyone wanting the time formatted differently changes the
+# expression there, instead of hunting for a formatting key that only the code knows. So
+# that a broken or missing file does not switch off the clock as well, exactly those two are
+# additionally in DEFAULTS below (see core/runtime_config.py: defaults are what a module
+# needs in order to work).
 #
-# Zuletzt legt die Plattform ihren Kontext darüber ({u}, {user}, {channel}) - der kommt
-# aus der Nachricht und nicht aus der Datei, deshalb kann ihn keine Konfiguration
-# verstellen.
+# Last, the platform lays its context on top ({u}, {user}, {channel}) - that comes from the
+# message and not from the file, which is why no configuration can misadjust it.
 
 import asyncio
 import locale
@@ -40,9 +38,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from core import feature as feature_api, runtime_config
 
-# Nur das Nötigste; alles Weitere steht in variables.json und kann dort geändert werden.
-# {time} und {date} stehen auch dort - hier ein zweites Mal, damit ein Befehl mit der
-# Uhrzeit selbst dann noch antwortet, wenn die Datei fehlt oder jemand sie kaputtschreibt.
+# Only the bare essentials; everything else is in variables.json and can be changed there.
+# {time} and {date} are in there too - here a second time, so that a command with the time
+# still answers even when the file is missing or somebody breaks it. The formats themselves
+# are the operator's choice, which is why they stay as the shipped file has them.
 DEFAULTS = {
     "timezone": "",
     "locale": "",
@@ -61,24 +60,24 @@ class VariablesFeature(feature_api.Feature):
 
     def __init__(self):
         self.config = runtime_config.for_package(__file__, DEFAULTS)
-        #: name -> (Konfigurationsstand, Zeitpunkt, Wert). Siehe _cached.
+        #: name -> (config version, timestamp, value). See _cached.
         self._cache = {}
-        #: Zuletzt gesetztes Locale, damit setlocale nicht bei jeder Nachricht läuft.
+        #: Locale set most recently, so setlocale does not run on every message.
         self._locale = None
 
-    # --- Zeit ---------------------------------------------------------------------------
+    # --- Time ---------------------------------------------------------------------------
 
     def _apply_locale(self):
-        """Setzt LC_TIME auf das Locale aus variables.json - davon hängen die
-        ausgeschriebenen Wochentage und Monate ab (strftime "%A", "%B").
+        """Sets LC_TIME to the locale from variables.json - the spelled-out weekdays and
+        months depend on it (strftime "%A", "%B").
 
-        Nötig, weil das Container-Image nur C und C.utf8 kennt: ohne diesen Aufruf liefert
-        now.strftime('%A') ein englisches "Sunday", bei völlig richtig gerechnetem Datum.
-        Das Locale muss im Image erzeugt worden sein (siehe Dockerfile, ARG LOCALE); ist es
-        das nicht, bleibt es bei Englisch, und es steht einmal im Log, warum.
+        Needed because the container image only knows C and C.utf8: without this call
+        now.strftime('%A') returns an English "Sunday", on a perfectly correctly computed
+        date. The locale has to have been generated in the image (see Dockerfile, ARG
+        LOCALE); if it was not, English it stays, and the log says once why.
 
-        Prozessweit, wie setlocale nun einmal ist. Das ist hier richtig: ein Bot spricht
-        eine Sprache, und wer sie ändert, will sie überall geändert haben."""
+        Process-wide, as setlocale simply is. That is right here: a bot speaks one language,
+        and whoever changes it wants it changed everywhere."""
         name = str(self.config.get("locale", "") or "").strip()
         if name == self._locale:
             return
@@ -90,52 +89,50 @@ class VariablesFeature(feature_api.Feature):
         except locale.Error as e:
             self.config.complain(
                 "locale",
-                f"Locale {name!r} ist nicht verfügbar, Wochentage bleiben englisch - {e}. "
-                f"Im Container wird es beim Bauen erzeugt (Dockerfile, ARG LOCALE).",
+                f"locale {name!r} is not available, weekdays stay English - {e}. "
+                f"In the container it is generated at build time (Dockerfile, ARG LOCALE).",
             )
 
     def zone(self):
-        """Die Zeitzone aus variables.json ("timezone", z.B. "Europe/Berlin"), oder None,
-        wenn dort keine oder eine unbekannte steht - dann gilt die Zeit des Prozesses.
+        """The timezone from variables.json ("timezone", e.g. "Europe/Berlin"), or None
+        when there is none or an unknown one - the process's own time then applies.
 
-        Die Zeitzone steht in der Konfiguration und nicht in der Container-Umgebung, weil
-        sie zu dem gehört, was ein Betreiber einstellt - und weil sie so wie alles andere
-        hier zur Laufzeit änderbar ist. Die Umgebung ist der schlechtere Ort dafür: fehlt
-        sie dort, ist es im Container UTC und damit im Sommer zwei Stunden zu früh, ohne
-        dass irgendwo ein Fehler auftaucht.
+        The timezone lives in the configuration and not in the container environment because
+        it belongs to what an operator sets - and because, like everything else here, it is
+        changeable at runtime. The environment is the worse place for it: if it is missing
+        there, the container is on UTC and therefore two hours early in summer, without an
+        error showing up anywhere.
 
-        Gehört zur Fähigkeit VARIABLES und nicht nur zu now(), weil auch Zeitpunkte, die
-        nicht "jetzt" sind, in dieser Zeitzone ausgegeben werden sollen - das Ende der
-        Werbepause etwa, das Twitch in UTC meldet (platforms/twitch/bot.py). Sonst müsste
-        derselbe Ort ein zweites Mal konfiguriert werden, und die beiden könnten
-        auseinanderlaufen."""
+        Belongs to the VARIABLES capability and not only to now(), because points in time
+        that are not "now" should be printed in this timezone as well - the end of an ad
+        break, say, which Twitch reports in UTC (platforms/twitch/bot.py). Otherwise the same
+        place would have to be configured a second time, and the two could drift apart."""
         name = str(self.config.get("timezone", "") or "").strip()
         if not name:
             return None
         try:
             return ZoneInfo(name)
         except (ZoneInfoNotFoundError, ValueError, OSError) as e:
-            self.config.complain("timezone", f"Zeitzone {name!r} ist unbekannt, nehme die des Servers - {e}")
+            self.config.complain("timezone", f"timezone {name!r} is unknown, using the server's - {e}")
             return None
 
     def now(self):
-        """Jetzt, in der Zeitzone aus variables.json - siehe zone().
+        """Now, in the timezone from variables.json - see zone().
 
-        datetime.now(None) ist die naive Ortszeit des Prozesses, also genau der Fall
-        "keine Zeitzone eingetragen"; deshalb braucht es hier keine Fallunterscheidung."""
+        datetime.now(None) is the process's naive local time, i.e. exactly the case "no
+        timezone entered"; which is why no case distinction is needed here."""
         return datetime.now(self.zone())
 
-    # --- Auflösen -----------------------------------------------------------------------
+    # --- Resolving ----------------------------------------------------------------------
 
     async def resolve(self, template, **context):
-        """Die Werte für die {platzhalter}, die in `template` wirklich vorkommen.
+        """The values for the {placeholders} that actually occur in `template`.
 
-        Nur die vorkommenden: sonst liefe bei jedem `!discord` auch jeder Python-Ausdruck
-        mit, den irgendwer für einen ganz anderen Befehl hinterlegt hat.
+        Only the occurring ones: otherwise every `!discord` would also run every Python
+        expression somebody stored for a completely different command.
 
-        `context` ist, was die Plattform beisteuert ({u}, {user}, {channel}) - es steht den
-        Ausdrücken als Variable zur Verfügung und gewinnt am Ende gegen alles aus der
-        Datei."""
+        `context` is what the platform contributes ({u}, {user}, {channel}) - it is available
+        to the expressions as a variable and in the end beats everything from the file."""
         wanted = runtime_config.placeholders(template)
         if not wanted:
             return dict(context)
@@ -153,18 +150,17 @@ class VariablesFeature(feature_api.Feature):
         return values
 
     async def _value(self, name, context, values, resolving):
-        """Der Wert einer einzelnen Variablen, mit allem, was sie ihrerseits braucht.
+        """The value of a single variable, together with everything it needs in turn.
 
-        Variablen dürfen Variablen benutzen - anders wäre es eine willkürliche Grenze:
-        wer {steam} definiert hat, will es auch in {chef} schreiben können, statt die URL
-        ein zweites Mal hinzuschreiben und beim nächsten Mal eine der beiden zu vergessen.
-        Deshalb wird hier nicht stur eine Liste durchgegangen, sondern von der gefragten
-        Variablen aus rückwärts aufgelöst, so tief wie nötig.
+        Variables may use variables - anything else would be an arbitrary limit: whoever has
+        defined {steam} wants to be able to write it inside {chef} too, rather than writing
+        the URL a second time and forgetting one of the two next time round. So this does not
+        stubbornly walk a list, but resolves backwards from the variable asked for, as deep
+        as necessary.
 
-        `resolving` sind die Variablen, die auf dem Weg hierher schon angefangen wurden.
-        Steht die gefragte selbst darin, hat sich jemand im Kreis definiert; das endete
-        ohne diese Prüfung in einer Endlosschleife, also mit einem stehenden Bot statt
-        einer Fehlermeldung."""
+        `resolving` are the variables already begun on the way here. If the one asked for is
+        in there, somebody has defined themselves in a circle; without this check that ended
+        in an endless loop, i.e. with a stalled bot instead of an error message."""
         if name in context:
             return context[name]
         if name in values:
@@ -178,8 +174,8 @@ class VariablesFeature(feature_api.Feature):
         if name in resolving:
             self.config.complain(
                 f"cycle:{name}",
-                f"Variable '{name}' benutzt sich am Ende selbst "
-                f"({' -> '.join([*resolving, name])}) - der Platzhalter bleibt stehen",
+                f"variable '{name}' ends up using itself "
+                f"({' -> '.join([*resolving, name])}) - the placeholder stays standing",
             )
             return None
         resolving = resolving | {name}
@@ -193,11 +189,11 @@ class VariablesFeature(feature_api.Feature):
         return value
 
     async def _expand(self, name, text, context, values, resolving):
-        """Ein fester Text aus "variables", dessen eigene {platzhalter} gefüllt sind.
+        """A fixed text from "variables", with its own {placeholders} filled in.
 
-        Ohne diesen Schritt käme ein {steam} in einem festen Text wörtlich im Chat an -
-        lautlos und mit einer Klammer mitten im Satz, denn format() ersetzt nur einmal und
-        nicht, was dabei herauskommt."""
+        Without this step a {steam} inside a fixed text would arrive in chat verbatim -
+        silently, and with a brace in the middle of the sentence, because format() replaces
+        only once and not what comes out of it."""
         inner = {}
         for dependency in runtime_config.placeholders(text):
             value = await self._value(dependency, context, values, resolving)
@@ -205,25 +201,25 @@ class VariablesFeature(feature_api.Feature):
                 inner[dependency] = value
         return self.config.render(text, **{**context, **inner})
 
-    # --- Python-Ausdrücke ---------------------------------------------------------------
+    # --- Python expressions -------------------------------------------------------------
 
     async def _evaluate(self, key, code, context, values, resolving):
-        """Wertet einen Ausdruck aus variables.json aus. None heißt "hat nicht geklappt";
-        der Aufrufer lässt den Platzhalter dann stehen, statt Unsinn zu posten.
+        """Evaluates an expression from variables.json. None means "did not work out"; the
+        caller then leaves the placeholder standing rather than posting nonsense.
 
-        Bewusst ein *Ausdruck* und keine Anweisungen: compile(..., "eval") lässt kein
-        import, kein Zuweisen und kein Schreiben von Dateien durch die Hintertür zu. Es ist
-        trotzdem kein Sandkasten und soll auch keiner sein - der Ausdruck läuft im
-        Bot-Prozess, mit dessen Rechten, und wer die Datei schreiben darf, darf ohnehin
-        schon alles. Was hier zählt, ist etwas anderes: dass ein *Versehen* - ein Tippfehler,
-        eine Division durch null, etwas Langsames - nicht den Bot mitnimmt.
+        Deliberately an *expression* and not statements: compile(..., "eval") allows no
+        import, no assignment and no writing of files through the back door. It is
+        nevertheless not a sandbox and is not meant to be one - the expression runs in the
+        bot process, with its rights, and whoever may write the file may already do
+        everything anyway. What counts here is something else: that an *accident* - a typo, a
+        division by zero, something slow - does not take the bot with it.
 
-        Deshalb drei Vorkehrungen, jede gegen einen anderen Unfall:
-          * jede Exception wird gefangen und einmal gemeldet,
-          * die Auswertung läuft in einem Thread mit Zeitlimit, damit etwas Hängendes
-            nicht die ganze Nachrichtenverarbeitung anhält,
-          * das Ergebnis wird kurz gemerkt (cache_seconds), sonst startet jede
-            Chat-Nachricht mit diesem Befehl die Auswertung neu."""
+        Hence three precautions, each against a different mishap:
+          * every exception is caught and reported once,
+          * the evaluation runs in a thread with a time limit, so that something hanging does
+            not stall the entire message processing,
+          * the result is remembered briefly (cache_seconds), otherwise every chat message
+            with this command starts the evaluation afresh."""
         cached = self._cached(key)
         if cached is not None:
             return cached
@@ -232,13 +228,13 @@ class VariablesFeature(feature_api.Feature):
         try:
             compiled = compile(str(code).strip(), f"<{self.config.path.name}:{key}>", "eval")
         except SyntaxError as e:
-            self.config.complain(f"python:{key}", f"Variable '{key}': {e.msg} - der Ausdruck bleibt ungenutzt")
+            self.config.complain(f"python:{key}", f"variable '{key}': {e.msg} - the expression stays unused")
             return None
 
-        # Welche anderen Variablen der Ausdruck benutzt, sagt er selbst: co_names sind die
-        # Namen, die er nachschlägt. Nur die werden aufgelöst - so kostet `steam + '?l=de'`
-        # genau die eine Variable und nicht die ganze Datei, und ein Ausdruck, der gar
-        # keine benutzt, löst gar nichts aus.
+        # Which other variables the expression uses, it says itself: co_names are the names
+        # it looks up. Only those are resolved - so `steam + '?l=de'` costs exactly that one
+        # variable and not the whole file, and an expression using none triggers nothing at
+        # all.
         namespace = {}
         for dependency in compiled.co_names:
             value = await self._value(dependency, context, values, resolving)
@@ -252,12 +248,12 @@ class VariablesFeature(feature_api.Feature):
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
-            # Der Thread läuft weiter - abbrechen lässt sich ein laufender Ausdruck in
-            # Python nicht. Der Bot wartet nur nicht mehr auf ihn, und das ist der Punkt.
-            self.config.complain(f"python:{key}", f"Variable '{key}' braucht länger als {timeout}s - übersprungen")
+            # The thread keeps running - a running expression cannot be cancelled in
+            # Python. The bot merely stops waiting for it, and that is the point.
+            self.config.complain(f"python:{key}", f"variable '{key}' takes longer than {timeout}s - skipped")
             return None
         except Exception as e:
-            self.config.complain(f"python:{key}", f"Variable '{key}' ist fehlgeschlagen: {e!r}")
+            self.config.complain(f"python:{key}", f"variable '{key}' failed: {e!r}")
             return None
 
         text = "" if value is None else str(value)
@@ -265,9 +261,9 @@ class VariablesFeature(feature_api.Feature):
         return text
 
     def _cached(self, key):
-        """Der gemerkte Wert, solange er frisch ist. Ein Bearbeiten der Datei macht ihn
-        sofort ungültig (config.version), sonst wartete man nach einer Änderung noch
-        cache_seconds auf ihre Wirkung - und genau das soll hier ja nicht passieren."""
+        """The remembered value, as long as it is fresh. Editing the file invalidates it
+        immediately (config.version) - otherwise you would wait another cache_seconds after a
+        change for it to take effect, which is precisely what must not happen here."""
         entry = self._cache.get(key)
         if entry is None:
             return None
@@ -289,9 +285,8 @@ def _positive(value, default):
     return number if number > 0 else default
 
 
-# Was einem Ausdruck ohne Import zur Verfügung steht. Klein gehalten und auf das
-# ausgerichtet, wofür Variablen in einem Chat da sind: Zeit, Datum, ein bisschen Rechnen,
-# ein bisschen Zufall.
+# What an expression has available without importing. Kept small and aimed at what
+# variables in a chat are for: time, date, a little arithmetic, a little randomness.
 _SAFE_NAMES = {
     "datetime": datetime,
     "date": date_type,

@@ -1,18 +1,18 @@
-"""Das Overlay-Feature: was im Bild steht, und wann es sich ändert.
+"""The overlay feature: what is on screen, and when it changes.
 
-Es hält einen Zustand - läuft der Stream, wie viele schauen zu, wer kam zuletzt dazu,
-welches Spiel, wie oft gestorben - und schickt jede Änderung an die Browser-Quellen, die
-am Lauscher hängen (features/overlay/server.py). Beim Verbinden bekommt jede erst einmal
-den vollständigen Zustand, danach nur noch die Unterschiede.
+It holds a state - is the stream running, how many are watching, who joined last, which
+game, how many deaths - and sends every change to the browser sources hanging on the
+listener (features/overlay/server.py). On connect each first gets the complete state, only
+the differences afterwards.
 
-Der Zustand entsteht ausschließlich aus Topics des Busses. Das Feature fragt nirgends
-nach und kennt keine Plattform beim Namen: was auf Twitch ein Follow ist, kommt hier als
-PLATFORM_EVENT mit event_type="follow" an, und ein zweiter Dienst mit derselben Meldung
-liefe ohne Änderung mit.
+The state arises exclusively from bus topics. The feature asks nowhere for anything and
+knows no platform by name: what is a follow on Twitch arrives here as a PLATFORM_EVENT with
+event_type="follow", and a second service with the same notification would run along
+unchanged.
 
-Dazu bringt es den Todeszähler mit. Der steht hier, weil das Overlay der Ort ist, an dem
-man ihn sieht - und weil er über einen Chat-Befehl hochgezählt wird, nicht über eine
-Datei auf dem OBS-Rechner, an die ein Bot auf dem Server ohnehin nicht herankäme.
+It also brings the death counter along. That lives here because the overlay is where you see
+it - and because it is counted up via a chat command, not via a file on the OBS machine that
+a bot on the server could not reach anyway.
 """
 
 import asyncio
@@ -26,25 +26,25 @@ from . import config as env
 from .server import OverlayServer
 from .store import OverlayStore
 
-# Schlüsselstamm des Todeszählers in overlay_counters. Kein Konfigurationswert: er steht
-# in der Datenbank und würde beim Umbenennen einen leeren Zähler zeigen.
+# Key stem of the death counter in overlay_counters. Not a configuration value: it lives in
+# the database and renaming it would show an empty counter.
 #
-# Gezählt wird je Spiel: "deaths:Elden Ring". Der Stamm allein bleibt der Topf für alles,
-# was außerhalb eines bekannten Spiels passiert - offline, oder wenn die Plattform keine
-# Kategorie meldet. Deshalb behält der alte Schlüssel aus der Zeit vor den Spielständen
-# genau seine bisherige Bedeutung, und es gibt nichts zu migrieren.
+# Counting happens per game: "deaths:Elden Ring". The stem on its own stays the pot for
+# everything happening outside a known game - offline, or when the platform reports no
+# category. That is why the old key from the time before per-game counts keeps exactly its
+# previous meaning, and there is nothing to migrate.
 DEATHS = "deaths"
 
 
 class OverlayFeature(feature_api.Feature):
     name = "overlay"
 
-    # Bietet nichts an: niemand sonst soll auf dem Bildschirminhalt aufbauen.
+    # Offers nothing: nobody else should build on what is on screen.
     provides = frozenset()
 
-    # Beides mitgenommen, wenn da - keines davon ist nötig, um zu senden. Ohne STORAGE
-    # lebt der Todeszähler nur bis zum Neustart, ohne SESSIONS fehlt die Startzeit aus
-    # einer schon laufenden Session (der nächste STREAM_START holt sie nach).
+    # Both taken along if present - neither is needed in order to send. Without STORAGE the
+    # death counter lives only until the restart; without SESSIONS the start time of an
+    # already running session is missing (the next STREAM_START makes up for it).
     optional = frozenset({feature_api.STORAGE, feature_api.SESSIONS})
 
     def __init__(self):
@@ -52,11 +52,11 @@ class OverlayFeature(feature_api.Feature):
         self.store = None
         self._server = None
         self._bus = None
-        # Ersatzablage ohne STORAGE: {Schlüssel: Stand}, nur bis zum Neustart.
+        # Substitute storage without STORAGE: {key: value}, only until the restart.
         self._memory = {}
         self._state = {
             "live": False,
-            "started_at": None,   # Unix-Sekunden; die Uptime rechnet das Overlay selbst
+            "started_at": None,   # unix seconds; the overlay computes the uptime itself
             "title": "",
             "game": "",
             "viewers": 0,
@@ -66,7 +66,7 @@ class OverlayFeature(feature_api.Feature):
             "deaths": 0,
         }
 
-    # --- Lebenszyklus ---------------------------------------------------------------
+    # --- Lifecycle ------------------------------------------------------------------
 
     async def setup(self, bus):
         self._bus = bus
@@ -75,10 +75,10 @@ class OverlayFeature(feature_api.Feature):
         if db is not None:
             self.store = OverlayStore(db)
             await asyncio.to_thread(self.store.init_schema)
-            # Beim Start ist noch kein Spiel bekannt - das holt der erste STREAM_START nach.
+            # At startup no game is known yet - the first STREAM_START makes up for that.
             self._state["deaths"] = await self._read_deaths(self._deaths_key())
         else:
-            print("⚠️  Overlay ohne STORAGE: der Todeszähler beginnt bei jedem Start neu.")
+            print("⚠️  Overlay without STORAGE: the death counter starts over on every start.")
 
         bus.subscribe(events.STREAM_START, self.on_stream_start)
         bus.subscribe(events.STREAM_END, self.on_stream_end)
@@ -87,8 +87,8 @@ class OverlayFeature(feature_api.Feature):
         bus.subscribe(events.PLATFORM_EVENT, self.on_platform_event)
 
         if not env.OVERLAY_TOKEN:
-            print("ℹ️  Kein OVERLAY_TOKEN gesetzt - kein Overlay-Lauscher. "
-                  "Die Zähler-Befehle laufen trotzdem.")
+            print("ℹ️  No OVERLAY_TOKEN set - no overlay listener. "
+                  "The counter commands run regardless.")
             return
 
         self._server = OverlayServer(
@@ -103,27 +103,27 @@ class OverlayFeature(feature_api.Feature):
             await self._server.close()
             self._server = None
 
-    # --- Zustand --------------------------------------------------------------------
+    # --- State ----------------------------------------------------------------------
 
     def snapshot(self):
-        """Der vollständige Zustand für eine frisch verbundene Browser-Quelle.
+        """The complete state for a freshly connected browser source.
 
-        Die Befehlsliste steckt mit drin und wird hier frisch geholt, nicht beim Start
-        gemerkt: Befehle lassen sich zur Laufzeit umbenennen, und ein Overlay, das
-        danach neu lädt, soll die neuen Namen zeigen."""
+        The command list is part of it and is fetched fresh here rather than remembered at
+        startup: commands can be renamed at runtime, and an overlay reloading afterwards
+        should show the new names."""
         return {**self._state, "commands": self._public_commands()}
 
     def _public_commands(self):
-        """Die Befehle, die einem normalen Zuschauer offenstehen - der Ticker im Bild.
+        """The commands open to an ordinary viewer - the ticker on screen.
 
-        mod_only fällt raus: was der Zuschauer nicht benutzen darf, muss er auch nicht
-        lesen. Die Namen kommen aus dem Bus und tragen damit schon die Umbenennungen aus
-        den JSON-Dateien - deshalb .values() und nicht die Schlüssel: bus.commands()
-        liefert {Name: Command}, und der Command darin trägt den tatsächlichen Namen.
+        mod_only drops out: what the viewer may not use, they need not read either. The names
+        come from the bus and therefore already carry the renames from the JSON files - hence
+        .values() and not the keys: bus.commands() returns {name: Command}, and the Command
+        in it carries the actual name.
 
-        Alles in einem try: fällt die Liste aus, soll das den Ticker kosten und nicht den
-        ganzen Zustand. Vorher lag die Schleife außerhalb, und eine Ausnahme darin hat den
-        state-Frame mitgenommen - die Seite verband sich dann und bekam nie Daten."""
+        All inside one try: if the list fails, that should cost the ticker and not the whole
+        state. Previously the loop sat outside, and an exception in it took the state frame
+        with it - the page then connected and never got any data."""
         if self._bus is None:
             return []
         try:
@@ -137,9 +137,9 @@ class OverlayFeature(feature_api.Feature):
             return []
 
     async def _patch(self, **changes):
-        """Nur das schicken, was sich wirklich geändert hat. Zuschauerzahlen kommen im
-        Takt der Stichprobe herein und sind meistens dieselben - jede davon als Nachricht
-        auszusenden hieße, das Overlay ohne Anlass neu zeichnen zu lassen."""
+        """Send only what actually changed. Viewer counts arrive at the sampling tick and
+        are mostly the same - sending each of them as a message would mean redrawing the
+        overlay for no reason."""
         actual = {key: value for key, value in changes.items() if self._state.get(key) != value}
         if not actual:
             return
@@ -157,8 +157,8 @@ class OverlayFeature(feature_api.Feature):
         await self._patch(live=False, started_at=None, viewers=0)
 
     async def on_segment(self, platform=None, title="", category="", **_):
-        """Titel- oder Kategoriewechsel. Beim Spielwechsel gehört ein anderer Zählerstand
-        ins Bild - stehen bliebe sonst der des vorigen Spiels."""
+        """Title or category change. On a change of game a different counter belongs on
+        screen - otherwise the previous game's would stay standing."""
         before = self._state["game"]
         await self._patch(title=title or "", game=category or "")
         if self._state["game"] != before:
@@ -168,26 +168,26 @@ class OverlayFeature(feature_api.Feature):
         await self._patch(viewers=int(count or 0))
 
     async def on_platform_event(self, platform=None, event_type="", user_name="", amount=0, **_):
-        """Follows, Subs, Raids. Welche Art wohin gehört, steht in overlay.json - so
-        kommt ein neuer Ereignistyp ohne Codeänderung ins Bild.
+        """Follows, subs, raids. Which kind belongs where is in overlay.json - so a new
+        event type gets on screen without a code change.
 
-        Nur der Name wird gemerkt, nichts blinkt: die Einblendungen macht die Alertbox von
-        Twitch als eigene Browser-Quelle, und zwei Stellen für dieselbe Meldung wären eine
-        zu viel."""
+        Only the name is remembered, nothing flashes: the on-screen alerts are done by
+        Twitch's own alertbox as a separate browser source, and two places for the same
+        notice would be one too many."""
         slot = (self.config.section("event_slots") or {}).get(event_type)
         if slot:
             await self._patch(**{slot: user_name})
 
-    # --- Befehle --------------------------------------------------------------------
+    # --- Commands -------------------------------------------------------------------
 
     async def cmd_deaths_show(self, message):
-        """Ohne Argument der laufende Titel, mit Argument ein beliebiger anderer - so lässt
-        sich "wie oft bin ich in X gestorben" fragen, ohne X gerade zu spielen.
+        """Without an argument the running title, with one any other - so "how often did I
+        die in X" can be asked without currently playing X.
 
-        Das Argument wird *nachgeschlagen*, nicht übernommen, und geantwortet wird mit dem
-        gespeicherten Namen. Sonst spräche der Bot beliebigen Chattext aus - und was er
-        sagt, geht an der Moderation vorbei, weil nicht der Nutzer schreibt, sondern er.
-        Ein unbekanntes Spiel bekommt deshalb eine Antwort ohne jede Eingabe darin."""
+        The argument is *looked up*, not adopted, and the answer uses the stored name.
+        Otherwise the bot would speak arbitrary chat text - and what it says bypasses
+        moderation, because it is not the user writing but the bot. An unknown game therefore
+        gets an answer without any input in it."""
         asked = (message.arg_text or "").strip()
         if asked:
             game = await self._find_game(asked)
@@ -214,29 +214,29 @@ class OverlayFeature(feature_api.Feature):
         return self._say("deaths.set", game, count=count)
 
     def _say(self, key, game, **values):
-        """Dieselbe Meldung in zwei Fassungen: mit Spielnamen und ohne. Ein einzelner Text
-        mit {game} ginge nicht - ohne bekanntes Spiel stünde dort ein Platzhalterwort, und
-        der Satz läse sich schief."""
+        """The same notice in two versions: with a game name and without. A single text with
+        {game} would not do - without a known game a filler word would stand there, and the
+        sentence would read crooked."""
         if game:
             return self.config.text(key, game=game, **values)
         return self.config.text(f"{key}_no_game", **values)
 
-    # --- Der Zähler ------------------------------------------------------------------
+    # --- The counter -----------------------------------------------------------------
 
     def _game(self):
         return self._state["game"].strip()
 
     def _deaths_key(self, game=None):
-        """"deaths:Elden Ring" je Spiel, "deaths" für alles ohne bekannte Kategorie."""
+        """"deaths:Elden Ring" per game, "deaths" for everything without a known category."""
         game = (self._game() if game is None else game).strip()
         return f"{DEATHS}:{game}" if game else DEATHS
 
     async def _find_game(self, asked):
-        """Der gespeicherte Name zu einer Anfrage, oder None.
+        """The stored name for a query, or None.
 
-        Groß-/Kleinschreibung egal, damit "!tode elden ring" trifft - zurück kommt aber
-        immer der Name aus der Ablage, nie der getippte. Das ist der ganze Schutz: was der
-        Bot ausspricht, stammt dann aus der Kategorie, die die Plattform gemeldet hat."""
+        Case-insensitive, so that "!tode elden ring" hits - but what comes back is always the
+        name from storage, never the typed one. That is the entire protection: what the bot
+        says then comes from the category the platform reported."""
         prefix = f"{DEATHS}:"
         if self.store is None:
             known = [k[len(prefix):] for k in self._memory if k.startswith(prefix)]
@@ -250,11 +250,11 @@ class OverlayFeature(feature_api.Feature):
         return None
 
     async def _refresh_deaths(self):
-        """Den Stand des jetzt laufenden Spiels ins Bild holen."""
+        """Bring the count of the currently running game on screen."""
         await self._patch(deaths=await self._read_deaths(self._deaths_key()))
 
-    # Drei schmale Hüllen um die Ablage, damit die Aufrufer oben nicht wissen müssen, ob
-    # es ein STORAGE-Feature gibt. Ohne eines lebt der Stand nur bis zum Neustart.
+    # Three thin wrappers around storage, so the callers above need not know whether a
+    # STORAGE feature exists. Without one the count lives only until the restart.
     async def _read_deaths(self, key):
         if self.store is None:
             return self._memory.get(key, 0)

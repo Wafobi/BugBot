@@ -19,25 +19,25 @@ _token_task = None
 _viewer_task = None
 _reconcile_task = None
 
-# Wird gesetzt, sobald Twitch die IRC-Anmeldung mit "001 Welcome, GLHF!" bestätigt hat,
-# und beim Verbindungsverlust wieder gelöscht - start_twitch_bot wartet darauf, bevor es
-# die Startmeldung in den Chat schreibt.
+# Set as soon as Twitch has confirmed the IRC sign-in with "001 Welcome, GLHF!", and cleared
+# again when the connection is lost - start_twitch_bot waits for it before writing the startup
+# message into the chat.
 _connected = asyncio.Event()
 
 EVENTSUB_WS_URL = "wss://eventsub.wss.twitch.tv/ws"
 
-# Alle Zeiten stehen in twitch.json unter "timings" und werden dort erklärt; hier nur der
-# Zugriff. Sie am Verwendungsort zu lesen statt beim Import einzufrieren ist der Grund,
-# warum eine Änderung ohne Neustart wirkt - beim nächsten Durchlauf der Schleife gilt sie.
+# All timings live in twitch.json under "timings" and are explained there; only the access is
+# here. Reading them at the point of use rather than freezing them at import time is the reason
+# a change takes effect without a restart - it applies on the loop's next pass.
 #
-# Wofür sie da sind, in Kürze: Twitch pingt von sich aus nur alle ~5 Minuten, und wenn die
-# Verbindung still wegfällt (Router-/Firewall-Timeout, Netzwechsel), kommt nicht einmal ein
-# FIN an - recv() blockiert dann für immer. Ohne eigenes Lebenszeichen merkt der Bot
-# tagelang nicht, dass er taub ist (irc_ping_interval). Twitch-User-Tokens gelten meist nur
-# ~4h; läuft der Token in einer Streampause ab, scheitert jeder Reconnect und Twitch
-# widerruft alle EventSub-Abos (token_check_interval/token_refresh_margin). Und bleibt das
-# session_keepalive von EventSub aus, ist die Session tot - eventsub_keepalive_grace ist der
-# Puffer gegen Netzwerk-Jitter.
+# What they are for, in short: Twitch itself only pings about every 5 minutes, and when the
+# connection quietly drops away (router/firewall timeout, network change) not even a FIN
+# arrives - recv() then blocks forever. Without a sign of life of its own the bot does not
+# notice for days that it has gone deaf (irc_ping_interval). Twitch user tokens are usually
+# valid only ~4h; if the token expires during a break between streams, every reconnect fails
+# and Twitch revokes all EventSub subscriptions (token_check_interval/token_refresh_margin).
+# And if EventSub's session_keepalive stops coming, the session is dead -
+# eventsub_keepalive_grace is the buffer against network jitter.
 
 
 def timing(key, default):
@@ -46,54 +46,54 @@ def timing(key, default):
 BROADCASTER_ID = None
 MODERATOR_ID = None
 
-# Kurzer, hochzählender Schlüssel -> echte AutoMod-msg_id, damit Mods im Chat
-# "!approve 3" statt der langen Helix-msg_id tippen müssen. Wird von handle_automod_hold
-# befüllt und von !approve/!deny (siehe TWITCH_BOT_MOD_COMMANDS unten) konsumiert.
+# Short, incrementing key -> the real AutoMod msg_id, so mods can type "!approve 3" in chat
+# instead of the long Helix msg_id. Filled by handle_automod_hold and consumed by
+# !approve/!deny (see TWITCH_BOT_MOD_COMMANDS below).
 _automod_queue = {}
 _automod_queue_counter = 0
 
-# Zustand der laufenden Channel-Points-Verlosung (siehe !giveaway unten), oder None,
-# wenn gerade keine läuft. entries bildet redemption_id -> (user_id, user_name) ab und
-# wird von handle_reward_redemption befüllt.
+# State of the running channel points giveaway (see !giveaway below), or None when none is
+# running. entries maps redemption_id -> (user_id, user_name) and is filled by
+# handle_reward_redemption.
 _giveaway = None
 
-# Läuft während einer Werbepause und meldet deren Ende (siehe handle_ad_break_begin).
+# Runs during an ad break and reports its end (see handle_ad_break_begin).
 _ad_break_task = None
 
-# Follows werden gesammelt statt einzeln beantwortet: ein Follow-Bot-Schwall würde sonst
-# eine Chat-Nachricht pro Follow erzeugen und das Twitch-Limit von 100 Nachrichten pro
-# 30 Sekunden reißen - Twitch verwirft die dann stillschweigend und kann die Verbindung
-# schließen. Erfasst wird weiterhin jeder einzelne Follow, gebündelt wird nur die Ansage.
-# Fenster und Namensanzahl: twitch.json, "timings".
+# Follows are collected rather than answered individually: a follow-bot surge would otherwise
+# produce one chat message per follow and break Twitch's limit of 100 messages per 30 seconds -
+# Twitch then silently discards them and may close the connection. Every single follow is still
+# recorded; only the announcement is bundled. Window and number of names: twitch.json,
+# "timings".
 _pending_follows = []
 _follow_batch_task = None
 
-# Läuft gerade ein Stream? Gepflegt von _go_live/_go_offline, die beide über
-# stream.online/stream.offline (EventSub) bzw. den Live-Abgleich beim Start angestoßen
-# werden. Lag früher als `is_live` im Discord-Bot - der musste dafür den Twitch-Bot
-# importieren, obwohl es ein rein twitchseitiger Zustand ist.
+# Is a stream running? Maintained by _go_live/_go_offline, both triggered via
+# stream.online/stream.offline (EventSub) resp. the live reconciliation at startup. This used to
+# sit as `is_live` in the Discord bot - which had to import the Twitch bot for it, even though
+# it is a purely Twitch-side state.
 _is_live = False
 
-# Zuschauerzahlen kennt nur die Helix-API, ein EventSub-Event dafür gibt es nicht -
-# dieser eine Wert bleibt also Polling (siehe _viewer_sample_loop, viewer_sample_interval).
+# Viewer counts are known only to the Helix API; there is no EventSub event for them - so this
+# one value stays polling (see _viewer_sample_loop, viewer_sample_interval).
 
-# Alles Einstellbare - Texte, Zeiten, Farben, Befehlsnamen, Regeln, statische Befehle,
-# Moderations-Schwellenwerte - kommt aus twitch.json und wird bei Änderung neu gelesen
-# (siehe core/runtime_config.py). Die Datei selbst liegt in config.py, damit auch
-# commands.py sie lesen kann; hier nur der gewohnte Name.
+# Everything adjustable - texts, timings, colours, command names, rules, static commands,
+# moderation thresholds - comes from twitch.json and is re-read on change (see
+# core/runtime_config.py). The file itself lives in config.py so that commands.py can read it
+# too; here only under the familiar name.
 TWITCH_CONFIG = config.TWITCH_CONFIG
 text = config.text
 
 
 async def _render(template, user_name):
-    """Ein statischer Befehl aus twitch.json, fertig für den Chat.
+    """A static command from twitch.json, ready for the chat.
 
-    Was die Plattform selbst weiß, setzt sie selbst ein: {u}/{user} ist der, der den
-    Befehl geschrieben hat, {channel} der Kanal. Alles Weitere - {time}, {date} und was
-    der Betreiber sich in features/variables/variables.json definiert hat - kommt vom
-    VARIABLES-Feature, und zwar über seine Fähigkeit, nicht über einen Import: läuft der
-    Bot ohne dieses Feature, bleiben eben nur die drei hier, und der Rest steht als Text
-    da. Ein Befehl fällt dadurch nie ganz aus."""
+    What the platform knows itself, it fills in itself: {u}/{user} is whoever wrote the
+    command, {channel} the channel. Everything else - {time}, {date} and whatever the operator
+    defined in features/variables/variables.json - comes from the VARIABLES feature, and
+    through its capability rather than an import: if the bot runs without that feature, only
+    the three here remain and the rest stands there as text. A command therefore never fails
+    entirely."""
     values = {"u": user_name, "user": user_name, "channel": config.TWITCH_CHANNEL}
     for variables in events.bus.features_with(feature_api.VARIABLES):
         values.update(await variables.resolve(template, **values))
@@ -101,16 +101,16 @@ async def _render(template, user_name):
 
 
 def _clock(moment):
-    """`moment` (mit Zeitzone) als Uhrzeit für den Chat.
+    """`moment` (with timezone) as a time of day for the chat.
 
-    In derselben Zeitzone wie {time}, und aus derselben Quelle: der Konfiguration des
-    VARIABLES-Features, geholt über dessen Fähigkeit statt über einen Import - wie in
-    _render darüber. Damit muss die Zeitzone nicht ein zweites Mal in twitch.json stehen,
-    und eine Änderung dort wirkt hier sofort mit.
+    In the same timezone as {time}, and from the same source: the VARIABLES feature's
+    configuration, fetched through its capability rather than an import - as in _render above.
+    That way the timezone need not appear a second time in twitch.json, and a change there
+    takes effect here immediately.
 
-    Fehlt das Feature oder ist dort keine Zeitzone eingetragen, bleibt die des Prozesses.
-    Die ist im Container die des Hosts (bugbot.container, Timezone=), ohne diese Zeile
-    UTC - deshalb ist der Eintrag in variables.json die verlässlichere Angabe."""
+    If the feature is missing, or no timezone is entered there, the process's own applies. In
+    the container that is the host's (bugbot.container, Timezone=), and UTC without that line -
+    which is why the entry in variables.json is the more reliable one."""
     for variables in events.bus.features_with(feature_api.VARIABLES):
         zone = variables.zone()
         if zone:
@@ -119,28 +119,28 @@ def _clock(moment):
 
 
 def get_twitch_commands():
-    # Schlüssel mit Unterstrich sind Erklärungen für den, der die Datei bearbeitet (JSON
-    # kennt keine Kommentare), kein Befehl - sonst stünde "_comment" gleich in !commands.
+    # Keys with a leading underscore are explanations for whoever edits the file (JSON has no
+    # comments), not a command - otherwise "_comment" would show up right in !commands.
     commands_map = {
         name: value for name, value in TWITCH_CONFIG.get("commands", {}).items()
         if not name.startswith("_")
     }
     rules = TWITCH_CONFIG.get("rules", "")
-    # u bleibt absichtlich ein Platzhalter: die Befehlstabelle wird einmal gebaut, den
-    # Namen setzt erst der Aufrufer je Nachricht ein (wie bei jedem statischen Befehl).
+    # u deliberately stays a placeholder: the command table is built once, and the caller
+    # fills the name in per message (as with every static command).
     commands_map.setdefault("!rules", TWITCH_CONFIG.text("rules.line", u="{u}", rules=rules))
     return commands_map
 
 
-# Plattformname, wie er in jeder Bus-Meldung und in der DB auftaucht. Muss zu
-# platform.py:TwitchPlatform.name passen.
+# Platform name as it appears in every bus notification and in the DB. Has to match
+# platform.py:TwitchPlatform.name.
 NAME = "twitch"
 
 
 async def _publish_event(event_type, user_name, amount=0):
-    """Meldet ein Live-Ereignis (Follow/Sub/Cheer/Raid/...) auf den Bus. Wer es
-    mitschreibt - und ob überhaupt jemand - ist von hier aus nicht zu sehen; vorher stand
-    an jeder dieser Stellen ein stats.record_event mit voller Signatur."""
+    """Reports a live event (follow/sub/cheer/raid/...) onto the bus. Who records it - and
+    whether anybody does - is not visible from here; previously each of these places held a
+    stats.record_event with the full signature."""
     await events.bus.publish(
         events.PLATFORM_EVENT, platform=NAME, event_type=event_type,
         user_name=user_name, amount=amount,
@@ -154,19 +154,19 @@ async def _publish_mod_action(user_name, reason, action):
 
 
 def moderation_overrides():
-    """Der "moderation"-Abschnitt aus twitch.json, so wie er dasteht. Gemergt und
-    ausgewertet wird er im Moderations-Feature - hier bleibt nur, woher er kommt,
-    damit die Hot-Reload-Konfiguration weiter greift."""
+    """The "moderation" section from twitch.json, exactly as it stands. Merging and evaluating
+    happen in the moderation feature - what remains here is only where it comes from, so the
+    hot-reload configuration keeps working."""
     return TWITCH_CONFIG.get("moderation", {})
 
 
-# Kleine, bot-eigene Befehle (Introspektion, plattformübergreifende Bug-Reports) -
-# anders als commands.py, das reine Helix-API-Befehle bündelt.
+# Small commands belonging to the bot itself (introspection, cross-platform bug reports) -
+# unlike commands.py, which bundles the pure Helix API commands.
 
 async def cmd_list_commands(ctx, user_name, arg_text):
-    """Listet nur die Befehle, die user_name tatsächlich nutzen darf - Mod-Befehle also
-    nur für Broadcaster/Moderatoren (ctx.is_privileged), sonst würde !commands selbst
-    Nicht-Mods Befehle vorschlagen, die deny_mod_command sofort wieder löschen würde."""
+    """Lists only the commands user_name may actually use - mod commands therefore only for
+    the broadcaster/moderators (ctx.is_privileged); otherwise !commands would itself suggest
+    commands to non-mods that deny_mod_command would delete again straight away."""
     feature_commands = events.bus.commands()
     names = set(get_twitch_commands()) | set(dynamic_commands()) | set(bot_commands())
     names |= {name for name, cmd in feature_commands.items() if not cmd.mod_only}
@@ -182,9 +182,9 @@ async def cmd_list_commands(ctx, user_name, arg_text):
 
 
 async def cmd_bug(ctx, user_name, arg_text):
-    """Der Bug-Report geht an den Event-Bus, nicht an Discord: welche Plattform ihn
-    darstellt (und ob überhaupt eine), entscheidet sich erst dort. Deshalb hier auch
-    keine Discord-Formulierung mehr im Fehlerfall."""
+    """The bug report goes to the event bus, not to Discord: which platform presents it (and
+    whether any does) is only decided there. Which is why the failure case no longer mentions
+    Discord here either."""
     if not arg_text.strip():
         return text("bug.usage")
     delivered = await events.bus.announce(platform_api.Announcement(
@@ -209,8 +209,7 @@ TWITCH_BOT_COMMANDS = {
 
 
 def bot_commands():
-    """Die botseitigen Befehle unter ihren tatsächlichen Namen (twitch.json,
-    "command_names")."""
+    """The bot-side commands under their actual names (twitch.json, "command_names")."""
     return TWITCH_CONFIG.resolve_commands(TWITCH_BOT_COMMANDS)
 
 
@@ -249,10 +248,10 @@ async def cmd_automod_deny(ctx, user_name, arg_text):
     return await _resolve_automod(ctx, arg_text, "DENY")
 
 
-# Bot-eigene Mod-Befehle - brauchen wie TWITCH_BOT_COMMANDS keinen TwitchContext-Import-
-# Umweg, hier zusätzlich weil sie direkt auf _automod_queue (Modul-globaler Zustand)
-# zugreifen. Werden wie twitch_commands_file.TWITCH_DYNAMIC_MOD_COMMANDS per
-# is_mod_command in twitch_chat_listener vor Nicht-Moderatoren geschützt.
+# The bot's own mod commands - like TWITCH_BOT_COMMANDS they need no TwitchContext import
+# detour, here additionally because they reach directly into _automod_queue (module-global
+# state). Like twitch_commands_file.TWITCH_DYNAMIC_MOD_COMMANDS they are protected from
+# non-moderators via is_mod_command in twitch_chat_listener.
 async def _giveaway_start(ctx, rest):
     global _giveaway
     if _giveaway is not None:
@@ -270,10 +269,7 @@ async def _giveaway_start(ctx, rest):
     if not reward:
         return text("giveaway.reward_failed")
     _giveaway = {"reward_id": reward["id"], "title": title, "entries": {}}
-    return (
-        f"🎉 Verlosung gestartet: \"{title}\" - löse den Channel-Points-Reward "
-        f"\"{title}\" für {cost_str} Punkte ein, um teilzunehmen! Mods beenden mit !giveaway pick."
-    )
+    return text("giveaway.started", title=title, cost=cost_str)
 
 
 async def _giveaway_pick(ctx):
@@ -319,9 +315,9 @@ async def _giveaway_cancel(ctx):
 
 
 async def cmd_giveaway(ctx, user_name, arg_text):
-    """!giveaway start <Punkte> <Titel> | !giveaway pick | !giveaway cancel - Zustand
-    lebt in _giveaway (Modul-global), Teilnahmen kommen über handle_reward_redemption
-    per EventSub rein, sobald jemand den passenden Channel-Points-Reward einlöst."""
+    """!giveaway start <points> <title> | !giveaway pick | !giveaway cancel - the state lives
+    in _giveaway (module-global), and entries come in through handle_reward_redemption via
+    EventSub as soon as somebody redeems the matching channel points reward."""
     sub, _, rest = arg_text.partition(" ")
     sub = sub.lower()
     if sub == "start":
@@ -340,7 +336,7 @@ TWITCH_BOT_MOD_COMMANDS = {
 }
 
 def parse_irc_tags(raw_tags):
-    """Parst das Tags-Präfix einer IRC-Zeile (z.B. '@badges=moderator/1;id=abc-123') in ein Dict."""
+    """Parses the tags prefix of an IRC line (e.g. '@badges=moderator/1;id=abc-123') into a dict."""
     tags = {}
     for pair in raw_tags.lstrip("@").split(";"):
         if "=" in pair:
@@ -349,41 +345,41 @@ def parse_irc_tags(raw_tags):
     return tags
 
 class _AuthFailed(Exception):
-    """Twitch hat die IRC-Anmeldung abgelehnt - der Access-Token muss erneuert werden,
-    bevor ein Reconnect Sinn ergibt (siehe twitch_chat_listener)."""
+    """Twitch rejected the IRC sign-in - the access token has to be renewed before a reconnect
+    makes any sense (see twitch_chat_listener)."""
 
 
 async def _send_raw(line):
-    """Schickt eine rohe IRC-Zeile. Wirft, wenn keine Verbindung (mehr) steht - der
-    Reader-Loop fängt das und baut die Verbindung neu auf."""
+    """Sends a raw IRC line. Raises when no connection stands (any more) - the reader loop
+    catches that and rebuilds the connection."""
     if _writer is None:
-        raise ConnectionError("keine Twitch-IRC-Verbindung")
+        raise ConnectionError("no Twitch IRC connection")
     _writer.write(f"{line}\r\n".encode("utf-8"))
     await _writer.drain()
 
 
 async def send_twitch_chat(message_text):
-    """True, wenn die Nachricht rausging - erfüllt damit gleichzeitig
-    core.platform.Platform.send_text (siehe platforms/twitch/platform.py)."""
+    """True when the message went out - which at the same time fulfils
+    core.platform.Platform.send_text (see platforms/twitch/platform.py)."""
     try:
         await _send_raw(f"PRIVMSG #{config.TWITCH_CHANNEL.lower()} :{message_text}")
         print(f"💬 Twitch-Chat gesendet: {message_text}")
         return True
     except Exception as e:
-        print(f"⚠️ Fehler beim Senden an Twitch: {e}")
+        print(f"⚠️ Error while sending to Twitch: {e}")
         return False
 
 
 async def _connect_and_auth(token):
-    """Baut die IRC-Verbindung auf. asyncio-Streams statt eines rohen Sockets, weil
-    readline() zeilenweise puffert - der frühere recv(2048) konnte PINGs mitten in einem
-    Chunk übersehen (und damit den Rauswurf durch Twitch provozieren) und riss bei einem
-    über die Chunk-Grenze zerschnittenen UTF-8-Zeichen den Decoder ab."""
+    """Establishes the IRC connection. asyncio streams rather than a raw socket, because
+    readline() buffers line by line - the earlier recv(2048) could miss PINGs in the middle of a
+    chunk (and thereby provoke being kicked by Twitch) and tore the decoder apart on a UTF-8
+    character cut across the chunk boundary."""
     global _reader, _writer
     _reader, _writer = await asyncio.open_connection("irc.chat.twitch.tv", 6667)
 
-    # Tags liefert Badges (mod/subscriber) und die Message-ID (für /delete);
-    # ohne diese Capability können wir keine gezielte Moderation durchführen.
+    # Tags provides badges (mod/subscriber) and the message id (for /delete); without this
+    # capability we cannot moderate in a targeted way at all.
     await _send_raw("CAP REQ :twitch.tv/tags twitch.tv/commands")
     await _send_raw(f"PASS oauth:{token}")
     await _send_raw(f"NICK {config.TWITCH_CHANNEL}")
@@ -402,11 +398,11 @@ async def _close_connection():
             pass
 
 def _eventsub_subscriptions():
-    """Liste aller EventSub-Abos, die bei jedem frischen session_welcome (neu) angemeldet
-    werden: (type, version, condition, Klartext-Label fürs Log). automod.message.hold und
-    channel.follow brauchen zusätzlich MODERATOR_ID im condition - werden übersprungen,
-    falls die (noch) nicht aufgelöst ist. Wird als Funktion aufgerufen (nicht als
-    Modul-Konstante), damit BROADCASTER_ID/MODERATOR_ID zum Aufrufzeitpunkt aktuell sind."""
+    """List of all EventSub subscriptions that are (re-)registered on every fresh
+    session_welcome: (type, version, condition, plain-text label for the log).
+    automod.message.hold and channel.follow additionally need MODERATOR_ID in the condition -
+    they are skipped if that is not (yet) resolved. Called as a function (not a module
+    constant) so that BROADCASTER_ID/MODERATOR_ID are current at call time."""
     subs = [
         ("channel.ad_break.begin", "1", {"broadcaster_user_id": BROADCASTER_ID}, "📺 Ad-Break"),
         ("channel.subscribe", "1", {"broadcaster_user_id": BROADCASTER_ID}, "⭐ Sub"),
@@ -421,9 +417,9 @@ def _eventsub_subscriptions():
         ),
         ("stream.online", "1", {"broadcaster_user_id": BROADCASTER_ID}, "🟢 Stream-Online"),
         ("stream.offline", "1", {"broadcaster_user_id": BROADCASTER_ID}, "🔴 Stream-Offline"),
-        # Ab hier: Vollständigkeit der Erfassung. Alles davon landet über
-        # record_eventsub_notification ohnehin im Rohprotokoll - Handler gibt es nur für
-        # das, was zusätzlich in eine typisierte Tabelle oder in den Chat soll.
+        # From here on: completeness of the record. All of it lands in the raw log via
+        # record_eventsub_notification anyway - handlers exist only for what should
+        # additionally go into a typed table or into the chat.
         ("channel.update", "2", {"broadcaster_user_id": BROADCASTER_ID}, "📝 Titel/Kategorie"),
         ("channel.hype_train.begin", "2", {"broadcaster_user_id": BROADCASTER_ID}, "🚂 Hype-Train-Start"),
         ("channel.hype_train.end", "2", {"broadcaster_user_id": BROADCASTER_ID}, "🚂 Hype-Train-Ende"),
@@ -444,9 +440,9 @@ def _eventsub_subscriptions():
 
 
 async def _announce_ad_break_end(delay_seconds):
-    """Meldet das Ende der Werbepause. Twitch hat dafür kein EventSub-Event - nur
-    channel.ad_break.begin mit der Dauer -, also warten wir sie selbst ab. Läuft als
-    eigener Task, damit der EventSub-Listener nicht minutenlang blockiert."""
+    """Reports the end of the ad break. Twitch has no EventSub event for it - only
+    channel.ad_break.begin with the duration - so we wait it out ourselves. Runs as a task of
+    its own so the EventSub listener does not block for minutes."""
     try:
         await asyncio.sleep(delay_seconds)
         await send_twitch_chat(text("ad_break.end"))
@@ -458,8 +454,8 @@ async def _announce_ad_break_end(delay_seconds):
 
 
 async def handle_ad_break_begin(event):
-    """Postet Start, Dauer und Endzeit einer Werbepause in den Twitch-Chat - und meldet
-    sich nach Ablauf der Dauer noch einmal, wenn die Werbung durch ist."""
+    """Posts the start, duration and end time of an ad break into the Twitch chat - and
+    reports back once more when the duration has elapsed and the ads are over."""
     global _ad_break_task
     duration = int(event.get("duration_seconds") or 0)
     try:
@@ -471,8 +467,8 @@ async def handle_ad_break_begin(event):
     await send_twitch_chat(text("ad_break.start", seconds=duration, end_time=end_local))
     await events.bus.publish(events.AD_BREAK, platform=NAME, duration_seconds=duration)
 
-    # Restdauer ab jetzt, nicht ab started_at - die Benachrichtigung kann verzögert
-    # ankommen, sonst würde die Entwarnung zu spät kommen.
+    # Remaining duration from now, not from started_at - the notification can arrive delayed,
+    # and the all-clear would otherwise come too late.
     remaining = (start_at + timedelta(seconds=duration) - datetime.now(timezone.utc)).total_seconds()
     if _ad_break_task and not _ad_break_task.done():
         _ad_break_task.cancel()
@@ -481,9 +477,9 @@ async def handle_ad_break_begin(event):
 
 
 async def handle_automod_hold(event):
-    """Vergibt einen kurzen Schlüssel für eine von AutoMod zurückgehaltene Nachricht,
-    merkt sich die echte msg_id in _automod_queue und postet die Nachricht mitsamt
-    Kategorie in den Chat, damit ein Mod per !approve/!deny <Schlüssel> entscheiden kann."""
+    """Assigns a short key to a message held back by AutoMod, remembers the real msg_id in
+    _automod_queue and posts the message together with its category into the chat, so a mod can
+    decide via !approve/!deny <key>."""
     global _automod_queue_counter
     _automod_queue_counter += 1
     key = str(_automod_queue_counter)
@@ -491,22 +487,22 @@ async def handle_automod_hold(event):
     held_text = (event.get("message") or {}).get("text", "")
     user = event.get("user_login", "unbekannt")
     category = event.get("category", "?")
-    print(f"🚧 AutoMod hält Nachricht #{key} von {user} zurück ({category}).")
+    print(f"🚧 AutoMod is holding back message #{key} from {user} ({category}).")
     await send_twitch_chat(config.text(
         "automod.hold", key=key, user=user, category=category, text=held_text[:200],
     ))
 
 
-# Sämtliche Stream-Kennzahlen (Zuschauer, Subs, Bits, Follows, Hype Train, ...) werden
-# nur noch auf den Bus gemeldet; ausgewertet werden sie im Statistik-Feature, das sie
-# einer Stream-Session zuordnet. Früher liefen die Höchstwerte parallel als Zähler-Dict
-# im RAM mit, was jeden Bot-Neustart mitten im Stream nicht überlebte.
+# All stream figures (viewers, subs, bits, follows, hype train, ...) are only reported onto
+# the bus now; they are evaluated in the statistics feature, which assigns them to a stream
+# session. The peak values used to run along in parallel as a counter dict in RAM, which did
+# not survive any bot restart mid-stream.
 
 
 async def handle_channel_subscribe(event):
-    """Feuert auch für Gift-Sub-Empfänger (event['is_gift'] == True) - die werden hier
-    nur gezählt, aber nicht extra im Chat angekündigt, weil handle_channel_subscription_gift
-    bereits eine Sammel-Ankündigung für den Gifter postet (sonst doppelte Meldung)."""
+    """Fires for gift sub recipients too (event['is_gift'] == True) - those are only counted
+    here and not separately announced in chat, because handle_channel_subscription_gift already
+    posts a collective announcement for the gifter (otherwise a duplicate notice)."""
     user_name = event.get("user_name") or event.get("user_login") or "jemand"
     await _publish_event("sub", user_name)
     if not event.get("is_gift"):
@@ -515,9 +511,9 @@ async def handle_channel_subscribe(event):
 
 
 async def handle_channel_subscription_gift(event):
-    """Anonyme Gifter werden als 'gift_sub_anon' erfasst: sie zählen in die Stream-Summe
-    mit, bleiben aber aus der !leaderboard-Bestenliste raus (dort stünde sonst dauerhaft
-    'Anonym' oben)."""
+    """Anonymous gifters are recorded as 'gift_sub_anon': they count towards the stream total
+    but stay out of the !leaderboard rankings (where 'Anonymous' would otherwise sit
+    permanently at the top)."""
     user_name = event.get("user_name") or event.get("user_login")
     total = int(event.get("total") or 0)
     if event.get("is_anonymous") or not user_name:
@@ -540,7 +536,7 @@ async def handle_channel_cheer(event):
     bits = int(event.get("bits") or 0)
     user_name = event.get("user_name") or event.get("user_login")
     if event.get("is_anonymous") or not user_name:
-        # Wie bei den Gift-Subs: zählt in die Bits-Summe des Streams, nicht ins Leaderboard.
+        # As with the gift subs: counts towards the stream's bits total, not the leaderboard.
         await _publish_event("cheer_anon", "Anonym", bits)
         return
     await _publish_event("cheer", user_name, bits)
@@ -550,9 +546,9 @@ async def handle_channel_cheer(event):
 
 
 async def _flush_follow_batch():
-    """Wartet kurz auf weitere Follows und postet dann eine Sammelmeldung. Bei sehr vielen
-    Follows auf einmal werden nur die ersten Namen genannt, der Rest als Anzahl - eine
-    IRC-Nachricht darf ohnehin nur ~500 Zeichen lang sein."""
+    """Waits briefly for further follows and then posts a collective notice. With very many
+    follows at once only the first names are given and the rest as a count - an IRC message may
+    only be about 500 characters long anyway."""
     global _follow_batch_task
     try:
         await asyncio.sleep(timing("follow_batch_window", 8))
@@ -575,8 +571,8 @@ async def _flush_follow_batch():
 
 
 async def handle_channel_follow(event):
-    """Jeder Follow wird einzeln in der DB erfasst; die Chat-Ansage läuft über
-    _flush_follow_batch gesammelt (Fenster: twitch.json, timings.follow_batch_window)."""
+    """Every follow is recorded individually in the DB; the chat announcement runs collected
+    through _flush_follow_batch (window: twitch.json, timings.follow_batch_window)."""
     global _follow_batch_task
     user_name = event.get("user_name") or event.get("user_login") or "jemand"
     await _publish_event("follow", user_name)
@@ -599,8 +595,8 @@ async def handle_channel_raid(event):
 
 
 async def handle_reward_redemption(event):
-    """Erfasst jede Channel-Points-Einlösung; die Giveaway-Logik darunter greift nur,
-    während !giveaway eine Verlosung laufen hat."""
+    """Records every channel points redemption; the giveaway logic below only applies while
+    !giveaway has a draw running."""
     reward = event.get("reward") or {}
     user_name = event.get("user_name") or event.get("user_login") or "jemand"
     await _publish_event("redemption", user_name, int(reward.get("cost") or 0))
@@ -621,9 +617,9 @@ def _stream_url():
 
 
 async def _go_live(stream_info):
-    """Meldet den Streamstart: neue stats-Session öffnen und alle Plattformen über den
-    Event-Bus informieren. Wird sowohl von EventSub (stream.online) als auch beim
-    Bot-Start aufgerufen, falls der Stream da schon lief - daher die _is_live-Sperre."""
+    """Reports the stream start: open a new stats session and inform all platforms over the
+    event bus. Called both from EventSub (stream.online) and at bot startup, in case the stream
+    was already running then - hence the _is_live guard."""
     global _is_live
     if _is_live or not stream_info:
         return
@@ -631,16 +627,16 @@ async def _go_live(stream_info):
 
     title = stream_info.get("title") or "Live-Stream"
     category = stream_info.get("game_name") or "Ohne Kategorie"
-    # {width}/{height} sind Platzhalter in der von Twitch gelieferten URL, und der
-    # Zeitstempel verhindert, dass Discord das (alte) Vorschaubild zwischenspeichert.
+    # {width}/{height} are placeholders in the URL Twitch delivers, and the timestamp keeps
+    # Discord from caching the (old) preview image.
     preview_url = stream_info.get("thumbnail_url", "")
     if preview_url:
         preview_url = preview_url.replace("{width}", "1280").replace("{height}", "720")
         preview_url += f"?t={int(datetime.now().timestamp())}"
 
-    # Ab hier ordnen die aufzeichnenden Features alles Gemeldete (Chat, Befehle,
-    # Mod-Aktionen, Events, Werbepausen, Zuschauer-Samples) dieser Session zu. Bewusst
-    # vor der Ankündigung: die Session muss offen sein, bevor irgendetwas hereinkommt.
+    # From here on the recording features assign everything reported (chat, commands, mod
+    # actions, events, ad breaks, viewer samples) to this session. Deliberately before the
+    # announcement: the session has to be open before anything comes in.
     await events.bus.publish(events.STREAM_START, platform=NAME, title=title, category=category)
 
     await events.bus.announce(platform_api.Announcement(
@@ -658,17 +654,16 @@ async def _go_live(stream_info):
 
 
 async def _go_offline():
-    """Gegenstück zu _go_live: Session schließen, Highscores abgleichen und den
-    Abschlussbericht als Ankündigung verteilen."""
+    """Counterpart to _go_live: close the session, reconcile the highscores and distribute the
+    closing report as an announcement."""
     global _is_live
     if not _is_live:
         return
     _is_live = False
 
-    # Die aufzeichnenden Features schließen die Session, gleichen die Rekorde ab und
-    # geben die Kennzahlen als fertige Felder zurück - der Twitch-Bot muss das
-    # Kennzahlen-Dict dafür nicht kennen. Ist kein solches Feature geladen, bleibt der
-    # Abschlussbericht eben ohne Zahlen.
+    # The recording features close the session, reconcile the records and return the figures
+    # as finished fields - the Twitch bot need not know the metrics dict for it. If no such
+    # feature is loaded, the closing report simply comes without numbers.
     fields = next((f for f in await events.bus.publish(events.STREAM_END, platform=NAME) if f), ())
 
     await events.bus.announce(platform_api.Announcement(
@@ -684,8 +679,8 @@ async def _go_offline():
 
 
 async def handle_stream_online(event):
-    """Das EventSub-Event enthält weder Titel noch Kategorie, daher ein zusätzlicher
-    get_stream_info-Aufruf."""
+    """The EventSub event contains neither title nor category, hence an additional
+    get_stream_info call."""
     loop = asyncio.get_event_loop()
     stream_info = await loop.run_in_executor(
         None, twitch_api.get_stream_info, BROADCASTER_ID, config.TWITCH_CHAT_ACCESS_TOKEN
@@ -698,15 +693,13 @@ async def handle_stream_offline(event):
 
 
 async def _reconcile_live_status():
-    """Einmaliger Live-Abgleich beim Start: EventSub feuert nur bei einem *Wechsel*, ein
-    Neustart während eines bereits laufenden Streams würde also sonst nie eine
-    Live-Meldung auslösen.
+    """One-off live reconciliation at startup: EventSub only fires on a *change*, so a restart
+    during an already running stream would otherwise never trigger a live notice.
 
-    Wartet vorher auf die übrigen Plattformen: Discord kennt vor seinem on_ready keine
-    Server und würde die Ankündigung stillschweigend verwerfen (siehe
-    core.platform.Platform.wait_ready)."""
+    Waits for the other platforms first: before its on_ready, Discord knows no guilds and would
+    silently discard the announcement (see core.platform.Platform.wait_ready)."""
     if not BROADCASTER_ID:
-        print("⚠️ Live-Status-Abgleich übersprungen: Broadcaster-ID nicht verfügbar.")
+        print("⚠️ Live status reconciliation skipped: broadcaster id not available.")
         return
     await events.bus.wait_ready(timeout=timing("platform_ready_timeout", 120))
     loop = asyncio.get_event_loop()
@@ -718,17 +711,16 @@ async def _reconcile_live_status():
 
 
 async def _viewer_sample_loop():
-    """Schreibt die Zuschauerzahl während eines laufenden Streams mit. Twitch hat dafür
-    kein EventSub-Event, das bleibt also Polling. Lief früher im Discord-Bot, hatte dort
-    aber nichts zu suchen: er brauchte dafür BROADCASTER_ID und den Chat-Token aus
-    platforms/twitch."""
+    """Records the viewer count during a running stream. Twitch has no EventSub event for it,
+    so this stays polling. It used to run in the Discord bot, where it had no business being:
+    it needed BROADCASTER_ID and the chat token from platforms/twitch for it."""
     while True:
         await asyncio.sleep(timing("viewer_sample_interval", 60))
         if not _is_live or not BROADCASTER_ID:
             continue
-        # Eine durchgereichte Exception würde den Loop zwar neu starten lassen
-        # (_supervised), aber mit timings.task_restart_delay Verzögerung - für ein reines
-        # Sampling ist Weitermachen die bessere Antwort.
+        # A propagated exception would indeed have the loop restarted (_supervised), but with
+        # timings.task_restart_delay of delay - for pure sampling, carrying on is the better
+        # answer.
         try:
             loop = asyncio.get_event_loop()
             stream_info = await loop.run_in_executor(
@@ -745,8 +737,8 @@ async def _viewer_sample_loop():
 
 
 async def handle_channel_update(event):
-    """Titel-/Kategoriewechsel mitten im Stream. Ohne das würde ein Stream für immer unter
-    der Kategorie laufen, die beim Einschalten gesetzt war."""
+    """Title/category change mid-stream. Without it a stream would run forever under the
+    category that was set at switch-on."""
     title = event.get("title") or ""
     game_name = event.get("category_name") or ""
     changed = any(await events.bus.publish(
@@ -757,9 +749,9 @@ async def handle_channel_update(event):
 
 
 async def handle_channel_ban(event):
-    """Bans/Timeouts, die ein Mensch (oder ein anderer Bot) ausgelöst hat - die eigenen
-    Aktionen protokolliert handle_twitch_violation bereits selbst. is_permanent
-    unterscheidet Ban von Timeout."""
+    """Bans/timeouts triggered by a human (or another bot) - our own actions are already
+    logged by handle_twitch_violation itself. is_permanent distinguishes a ban from a
+    timeout."""
     user_name = event.get("user_name") or event.get("user_login") or "unbekannt"
     action = "ban" if event.get("is_permanent") else "timeout"
     reason = event.get("reason") or "manuell"
@@ -772,7 +764,7 @@ async def handle_channel_unban(event):
 
 
 async def handle_hypetrain_end(event):
-    """Das erreichte Endlevel ist verlässlicher als der letzte progress-Zwischenstand."""
+    """The final level reached is more reliable than the last progress update."""
     level = int(event.get("level") or 0)
     await _publish_event("hypetrain", config.TWITCH_CHANNEL, level)
     if level:
@@ -791,14 +783,14 @@ async def handle_subscription_end(event):
 
 
 async def handle_hypetrain_progress(event):
-    """Jeder Zwischenstand wird als eigenes Event mit dem Level als `amount` abgelegt -
-    die Auswertung nimmt daraus das Maximum je Stream (siehe features/stats/store.py)."""
+    """Every progress update is stored as its own event with the level as `amount` - the
+    evaluation takes the maximum per stream from those (see features/stats/store.py)."""
     level = int(event.get("level") or 0)
     await _publish_event("hypetrain", config.TWITCH_CHANNEL, level)
 
 
-# subscription_type -> Handler, konsultiert im "notification"-Zweig von
-# twitch_eventsub_listener. Jeder Handler bekommt nur das rohe event-Dict.
+# subscription_type -> handler, consulted in the "notification" branch of
+# twitch_eventsub_listener. Every handler receives only the raw event dict.
 _EVENTSUB_HANDLERS = {
     "channel.ad_break.begin": handle_ad_break_begin,
     "automod.message.hold": handle_automod_hold,
@@ -818,27 +810,27 @@ _EVENTSUB_HANDLERS = {
     "channel.unban": handle_channel_unban,
     "channel.shoutout.receive": handle_shoutout_receive,
     "channel.subscription.end": handle_subscription_end,
-    # channel.hype_train.begin, channel.poll.end, channel.prediction.end und
-    # channel.goal.end haben bewusst keinen Handler - sie werden über das Rohprotokoll
-    # (record_eventsub_notification) vollständig erfasst und sind dort auswertbar.
+    # channel.hype_train.begin, channel.poll.end, channel.prediction.end and
+    # channel.goal.end deliberately have no handler - they are recorded in full via the raw log
+    # (record_eventsub_notification) and can be evaluated there.
 }
 
 
 async def twitch_eventsub_listener():
-    """Hält eine EventSub-WebSocket-Verbindung offen, meldet nach jedem frischen
-    session_welcome alle Abos aus _eventsub_subscriptions() an und dispatcht deren
-    Benachrichtigungen über _EVENTSUB_HANDLERS. Bei session_reconnect wandern bestehende
-    Abos laut Twitch automatisch mit auf die neue Session (kein Neu-Abo nötig); nach einem
-    Verbindungsabbruch sind die alten Abos dagegen weg und müssen neu abonniert werden.
-    Bleiben die session_keepalive-Nachrichten aus, gilt die Session als tot - ohne diese
-    Prüfung konnte der Listener stumm an einer längst toten Session hängen."""
+    """Holds an EventSub WebSocket connection open, registers every subscription from
+    _eventsub_subscriptions() after each fresh session_welcome and dispatches their
+    notifications through _EVENTSUB_HANDLERS. On a session_reconnect, existing subscriptions
+    migrate to the new session automatically according to Twitch (no re-subscribe needed);
+    after a dropped connection, by contrast, the old subscriptions are gone and have to be
+    registered again. If the session_keepalive messages stop coming, the session counts as
+    dead - without that check the listener could hang silently on a long-dead session."""
     url = EVENTSUB_WS_URL
     resubscribe = True
     loop = asyncio.get_event_loop()
     while True:
         try:
             async with websockets.connect(url) as ws:
-                # Ein reconnect_url gilt nur für genau diesen einen Verbindungsaufbau.
+                # A reconnect_url is valid for exactly this one connection attempt.
                 url = EVENTSUB_WS_URL
                 keepalive_timeout = 30
                 while True:
@@ -846,7 +838,7 @@ async def twitch_eventsub_listener():
                         deadline = keepalive_timeout + timing("eventsub_keepalive_grace", 10)
                         raw = await asyncio.wait_for(ws.recv(), timeout=deadline)
                     except asyncio.TimeoutError:
-                        raise ConnectionError(f"kein Keepalive seit {deadline}s")
+                        raise ConnectionError(f"no keepalive for {deadline}s")
 
                     msg = json.loads(raw)
                     metadata = msg.get("metadata", {})
@@ -871,8 +863,8 @@ async def twitch_eventsub_listener():
                     elif msg_type == "notification":
                         sub_type = metadata.get("subscription_type")
                         event = msg["payload"]["event"]
-                        # Erst wegschreiben, dann verarbeiten: ein Fehler im Handler darf
-                        # nicht dazu führen, dass das Ereignis nirgends dokumentiert ist.
+                        # Write it away first, process afterwards: an error in the handler
+                        # must not result in the event being documented nowhere.
                         await events.bus.publish(events.RAW_EVENT, platform=NAME, event_type=sub_type, payload=event)
                         handler = _EVENTSUB_HANDLERS.get(sub_type)
                         if handler:
@@ -881,18 +873,18 @@ async def twitch_eventsub_listener():
                             except asyncio.CancelledError:
                                 raise
                             except Exception as e:
-                                # Ein kaputter Handler darf nicht die ganze EventSub-
-                                # Session mitreißen - dann fielen alle anderen Events aus.
-                                print(f"⚠️ Fehler im EventSub-Handler für {sub_type}: {e}")
+                                # A broken handler must not drag the whole EventSub session
+                                # down - all other events would then be lost.
+                                print(f"⚠️ Error in the EventSub handler for {sub_type}: {e}")
 
                     elif msg_type == "revocation":
                         subscription = msg["payload"]["subscription"]
                         status = subscription.get("status")
                         print(f"⚠️ EventSub-Abo {subscription.get('type')} widerrufen ({status}).")
                         if status == "authorization_revoked":
-                            # Token ungültig geworden: erst erneuern, dann mit frischer
-                            # Session alles neu abonnieren. Ein bloßes Merken hätte hier
-                            # nichts gebracht - diese Session liefert nichts mehr.
+                            # Token has gone invalid: renew first, then re-subscribe
+                            # everything with a fresh session. Merely noting it would have
+                            # achieved nothing here - this session delivers nothing more.
                             await loop.run_in_executor(None, twitch_api.refresh_chat_token)
                             resubscribe = True
                             break
@@ -906,11 +898,11 @@ async def twitch_eventsub_listener():
 
 
 def log_token_capabilities(scopes):
-    """Loggt beim Start, welche Berechtigungen der Chat-Token tatsächlich hat und
-    was der Bot damit tun kann - Klartext-Gegenstück zur manuellen Prüfung über
+    """Logs at startup which permissions the chat token actually has and what the bot can do
+    with them - the plain-text counterpart to checking manually via
     https://id.twitch.tv/oauth2/validate."""
     if scopes is None:
-        print("⚠️ Token-Scopes konnten nicht abgefragt werden (siehe Fehler oben).")
+        print("⚠️ Token scopes could not be queried (see the error above).")
         return
 
     print(f"🔑 Twitch-Token hat {len(scopes)} Scope(s):")
@@ -921,32 +913,32 @@ def log_token_capabilities(scopes):
     if unknown:
         print(f"   ℹ️ weitere Scopes ohne Bot-Funktion: {', '.join(unknown)}")
 
-    # Gegen dieselbe Liste, die get_token.py beim Erzeugen anfordert: kommt ein
-    # Scope in config dazu, ohne dass der Token neu geholt wurde, sagt der Start es hier.
+    # Against the same list get_token.py requests when creating one: if a scope is added in
+    # config without the token being fetched again, startup says so here.
     missing = [s for s in twitch_scopes.REQUIRED if s not in scopes]
     if missing:
-        print(f"   ⚠️ {len(missing)} benötigte(r) Scope(s) fehlen: {', '.join(missing)}")
-        print("      -> Token mit 'python3 -m platforms.twitch.get_token' neu erzeugen "
-              "(Twitch erweitert bestehende Tokens nicht nachträglich).")
+        print(f"   ⚠️ {len(missing)} required scope(s) missing: {', '.join(missing)}")
+        print("      -> create the token afresh with 'python3 -m platforms.twitch.get_token' "
+              "(Twitch does not extend existing tokens after the fact).")
 
     for scope, warning in twitch_scopes.DANGEROUS_UNNEEDED.items():
         if scope in scopes:
-            print(f"   🚨 unnötig riskanter Scope vorhanden: {scope} ({warning}) - beim nächsten Token-Refresh entfernen")
+            print(f"   🚨 needlessly risky scope present: {scope} ({warning}) - remove it at the next token refresh")
 
 
 async def twitch_token_refresh_loop():
-    """Erneuert den Chat-Token, bevor er abläuft. Die Helix-Aufrufe refreshen zwar bei
-    einem 401 selbst (siehe api._helix_request), aber genau die passieren im Leerlauf
-    nicht: nach ein paar stillen Stunden wäre der Token sonst tot, der nächste
-    IRC-Reconnect würde scheitern und die EventSub-Abos wären widerrufen."""
+    """Renews the chat token before it expires. The Helix calls do refresh by themselves on a
+    401 (see api._helix_request), but those are exactly what does not happen while idle: after
+    a few quiet hours the token would otherwise be dead, the next IRC reconnect would fail and
+    the EventSub subscriptions would be revoked."""
     loop = asyncio.get_event_loop()
     while True:
         await asyncio.sleep(timing("token_check_interval", 1800))
         info = await loop.run_in_executor(None, twitch_api.validate_token_info, config.TWITCH_CHAT_ACCESS_TOKEN)
         expires_in = info.get("expires_in") if info else None
-        # expires_in == 0 heißt bei Twitch "läuft nie ab" (langlebige Tokens mancher Apps),
-        # nicht "gerade abgelaufen" - solche Tokens hier zu erneuern wäre nicht nur unnötig,
-        # sondern lief vorher alle 30 Minuten in einen fehlgeschlagenen Refresh.
+        # For Twitch, expires_in == 0 means "never expires" (long-lived tokens of some apps),
+        # not "just expired" - renewing such tokens here would not only be unnecessary, it
+        # previously ran into a failed refresh every 30 minutes.
         if expires_in == 0:
             continue
         if expires_in is None or expires_in < timing("token_refresh_margin", 3600):
@@ -954,10 +946,10 @@ async def twitch_token_refresh_loop():
 
 
 async def _supervised(name, coro_factory):
-    """Hält einen der endlosen Hintergrund-Loops am Leben. Vorher wurde ein abgestürzter
-    Task nur geloggt und blieb dann tot - der Bot lief weiter, aber z.B. ohne
-    EventSub-Events oder ohne Token-Erneuerung, bis jemand ihn von Hand neu startete.
-    Genau die Art stiller Teilausfall, die die Uptime auf dem Papier gut aussehen lässt."""
+    """Keeps one of the endless background loops alive. Previously a crashed task was merely
+    logged and then stayed dead - the bot ran on, but e.g. without EventSub events or without
+    token renewal, until somebody restarted it by hand. Exactly the kind of silent partial
+    failure that makes uptime look good on paper."""
     while True:
         try:
             await coro_factory()
@@ -965,7 +957,7 @@ async def _supervised(name, coro_factory):
             raise
         except Exception as e:
             delay = timing("task_restart_delay", 10)
-            print(f"⚠️ Hintergrundtask {name} abgestürzt: {e!r} - Neustart in {delay}s")
+            print(f"⚠️ Background task {name} crashed: {e!r} - restarting in {delay}s")
         else:
             delay = timing("task_restart_delay", 10)
             print(f"⚠️ Hintergrundtask {name} unerwartet beendet - Neustart in {delay}s")
@@ -973,8 +965,8 @@ async def _supervised(name, coro_factory):
 
 
 def _warn_if_task_died(task):
-    """Letzte Absicherung: dass sogar der Supervisor endet, sollte nie passieren - wenn
-    doch, darf es nicht stillschweigend geschehen."""
+    """Last line of defence: the supervisor itself ending should never happen - and if it
+    does, it must not happen silently."""
     if task.cancelled():
         return
     print(f"🚨 Twitch-Supervisor {task.get_name()} beendet: {task.exception()!r}")
@@ -985,9 +977,9 @@ async def start_twitch_bot():
     global _listener_task, _eventsub_task, _token_task, _viewer_task, _reconcile_task
     loop = asyncio.get_event_loop()
 
-    # Der Reader baut die Verbindung selbst auf (und immer wieder neu) - deshalb hier
-    # zuerst starten: selbst wenn Twitch beim Start nicht erreichbar ist, versucht er
-    # es weiter, statt den Twitch-Teil des Bots dauerhaft tot zurückzulassen.
+    # The reader establishes the connection itself (and re-establishes it again and again) -
+    # hence starting it first here: even when Twitch is unreachable at startup it keeps trying,
+    # instead of leaving the Twitch part of the bot permanently dead.
     _listener_task = asyncio.create_task(_supervised("twitch-irc", twitch_chat_listener), name="twitch-irc")
     _token_task = asyncio.create_task(_supervised("twitch-token", twitch_token_refresh_loop), name="twitch-token")
 
@@ -1000,9 +992,9 @@ async def start_twitch_bot():
     MODERATOR_ID = await loop.run_in_executor(None, twitch_api.get_moderator_id, config.TWITCH_CHAT_ACCESS_TOKEN)
     if not BROADCASTER_ID or not MODERATOR_ID:
         print(
-            "⚠️ Broadcaster-/Moderator-ID nicht auflösbar - Twitch-Delete/Timeout sind deaktiviert. "
-            "Prüfe, ob TWITCH_CHAT_ACCESS_TOKEN die Scopes moderator:manage:chat_messages und "
-            "moderator:manage:banned_users besitzt und der Account im Kanal Moderator ist."
+            "⚠️ Broadcaster/moderator id not resolvable - Twitch delete/timeout are disabled. "
+            "Check that TWITCH_CHAT_ACCESS_TOKEN holds the scopes moderator:manage:chat_messages "
+            "and moderator:manage:banned_users, and that the account is a moderator in the channel."
         )
 
     if BROADCASTER_ID:
@@ -1017,23 +1009,22 @@ async def start_twitch_bot():
         if task:
             task.add_done_callback(_warn_if_task_died)
 
-    # Läuft als eigener Task, weil er auf die Bereitschaft der übrigen Plattformen
-    # wartet (bis zu timings.platform_ready_timeout). Inline würde eine Plattform, die nie
-    # bereit wird, hier den kompletten Twitch-Start blockieren - inklusive der
-    # Startmeldung im Chat.
+    # Runs as a task of its own because it waits for the other platforms to be ready (up to
+    # timings.platform_ready_timeout). Inline, a platform that never becomes ready would block
+    # the entire Twitch startup here - including the startup message in the chat.
     _reconcile_task = asyncio.create_task(_reconcile_live_status(), name="twitch-live-reconcile")
 
     try:
         await asyncio.wait_for(_connected.wait(), timeout=60)
         await send_twitch_chat(text("startup"))
     except asyncio.TimeoutError:
-        print("⚠️ Twitch-IRC nach 60s noch nicht verbunden - Startmeldung übersprungen, der Reader versucht es weiter.")
+        print("⚠️ Twitch IRC still not connected after 60s - startup message skipped, the reader keeps trying.")
 
 
 async def close():
-    """Beendet alle Hintergrundtasks (Chat-Reader, EventSub-Listener, Token-Wächter,
-    Zuschauer-Sampling, Live-Abgleich, laufende Ansagen) und die IRC-Verbindung sauber -
-    z.B. bei Strg+C oder wenn eine andere Plattform abstürzt."""
+    """Ends all background tasks (chat reader, EventSub listener, token watchdog, viewer
+    sampling, live reconciliation, running announcements) and the IRC connection cleanly - e.g.
+    on Ctrl+C, or when another platform crashes."""
     global _listener_task, _eventsub_task, _token_task, _viewer_task, _reconcile_task
     global _ad_break_task, _follow_batch_task
     tasks = (
@@ -1055,10 +1046,10 @@ async def close():
 
 
 async def handle_twitch_violation(message, msg_id, verdict):
-    """Führt das Urteil des Moderations-Features aus. Was ein Verstoß ist und ab wann ein
-    Timeout fällig wird, entscheidet nicht mehr diese Funktion (das stand vorher wortgleich
-    auch im Discord-Bot), sondern features/moderation - hier bleibt nur, wie man auf Twitch
-    löscht und stummschaltet."""
+    """Carries out the moderation feature's verdict. What counts as an offence and when a
+    timeout is due is no longer decided by this function (that used to stand word for word in
+    the Discord bot too) but by features/moderation - what remains here is only how to delete
+    and time out on Twitch."""
     detail_suffix = f" ('{verdict.detail}')" if verdict.detail else ""
     loop = asyncio.get_event_loop()
 
@@ -1069,11 +1060,11 @@ async def handle_twitch_violation(message, msg_id, verdict):
         )
 
     print(
-        f"🧹 Twitch-Nachricht gelöscht: {message.user_name} - {verdict.label}{detail_suffix} "
-        f"(Verstoß #{verdict.violation_count})"
+        f"🧹 Twitch message deleted: {message.user_name} - {verdict.label}{detail_suffix} "
+        f"(offence #{verdict.violation_count})"
     )
-    # Grund als Kategorie (label), nicht als Detail posten - sonst würde ein gelöschtes
-    # Bannwort/ein gesperrter Link durch die eigene Bot-Nachricht erneut im Chat landen.
+    # Post the reason as a category (label), not as a detail - otherwise a deleted banned word
+    # or a blocked link would land in the chat again through the bot's own message.
     await send_twitch_chat(text("violation.deleted", user=message.user_name, label=verdict.label))
     await _publish_mod_action(message.user_name, verdict.reason, "delete")
 
@@ -1089,25 +1080,25 @@ async def handle_twitch_violation(message, msg_id, verdict):
 
 
 async def deny_mod_command(user_name, msg_id, command_word):
-    """Löscht den Versuch eines Nicht-Moderators, einen Mod-Befehl zu nutzen, und
-    postet eine kurze Ablehnung - vorher wurde das einfach stillschweigend ignoriert."""
+    """Deletes a non-moderator's attempt to use a mod command and posts a short refusal -
+    previously this was simply ignored in silence."""
     if BROADCASTER_ID and MODERATOR_ID and msg_id:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             None, twitch_api.delete_chat_message,
             BROADCASTER_ID, MODERATOR_ID, msg_id, config.TWITCH_CHAT_ACCESS_TOKEN,
         )
-    print(f"🚫 Mod-Befehl {command_word} von {user_name} abgelehnt (keine Moderator-Rechte).")
+    print(f"🚫 Mod command {command_word} from {user_name} refused (no moderator rights).")
     await send_twitch_chat(text("mod_only", user=user_name))
 
 
 async def twitch_chat_listener():
-    """Besitzt den kompletten Verbindungs-Lebenszyklus: verbinden, lesen, und nach jedem
-    Abbruch mit wachsendem Backoff neu verbinden. Vorher wurde genau einmal verbunden und
-    ein von Twitch geschlossener Socket (recv() -> b"") nur mit sleep(0.5) quittiert - der
-    Bot lief dann endlos weiter, ohne je wieder eine Nachricht zu sehen."""
+    """Owns the complete connection lifecycle: connect, read, and reconnect with growing
+    backoff after every break. Previously it connected exactly once, and a socket closed by
+    Twitch (recv() -> b"") was acknowledged with nothing but a sleep(0.5) - the bot then ran on
+    endlessly without ever seeing another message."""
     backoff = 5
-    print("👀 Twitch-Chat-Reader läuft im Hintergrund...")
+    print("👀 Twitch chat reader running in the background...")
 
     while True:
         try:
@@ -1116,24 +1107,23 @@ async def twitch_chat_listener():
         except asyncio.CancelledError:
             raise
         except _AuthFailed:
-            print("⚠️ Twitch-Login abgelehnt, erneuere Token und verbinde neu...")
+            print("⚠️ Twitch login rejected, renewing the token and reconnecting...")
             await asyncio.get_event_loop().run_in_executor(None, twitch_api.refresh_chat_token)
         except Exception as e:
             print(f"⚠️ Twitch-IRC-Verbindung verloren: {e}")
 
-        # Nur nach einer Verbindung, die wirklich stand, sofort wieder schnell versuchen -
-        # sonst hämmern wir bei kaputtem Token oder totem Netz gegen Twitch.
+        # Only retry quickly after a connection that really stood - otherwise we would hammer
+        # Twitch on a broken token or a dead network.
         backoff = 5 if _connected.is_set() else min(backoff * 2, timing("irc_reconnect_backoff_max", 300))
         await _close_connection()
-        print(f"🔄 Nächster Twitch-IRC-Verbindungsversuch in {backoff}s...")
+        print(f"🔄 Next Twitch IRC connection attempt in {backoff}s...")
         await asyncio.sleep(backoff)
 
 
 async def _read_until_disconnect():
-    """Liest zeilenweise, bis die Verbindung tot ist, und wirft dann - der Aufrufer
-    verbindet daraufhin neu. "Tot" heißt: EOF, Socket-Fehler, oder keine Antwort auf
-    unser eigenes PING (der Fall, den eine still weggefallene Verbindung sonst
-    unbemerkt lässt)."""
+    """Reads line by line until the connection is dead, and then raises - upon which the
+    caller reconnects. "Dead" means: EOF, socket error, or no answer to our own PING (the case
+    a quietly dropped connection would otherwise leave unnoticed)."""
     reader = _reader
     awaiting_pong = False
 
@@ -1143,7 +1133,7 @@ async def _read_until_disconnect():
             raw_line = await asyncio.wait_for(reader.readline(), timeout=ping_interval)
         except asyncio.TimeoutError:
             if awaiting_pong:
-                raise ConnectionError(f"keine Antwort auf eigenes PING innerhalb von {ping_interval}s")
+                raise ConnectionError(f"no answer to our own PING within {ping_interval}s")
             await _send_raw("PING :tmi.twitch.tv")
             awaiting_pong = True
             continue
@@ -1151,14 +1141,14 @@ async def _read_until_disconnect():
         if not raw_line:
             raise ConnectionError("Verbindung von Twitch geschlossen (EOF)")
 
-        # Jedes eingehende Byte ist ein Lebenszeichen - ob PONG, Chat oder Systemzeile.
+        # Every incoming byte is a sign of life - be it a PONG, chat, or a system line.
         awaiting_pong = False
         await _handle_irc_line(raw_line.decode("utf-8", "replace").rstrip("\r\n"))
 
 
 async def _handle_irc_line(line):
-    """Verarbeitet genau eine IRC-Zeile. PING/Login-Fehler zuerst, damit die
-    Verbindungspflege nicht davon abhängt, was sonst noch im Chat passiert."""
+    """Processes exactly one IRC line. PING/login errors first, so that keeping the connection
+    alive does not depend on whatever else is happening in the chat."""
     if line.startswith("PING"):
         await _send_raw(f"PONG {line[5:] or ':tmi.twitch.tv'}")
         return
@@ -1166,7 +1156,7 @@ async def _handle_irc_line(line):
     if "Login authentication failed" in line or "Improperly formatted auth" in line:
         raise _AuthFailed(line)
 
-    # :tmi.twitch.tv 001 <nick> :Welcome, GLHF! - erst ab hier ist die Anmeldung durch.
+    # :tmi.twitch.tv 001 <nick> :Welcome, GLHF! - only from here on is the sign-in complete.
     if " 001 " in line:
         _connected.set()
         print(f"✅ Twitch-IRC verbunden (#{config.TWITCH_CHANNEL.lower()}).")
@@ -1178,15 +1168,15 @@ async def _handle_irc_line(line):
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            # Ein Fehler in der Nachrichtenverarbeitung darf die Verbindung nicht kosten.
-            print(f"⚠️ Fehler bei der Verarbeitung einer Twitch-Nachricht: {e}")
+            # An error in message processing must not cost us the connection.
+            print(f"⚠️ Error while processing a Twitch message: {e}")
 
 
 async def _send_command_reply(reply):
-    """Antwort eines Befehls in den Chat schicken. Feature-Befehle dürfen auch eine
-    Announcement zurückgeben (Discord baut daraus ein Embed) - im IRC wird daraus eine
-    Zeile. Zeilenumbrüche müssen dabei weg: eine IRC-Nachricht ist einzeilig, mehrzeilige
-    Antworten (z.B. !top) kämen sonst abgeschnitten an."""
+    """Send a command's reply into the chat. Feature commands may return an Announcement too
+    (Discord builds an embed from it) - on IRC that becomes a single line. Line breaks have to
+    go in the process: an IRC message is single-line, and multi-line replies (e.g. !top) would
+    otherwise arrive truncated."""
     if not reply:
         return
     if isinstance(reply, platform_api.Announcement):
@@ -1209,7 +1199,7 @@ async def _handle_privmsg(line):
     if len(parts) < 3:
         return
 
-    # Zieht den reinen Usernamen sauber und ohne Müll heraus
+    # Pulls the plain username out cleanly and without cruft
     raw_user = parts[1].split("!")[0]
     user_name = raw_user.replace(":", "").strip()
     message = parts[2].strip()
@@ -1236,13 +1226,13 @@ async def _handle_privmsg(line):
         arg_text=arg_text,
     )
 
-    # Bewusst vor der Moderation: gerade die später gelöschten Nachrichten sind die, die
-    # man im Nachhinein noch nachlesen können will. Wer daraus was macht (Mitschnitt nur
-    # während eines Streams), entscheiden die Features - der Bot meldet nur.
+    # Deliberately before moderation: the messages deleted later are precisely the ones you
+    # want to be able to read back afterwards. What is made of it (recording only during a
+    # stream) is decided by the features - the bot only reports.
     await events.bus.publish(events.MESSAGE, message=msg)
 
-    # Moderation: das erste Feature, das etwas beanstandet, gewinnt. Ist keines geladen,
-    # wird schlicht nicht moderiert - der Rest des Bots läuft unverändert weiter.
+    # Moderation: the first feature to object wins. If none is loaded, there simply is no
+    # moderation - the rest of the bot runs on unchanged.
     for moderator in events.bus.features_with(feature_api.MODERATION):
         verdict = await moderator.review(msg, moderation_overrides())
         if verdict:
@@ -1251,13 +1241,13 @@ async def _handle_privmsg(line):
 
     await events.bus.publish(events.MESSAGE_ACCEPTED, message=msg)
 
-    # Befehle in fester Reihenfolge: erst die plattformeigenen (Helix-Aufrufe in
-    # commands.py, Bot-Interna hier), dann die der Features, zuletzt die statischen
-    # Text-Maps aus twitch.json. Die Plattform hat Vorrang - ein Feature soll einen
-    # Befehl, den twitch.json ausdrücklich anders belegt, nicht überschreiben können.
-    # Die vier Befehlstabellen jeweils durch die Umbenennungen aus twitch.json
-    # ("command_names") - ein Befehl kann dadurch anders heißen, mehrere Namen haben oder
-    # ganz fehlen, ohne dass hier etwas davon steht.
+    # Commands in a fixed order: first the platform's own (Helix calls in commands.py, bot
+    # internals here), then the features', and last the static text maps from twitch.json. The
+    # platform takes precedence - a feature must not be able to override a command that
+    # twitch.json explicitly assigns otherwise.
+    # Each of the four command tables goes through the renames from twitch.json
+    # ("command_names") - a command can thereby be called something else, have several names or
+    # be missing entirely, without any of that appearing here.
     ctx = twitch_commands_file.TwitchContext(
         BROADCASTER_ID, MODERATOR_ID, config.TWITCH_CHAT_ACCESS_TOKEN, config.TWITCH_CHANNEL,
         is_privileged=is_privileged,
@@ -1278,8 +1268,8 @@ async def _handle_privmsg(line):
     )
 
     if is_mod_command and not is_privileged:
-        # Nicht-Mods, die einen Mod-Befehl versuchen: Nachricht löschen
-        # statt sie einfach zu ignorieren.
+        # Non-mods attempting a mod command: delete the message rather than simply ignoring
+        # it.
         await deny_mod_command(user_name, tags.get("id"), command_word)
     elif command_word in dynamic_mod:
         await _record_command(command_word, user_name)

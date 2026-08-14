@@ -1,21 +1,20 @@
 # runtime_config.py
-# Die Konfiguration zur Laufzeit: eine JSON-Datei je Plattform und je Feature, neben dem
-# Code, der sie liest. Jede wird bei Änderung neu eingelesen - Regeln, Texte, Namen,
-# Schwellenwerte und Zeiten lassen sich also im laufenden Betrieb ändern.
+# The configuration at runtime: one JSON file per platform and per feature, next to the
+# code that reads it. Each is re-read when it changes - so rules, texts, names, thresholds
+# and timings can be changed while the bot is running.
 #
-# Drei Dinge macht eine LiveConfig, und alle drei haben denselben Grund: was ein anderer
-# Betreiber anders haben will, soll er ändern können, ohne Python anzufassen.
+# A LiveConfig does three things, and all three for the same reason: whatever another
+# operator wants differently, they should be able to change without touching Python.
 #
-#   get()/section()  Werte und Abschnitte, mit den DEFAULTS aus dem Code als Unterlage.
-#                    Die Datei muss also nicht vollständig sein - was fehlt, kommt aus dem
-#                    Code, und eine gelöschte Zeile ist kein Absturz, sondern der Default.
-#   text()           die Texte des Bots. Jeder Satz, den ein Mensch zu sehen bekommt, hat
-#                    einen Schlüssel und steht unter "texts" in der JSON. Ein Tippfehler
-#                    des Betreibers darf dabei nie den Handler mitreißen, der ihn gerade
-#                    ausgibt - text() gibt im Zweifel den Default aus und meldet einmal,
-#                    was nicht stimmte.
-#   commands()       Befehlsnamen: umbenennen, Aliase geben, abschalten. Wer schon einen
-#                    Bot mit !uptime im Chat hat, soll den hier nicht doppelt bekommen.
+#   get()/section()  values and sections, with the DEFAULTS from the code underneath.
+#                    The file therefore need not be complete - what is missing comes from
+#                    the code, and a deleted line is not a crash but the default.
+#   text()           the bot's texts. Every sentence a human gets to see has a key and
+#                    lives under "texts" in the JSON. A typo by the operator must never
+#                    take down the handler that is printing it - in case of doubt text()
+#                    prints the default and reports once what was wrong.
+#   commands()       command names: rename, alias, disable. Someone who already has a bot
+#                    with !uptime in chat should not get a second one here.
 
 import json
 from pathlib import Path
@@ -23,22 +22,21 @@ from string import Formatter
 
 
 def for_package(module_file, defaults=None):
-    """Die Konfiguration neben dem Modul, das sie liest: features/stats/stats.json für
+    """The configuration next to the module that reads it: features/stats/stats.json for
     features/stats/feature.py.
 
-    Ein Paket, eine Datei, gleicher Name - so muss niemand raten, welche JSON zu welchem
-    Ordner gehört, und ein zusätzliches Feature bringt seine Konfiguration einfach mit,
-    ohne dass core davon wissen muss."""
+    One package, one file, same name - so nobody has to guess which JSON belongs to which
+    folder, and an additional feature simply brings its configuration along without core
+    having to know about it."""
     directory = Path(module_file).resolve().parent
     return LiveConfig(directory / f"{directory.name}.json", defaults)
 
 
 def deep_merge(base, override):
-    """Kopie von base, in die override hineingelegt wird. Verschachtelte Dicts werden
-    zusammengeführt statt ersetzt: wer in der JSON *einen* Schwellenwert setzt, verliert
-    nicht die übrigen aus den Defaults. Listen gelten als ein Wert - eine Liste in der
-    JSON ersetzt die Default-Liste vollständig, denn sonst könnte man nie etwas
-    wegnehmen."""
+    """Copy of base with override laid into it. Nested dicts are merged rather than
+    replaced: setting *one* threshold in the JSON does not lose the others from the
+    defaults. Lists count as a single value - a list in the JSON replaces the default list
+    entirely, because otherwise you could never take anything away."""
     merged = dict(base)
     for key, value in (override or {}).items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):
@@ -49,14 +47,14 @@ def deep_merge(base, override):
 
 
 def placeholders(template):
-    """Die Namen aller {…}-Platzhalter einer Vorlage."""
+    """The names of all {…} placeholders in a template."""
     return {name for _, name, _, _ in Formatter().parse(template) if name}
 
 
 class _Unfilled(dict):
-    """Ein Wörterbuch für format_map, das einen unbekannten Platzhalter unverändert
-    stehen lässt, statt eine KeyError zu werfen - und sich merkt, welche das waren, damit
-    der Aufrufer es melden kann. Siehe LiveConfig.render."""
+    """A dictionary for format_map that leaves an unknown placeholder standing unchanged
+    instead of raising a KeyError - and remembers which ones those were, so the caller can
+    report them. See LiveConfig.render."""
 
     def __init__(self, values):
         super().__init__(values)
@@ -68,29 +66,28 @@ class _Unfilled(dict):
 
 
 class LiveConfig:
-    """Lädt eine JSON-Datei und prüft bei jedem Zugriff per mtime, ob sie sich geändert
-    hat - kein Polling-Task nötig, ein stat()-Aufruf ist billig genug, um ihn pro
-    Chat-Nachricht mitlaufen zu lassen. Fehlt die Datei oder ist sie kaputt, bleibt der
-    zuletzt bekannte gute Stand (bzw. die Defaults beim allerersten Laden) erhalten,
-    statt den Bot abstürzen zu lassen.
+    """Loads a JSON file and checks its mtime on every access to see whether it has changed
+    - no polling task needed, a stat() call is cheap enough to run per chat message. If the
+    file is missing or broken, the last known good state is kept (resp. the defaults on the
+    very first load) rather than crashing the bot.
 
-    Zwei Lagen liegen übereinander, die obere schlägt die untere:
+    Two layers lie on top of each other, the upper beating the lower:
 
-        `defaults`     was der Code mitbringt. Für die wenigen Werte, ohne die ein Modul
-                       nicht arbeiten kann - damit es auch ohne die Datei läuft.
-        aktuelle Datei was jetzt darin steht.
+        `defaults`     what the code brings along. For the few values without which a
+                       module cannot work - so that it runs without the file too.
+        current file   what is in it right now.
 
-    Was in der Datei steht, ist damit auch das, was gilt: ein gelöschter Befehl ist weg,
-    ein gelöschter Schwellenwert fällt auf den Wert aus dem Code zurück. Genau daran
-    hängt der Sinn der ganzen Klasse - eine Änderung, die man nicht rückgängig machen
-    kann, ohne den Bot neu zu starten, ist keine Laufzeit-Änderung.
+    What is in the file is therefore also what applies: a deleted command is gone, a
+    deleted threshold falls back to the value from the code. The whole point of this class
+    hangs on exactly that - a change you cannot undo without restarting the bot is not a
+    runtime change.
 
-    Eine dritte Lage gibt es trotzdem, aber nur für Texte und nur als Rückfalltext:
-    `_baseline`, der Inhalt beim ersten erfolgreichen Laden (also die mitgelieferte Datei
-    aus dem Repository). Sie hält text() am Leben, wenn ein Schlüssel fehlt - siehe dort.
-    Texte sind der eine Fall, in dem das richtig ist: ein Feature, das fast nur aus Sätzen
-    besteht, müsste sie sonst zweimal führen, einmal in Python und einmal in JSON. Für
-    alles andere wäre dieselbe Unterlage nur ein Weg, Gelöschtes am Leben zu halten."""
+    There is a third layer nonetheless, but only for texts and only as a fallback text:
+    `_baseline`, the content at the first successful load (i.e. the file shipped in the
+    repository). It keeps text() alive when a key is missing - see there. Texts are the one
+    case where that is right: a feature consisting almost entirely of sentences would
+    otherwise have to carry them twice, once in Python and once in JSON. For everything
+    else the same underlay would only be a way of keeping deleted things alive."""
 
     def __init__(self, path, defaults=None):
         self._path = Path(path)
@@ -101,9 +98,9 @@ class LiveConfig:
         self._data = dict(self._defaults)
         self._complained = set()
 
-        #: Zählt bei jedem erfolgreichen Neuladen hoch. Wer aus der Konfiguration etwas
-        #: Teures ableitet (die Befehlstabelle im Bus), erkennt daran, dass sein
-        #: Zwischenstand veraltet ist - siehe core/events.py.
+        #: Counts up on every successful reload. Anyone deriving something expensive from
+        #: the configuration (the command table in the bus) uses it to notice that their
+        #: cached state is stale - see core/events.py.
         self.version = 0
 
         self.reload()
@@ -122,15 +119,15 @@ class LiveConfig:
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:
-            print(f"⚠️ Konnte {self._path.name} nicht laden, behalte vorherigen Stand: {e}")
+            print(f"⚠️ Could not load {self._path.name}, keeping the previous state: {e}")
             return
         if self._baseline is None:
             self._baseline = data
         self._mtime = mtime
         self._file_data = data
-        # Bewusst ohne _baseline dazwischen: die Datei ist die Wahrheit, sonst ließe sich
-        # nichts löschen, was beim Start einmal dringestanden hat. Fehlende Texte fängt
-        # text() eigens über _baseline ab - der einzige Ort, an dem das gewollt ist.
+        # Deliberately without _baseline in between: the file is the truth, otherwise
+        # nothing that was once in it at startup could ever be deleted. Missing texts are
+        # caught by text() itself via _baseline - the only place where that is wanted.
         self._data = deep_merge(self._defaults, data)
         self._complained.clear()
         self.version += 1
@@ -146,41 +143,40 @@ class LiveConfig:
         return default if value is None else value
 
     def section(self, key):
-        """Ein Unterabschnitt als Dict - immer eines, auch wenn der Schlüssel fehlt oder
-        jemand etwas anderes hineingeschrieben hat."""
+        """A subsection as a dict - always one, even when the key is missing or somebody
+        has written something else into it."""
         value = self.get(key)
         return value if isinstance(value, dict) else {}
 
-    # --- Texte -----------------------------------------------------------------------
+    # --- Texts -------------------------------------------------------------------------
 
     def text(self, key, **values):
-        """Der Text zu einem Schlüssel, mit {platzhaltern} gefüllt.
+        """The text for a key, filled with its {placeholders}.
 
-        Robust mit Absicht: dieser Aufruf steckt in jedem Befehl und jeder Ankündigung,
-        und die Vorlage kommt von außen. Weder ein unbekannter Platzhalter noch eine
-        halbe geschweifte Klammer noch ein fehlender Schlüssel darf den Aufrufer mit
-        einer Exception zurücklassen - im schlimmsten Fall steht eben der Default oder
-        die rohe Vorlage da. Gemeldet wird trotzdem, aber nur einmal je Schlüssel und
-        Dateistand, damit ein Tippfehler nicht das Log flutet."""
+        Robust on purpose: this call sits in every command and every announcement, and the
+        template comes from outside. Neither an unknown placeholder nor half a curly brace
+        nor a missing key may leave the caller with an exception - in the worst case the
+        default or the raw template is what shows up. It is still reported, but only once
+        per key and file state, so a typo does not flood the log."""
         template = self.section("texts").get(key)
         fallback = ((self._baseline or self._defaults).get("texts") or {}).get(key)
 
         if template is None:
             template = fallback
         if template is None:
-            self.complain(key, f"kein Text für '{key}' hinterlegt")
+            self.complain(key, f"no text stored for '{key}'")
             return key
         if not isinstance(template, str):
-            self.complain(key, f"Text '{key}' ist kein Text, sondern {type(template).__name__}")
+            self.complain(key, f"text '{key}' is not text but {type(template).__name__}")
             template = fallback if isinstance(fallback, str) else key
 
         try:
             return template.format(**values)
         except (KeyError, IndexError, ValueError) as e:
             unknown = ", ".join(sorted(placeholders(template) - set(values))) or "?"
-            self.complain(key, f"Text '{key}' benutzt unbekannte Platzhalter ({unknown}) - {e}")
+            self.complain(key, f"text '{key}' uses unknown placeholders ({unknown}) - {e}")
 
-        # Der Default kann es noch richtig machen, wenn nur die eigene Fassung kaputt ist.
+        # The default can still get it right when only the operator's own version is broken.
         if isinstance(fallback, str) and fallback != template:
             try:
                 return fallback.format(**values)
@@ -188,54 +184,54 @@ class LiveConfig:
                 pass
         return template
 
-    # --- Statische Befehle --------------------------------------------------------------
+    # --- Static commands -----------------------------------------------------------------
 
     def render(self, template, **values):
-        """Füllt die {platzhalter} eines statischen Befehls aus der JSON.
+        """Fills the {placeholders} of a static command from the JSON.
 
-        Getrennt von text() und bewusst mit anderer Quelle: text() füllt Vorlagen, deren
-        Werte der Code kennt - er ruft sie ja mit genau diesen Werten auf. Hier bestimmt
-        der Betreiber beides, Vorlage *und* Platzhalter, und wer sich vertippt, soll dafür
-        nicht die Antwort verlieren. Vorher stand an den Aufrufstellen ein blankes
-        .format(u=...): ein {zeit} statt {time} warf dort eine KeyError, die weit oben als
-        "Fehler bei der Verarbeitung" landete, und der Befehl blieb im Chat still.
+        Separate from text() and deliberately from a different source: text() fills
+        templates whose values the code knows - it calls them with exactly those values.
+        Here the operator decides both, template *and* placeholders, and a typo should not
+        cost them the answer. Previously the call sites held a bare .format(u=...): a
+        {zeit} instead of {time} raised a KeyError there, which landed far above as "error
+        while processing", and the command stayed silent in chat.
 
-        Woher die Werte kommen, steht hier bewusst nicht - das weiß features/variables,
-        und die Plattform reicht sie herein. Diese Klasse formatiert nur.
+        Where the values come from is deliberately not stated here - features/variables
+        knows that, and the platform passes them in. This class only formats.
 
-        Ein unbekannter Platzhalter kostet nur sich selbst: er bleibt als {name} stehen,
-        alles andere im Satz wird gefüllt. Das ist der Unterschied, der zählt, wenn das
-        Variablen-Feature abgeschaltet ist - "Es ist {time} Uhr, @jens" ist eine
-        halbwegs brauchbare Antwort, "Es ist {time} Uhr, @{u}" ist keine."""
+        An unknown placeholder costs only itself: it stays standing as {name} while
+        everything else in the sentence is filled. That is the difference that counts when
+        the variables feature is switched off - "It is {time}, @jens" is a halfway usable
+        answer, "It is {time}, @{u}" is not."""
         unfilled = _Unfilled(values)
         try:
             filled = template.format_map(unfilled)
         except (IndexError, ValueError, AttributeError, TypeError) as e:
-            # Kaputte Vorlage statt fehlendem Wert: eine halbe Klammer, ein {0}, ein
-            # {name.attribut} ins Leere. Da ist nichts zu retten, der Text bleibt roh.
-            self.complain(f"render:{template[:60]}", f"Befehl ist keine gültige Vorlage - {e}")
+            # Broken template rather than a missing value: half a brace, a {0}, a
+            # {name.attribute} pointing at nothing. Nothing to save there, the text stays raw.
+            self.complain(f"render:{template[:60]}", f"command is not a valid template - {e}")
             return template
         if unfilled.missing:
-            available = ", ".join("{%s}" % name for name in sorted(values)) or "keine"
+            available = ", ".join("{%s}" % name for name in sorted(values)) or "none"
             self.complain(
                 f"render:{template[:60]}",
-                f"Befehl benutzt unbekannte Platzhalter "
+                f"command uses unknown placeholders "
                 f"({', '.join('{%s}' % name for name in sorted(unfilled.missing))}) - "
-                f"bekannt sind {available}",
+                f"known are {available}",
             )
         return filled
 
     def color(self, key, default=0x3498DB):
-        """Eine Farbe aus dem Abschnitt "colors" als Zahl, wie Announcement.color sie
-        erwartet. In der JSON steht sie als "#2ECC71" - so, wie sie überall sonst
-        geschrieben wird -, eine reine Zahl geht aber auch."""
+        """A colour from the "colors" section as a number, the way Announcement.color
+        expects it. In the JSON it reads "#2ECC71" - the way it is written everywhere else
+        - but a plain number works too."""
         value = self.section("colors").get(key, default)
         if isinstance(value, int):
             return value
         try:
             return int(str(value).lstrip("#"), 16)
         except ValueError:
-            self.complain(f"color:{key}", f"Farbe '{key}': {value!r} ist keine Farbe wie \"#2ECC71\"")
+            self.complain(f"color:{key}", f"colour '{key}': {value!r} is not a colour like \"#2ECC71\"")
             return default
 
     def complain(self, key, message):
@@ -244,38 +240,38 @@ class LiveConfig:
         self._complained.add(key)
         print(f"⚠️ {self._path.name}: {message}")
 
-    # --- Befehlsnamen ------------------------------------------------------------------
+    # --- Command names -------------------------------------------------------------------
 
     def command_names(self, section="command_names"):
-        """{Standardname: (Name, Alias, ...)} aus der JSON, leer wenn nichts umbenannt
-        wurde. Erlaubt drei Schreibweisen, weil sich alle drei natürlich lesen:
+        """{default name: (name, alias, ...)} from the JSON, empty when nothing was
+        renamed. Three spellings are allowed, because all three read naturally:
 
-            "!uptime": "!live"                     umbenennen
-            "!uptime": ["!live", "!wielange"]      umbenennen + Aliase
-            "!uptime": false                       abschalten
-            "!uptime": {"name": "!live", "aliases": ["!wielange"], "enabled": true}
+            "!uptime": "!live"                     rename
+            "!uptime": ["!live", "!howlong"]       rename + aliases
+            "!uptime": false                       disable
+            "!uptime": {"name": "!live", "aliases": ["!howlong"], "enabled": true}
 
-        Namen ohne "!" werden ergänzt - "live" und "!live" sollen dasselbe meinen."""
+        Names without "!" get one added - "live" and "!live" should mean the same."""
         resolved = {}
         for default_name, setting in self.section(section).items():
-            # Schlüssel mit Unterstrich sind Erklärungen für den Menschen, der die Datei
-            # bearbeitet (JSON kennt keine Kommentare) - kein Befehl.
+            # Keys with a leading underscore are explanations for the human editing the
+            # file (JSON has no comments) - not a command.
             if default_name.startswith("_"):
                 continue
             names = _normalize_command_setting(setting)
             if names is None:
                 self.complain(f"command:{default_name}",
-                               f"Befehl '{default_name}': {setting!r} ist keine gültige Angabe")
+                               f"command '{default_name}': {setting!r} is not a valid setting")
                 continue
             resolved[_with_prefix(default_name)] = names
         return resolved
 
     def resolve_commands(self, declared, section="command_names"):
-        """Bildet {Standardname: Wert} auf {tatsächlicher Name: Wert} ab - inklusive
-        Aliasen, die auf denselben Wert zeigen. Abgeschaltete Befehle fallen heraus.
+        """Maps {default name: value} onto {actual name: value} - including aliases
+        pointing at the same value. Disabled commands drop out.
 
-        `declared` bleibt unangetastet; die Reihenfolge der Standardnamen bleibt erhalten,
-        damit Auflistungen (!commands) nicht bei jedem Neuladen anders aussehen."""
+        `declared` is left untouched; the order of the default names is preserved so that
+        listings (!commands) do not look different after every reload."""
         overrides = self.command_names(section)
         resolved = {}
         for default_name, value in declared.items():
@@ -283,7 +279,7 @@ class LiveConfig:
             for name in names:
                 if name in resolved:
                     self.complain(f"collision:{name}",
-                                   f"Befehlsname '{name}' ist doppelt vergeben - der spätere wird ignoriert")
+                                   f"command name '{name}' is assigned twice - the later one is ignored")
                     continue
                 resolved[name] = value
         return resolved
@@ -295,8 +291,8 @@ def _with_prefix(name):
 
 
 def _normalize_command_setting(setting):
-    """(Name, Alias, ...) oder () für "abgeschaltet"; None, wenn die Angabe unbrauchbar
-    ist - der Aufrufer meldet das und lässt den Standardnamen stehen."""
+    """(name, alias, ...) or () for "disabled"; None when the setting is unusable - the
+    caller reports that and leaves the default name standing."""
     if setting is False:
         return ()
     if isinstance(setting, str):

@@ -1,21 +1,20 @@
-"""Alles über Twitch-OAuth-Scopes an einer Stelle.
+"""Everything about Twitch OAuth scopes in one place.
 
-Bewusst getrennt von config.py: das sind keine Einstellungen, die man pro Deployment
-anders setzt, sondern eine Eigenschaft des Codes selbst - welche Scopes REQUIRED enthält,
-ergibt sich direkt daraus, welche Helix-Endpunkte api.py aufruft und welche EventSub-Typen
-bot.py abonniert. config.py liest Umgebung, dieses Modul beschreibt die Integration.
+Deliberately separate from config.py: these are not settings you set differently per
+deployment, but a property of the code itself - what REQUIRED contains follows directly from
+which Helix endpoints api.py calls and which EventSub types bot.py subscribes to. config.py
+reads the environment; this module describes the integration.
 
-Das Modul hat absichtlich keine Importe: so kann sowohl der Bot als auch das
-eigenständige get_token.py es ziehen, ohne websockets & Co. zu laden.
+The module deliberately has no imports: that way both the bot and the standalone get_token.py
+can pull it in without loading websockets and friends.
 """
 
-# Die Scopes, die der Chat-Token braucht. get_token.py fordert genau diese Liste
-# beim OAuth-Flow an, und bot.log_token_capabilities prüft den Token beim Start dagegen.
-# Kommt eine Funktion dazu, die einen neuen Scope braucht: hier eintragen, in
-# CAPABILITIES eine Klartext-Zeile ergänzen und get_token.py einmal neu laufen
-# lassen (Twitch erweitert bestehende Tokens nicht nachträglich).
-# Bewusst knapp gehalten - der Token liegt auf einem Server, jeder ungenutzte Scope ist
-# nur zusätzlicher Schaden, falls er abhandenkommt.
+# The scopes the chat token needs. get_token.py requests exactly this list during the OAuth
+# flow, and bot.log_token_capabilities checks the token against it at startup. If a function
+# is added that needs a new scope: enter it here, add a plain-text line to CAPABILITIES and
+# run get_token.py once more (Twitch does not extend existing tokens after the fact).
+# Deliberately kept short - the token sits on a server, and every unused scope is only
+# additional damage should it go astray.
 REQUIRED = [
     # --- Chat (IRC) ---
     "chat:read",                        # bot.py: IRC-Verbindung
@@ -48,37 +47,37 @@ REQUIRED = [
     "channel:moderate",                 # EventSub channel.ban / channel.unban
 ]
 
-# Scope -> Klartext-Beschreibung, nur für die Startup-Diagnose (log_token_capabilities).
-# Deckt über REQUIRED hinaus auch Scopes ab, die für geplante Stream-Steuerungs-Features
-# relevant wären - ein Token aus einem Generator bringt oft viele davon mit.
+# Scope -> plain-text description, only for the startup diagnostics
+# (log_token_capabilities). Beyond REQUIRED it also covers scopes that would be relevant for
+# planned stream-control features - a token from a generator often brings many of them.
 CAPABILITIES = {
     "chat:read": "Chat lesen",
     "chat:edit": "Chat schreiben (IRC PRIVMSG)",
     "user:write:chat": "Chat schreiben (Helix)",
-    "moderator:manage:chat_messages": "Nachrichten löschen",
+    "moderator:manage:chat_messages": "delete messages",
     "moderator:manage:banned_users": "Timeouts/Bans",
     "moderator:manage:announcements": "Announcements posten",
     "moderator:manage:automod": "AutoMod-Warteschlange verwalten",
-    "moderator:manage:automod_settings": "AutoMod-Einstellungen ändern",
+    "moderator:manage:automod_settings": "change AutoMod settings",
     "moderator:manage:blocked_terms": "Bannwort-Liste (Twitch-seitig) verwalten",
-    "moderator:manage:chat_settings": "Chat-Einstellungen (Slow/Follower/Sub-Mode) ändern",
-    "moderator:manage:shield_mode": "Shield Mode auslösen",
+    "moderator:manage:chat_settings": "change chat settings (slow/follower/sub mode)",
+    "moderator:manage:shield_mode": "trigger shield mode",
     "moderator:manage:shoutouts": "Shoutouts geben",
     "moderator:manage:unban_requests": "Unban-Anfragen bearbeiten",
     "moderator:manage:warnings": "Verwarnungen aussprechen",
-    "channel:manage:broadcast": "Titel/Kategorie ändern",
+    "channel:manage:broadcast": "change title/category",
     "channel:manage:polls": "Umfragen steuern",
     "channel:manage:predictions": "Predictions steuern",
     "channel:manage:raids": "Raids starten",
     "channel:manage:redemptions": "Channel-Point-Rewards verwalten",
     "channel:manage:schedule": "Stream-Zeitplan verwalten",
-    "channel:manage:moderators": "Moderatoren hinzufügen/entfernen",
+    "channel:manage:moderators": "add/remove moderators",
     "channel:manage:vips": "VIPs verwalten",
-    "channel:manage:videos": "VODs löschen/bearbeiten",
+    "channel:manage:videos": "delete/edit VODs",
     "channel:manage:extensions": "Extensions verwalten",
-    "channel:manage:ads": "Werbeblöcke starten",
+    "channel:manage:ads": "start ad breaks",
     "channel:read:ads": "Werbeplan lesen / Ad-Break-Benachrichtigungen empfangen",
-    "channel:edit:commercial": "Werbeblöcke starten (legacy)",
+    "channel:edit:commercial": "start ad breaks (legacy)",
     "clips:edit": "Clips erstellen",
     "moderator:read:chatters": "Chatter-Anzahl abfragen",
     "channel:read:subscriptions": "Abonnentenzahl abfragen / Sub-Highscore erfassen",
@@ -89,8 +88,8 @@ CAPABILITIES = {
     "channel:moderate": "Ban-/Unban-Events empfangen (channel.ban / channel.unban)",
 }
 
-# Scopes, die keinen Nutzen für den Bot haben, aber besonders hohes Schadenspotenzial
-# bergen, falls der Token geleakt wird - werden beim Start explizit als Warnung geloggt.
+# Scopes of no use to the bot but carrying particularly high damage potential should the
+# token leak - explicitly logged as a warning at startup.
 DANGEROUS_UNNEEDED = {
     "channel:read:stream_key": "RTMP-Stream-Key - erlaubt, unter deinem Namen zu streamen",
 }

@@ -46,6 +46,7 @@
     "giveaway.start_usage": "⚠️ Nutzung: !giveaway start <Punkte> <Titel>",
     "giveaway.unavailable": "⚠️ Verlosung aktuell nicht verfügbar.",
     "giveaway.reward_failed": "⚠️ Reward konnte nicht erstellt werden (fehlt evtl. Scope channel:manage:redemptions?).",
+    "giveaway.started": "🎉 Verlosung gestartet: \"{title}\" - löse den Channel-Points-Reward \"{title}\" für {cost} Punkte ein, um teilzunehmen! Mods beenden mit !giveaway pick.",
     "giveaway.none": "⚠️ Aktuell läuft keine Verlosung.",
     "giveaway.no_entries": "⚠️ Niemand hat an \"{title}\" teilgenommen.",
     "giveaway.winner": "🎉 Gewinner von \"{title}\": @{winner}! Alle anderen Einsätze wurden zurückerstattet.",

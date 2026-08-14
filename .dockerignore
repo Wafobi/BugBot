@@ -5,4 +5,4 @@ __pycache__
 .env
 # Die DB kommt per Bind-Mount vom Host (siehe bugbot.container); eine ins Image kopierte
 # Kopie wäre nur totes Gewicht, das mit jedem Build wächst.
-bugbot.db
+features/sql_db/bugbot.db

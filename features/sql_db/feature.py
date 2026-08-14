@@ -1,15 +1,16 @@
 # feature.py
-# Die persistente Ablage als eigenes Feature (Fähigkeit STORAGE).
+# Persistent storage as a feature of its own (capability STORAGE).
 #
-# Vorher lag der SQLite-Zugriff mitten in core/stats.py: wer Statistiken wollte, bekam
-# das Datenbank-Layout mit, und wer die Datenbank tauschen wollte, musste an den
-# Statistiken vorbei. Jetzt bietet dieses Feature nur Verbindung und Schema-Helfer an;
-# welche Tabellen es gibt, entscheidet jedes Feature für sich in seinem setup().
+# Previously the SQLite access sat in the middle of core/stats.py: whoever wanted
+# statistics got the database layout along with them, and whoever wanted to swap the
+# database had to go past the statistics. Now this feature offers nothing but a connection
+# and schema helpers; which tables exist is decided by each feature for itself in its
+# setup().
 #
-# Bewusst kein gemeinsames Schema und keine ORM-Schicht: die Features schreiben ihr SQL
-# selbst, teilen sich nur die Datei und die Handhabung. Ein Austausch gegen eine andere
-# Ablage (Postgres, reines JSON) hieße, ein zweites Feature mit derselben Fähigkeit zu
-# bauen - die Features, die es nutzen, müssten dafür nur ihre CREATE-Statements ändern.
+# Deliberately no shared schema and no ORM layer: the features write their own SQL and only
+# share the file and its handling. Swapping in different storage (Postgres, plain JSON)
+# would mean building a second feature with the same capability - the features using it
+# would only have to change their CREATE statements.
 
 import os
 import sqlite3
@@ -18,7 +19,7 @@ from pathlib import Path
 
 from core import feature as feature_api, runtime_config
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "bugbot.db"
+DEFAULT_DB_PATH = Path(__file__).resolve().parent / "bugbot.db"
 
 DEFAULTS = {
     "db_path": "",
@@ -31,10 +32,10 @@ class SqlDbFeature(feature_api.Feature):
 
     def __init__(self, path=None):
         self.config = runtime_config.for_package(__file__, DEFAULTS)
-        # Reihenfolge mit Absicht: BUGBOT_DB schlägt die Konfigurationsdatei. Die Datei
-        # sagt, wo die Ablage dieser Installation liegt; die Umgebungsvariable ist der
-        # Eingriff von außen für genau einen Lauf - ein Test, der nicht in die echte
-        # bugbot.db schreiben soll, oder ein Container mit anderem Mount.
+        # Order on purpose: BUGBOT_DB beats the configuration file. The file says where
+        # this installation's storage lives; the environment variable is the intervention
+        # from outside for exactly one run - a test that should not write into the real
+        # bugbot.db, or a container with a different mount.
         self.path = Path(
             path
             or os.environ.get("BUGBOT_DB")
@@ -43,22 +44,22 @@ class SqlDbFeature(feature_api.Feature):
         )
 
     async def setup(self, bus):
-        # Nur anlegen/öffnen, keine Tabellen: die gehören den Features, die sie nutzen.
+        # Only create/open, no tables: those belong to the features using them.
         with self.connect():
             pass
-        print(f"🗄️ Ablage: {self.path}")
+        print(f"🗄️ Storage: {self.path}")
 
     @contextmanager
     def connect(self):
-        """sqlite3s eingebauter Connection-Contextmanager committet/rollbackt zwar
-        automatisch, schließt die Connection selbst aber NICHT - das übernimmt dieser
-        Wrapper, damit jeder Aufruf sein File-Handle sauber wieder freigibt.
+        """sqlite3's built-in connection context manager does commit/rollback
+        automatically, but does NOT close the connection itself - this wrapper takes care
+        of that, so every call releases its file handle cleanly again.
 
-        Jeder Aufruf öffnet seine eigene Connection statt eine geteilte über Threads
-        hinweg zu verwalten - beim Traffic eines einzelnen Streamer-Chats ist das
-        unproblematisch und deutlich einfacher als Pooling/WAL.
+        Every call opens its own connection rather than managing a shared one across
+        threads - at the traffic of a single streamer's chat that is unproblematic and much
+        simpler than pooling/WAL.
 
-        Blockierend: aus async Code immer per loop.run_in_executor(None, ...) aufrufen."""
+        Blocking: from async code always call it via loop.run_in_executor(None, ...)."""
         conn = sqlite3.connect(self.path)
         try:
             with conn:
@@ -68,9 +69,9 @@ class SqlDbFeature(feature_api.Feature):
 
     @staticmethod
     def add_column_if_missing(conn, table, column, decl):
-        """SQLite kennt kein 'ADD COLUMN IF NOT EXISTS' - deshalb erst PRAGMA table_info
-        fragen. Nötig, weil eine bereits laufende bugbot.db nachträglich hinzugekommene
-        Spalten noch nicht hat und sonst beim Start crashen würde."""
+        """SQLite has no 'ADD COLUMN IF NOT EXISTS' - hence asking PRAGMA table_info first.
+        Needed because an already running bugbot.db does not yet have columns added later
+        and would otherwise crash at startup."""
         existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")

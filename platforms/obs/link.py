@@ -1,26 +1,26 @@
 # link.py
-# Die Leitung zu OBS: der WebSocket-Lauscher des Bots und die obs-websocket-5-Sitzung, die
-# über eine eingehende Verbindung läuft.
+# The line to OBS: the bot's WebSocket listener and the obs-websocket 5 session running over
+# an incoming connection.
 #
-# Der Verbindungsaufbau geht andersherum als bei den übrigen Plattformen - nicht der Bot
-# ruft OBS an, sondern OBS ruft den Bot an. Der Grund steht in config.py: obs-websocket
-# lauscht auf dem Rechner des Streamers, und der soll dafür keinen Port ins Internet
-# hängen müssen. Ein Relais auf dem OBS-PC (obs_bridge.py) verbindet sich lokal mit
-# obs-websocket, wählt sich beim Bot ein und reicht die Frames unverändert durch.
+# The connection is established the other way round than on the other platforms - the bot
+# does not call OBS, OBS calls the bot. The reason is in config.py: obs-websocket listens on
+# the streamer's machine, and they should not have to hang a port into the internet for it. A
+# relay on the OBS machine (obs_bridge.py) connects locally to obs-websocket, dials in to the
+# bot and passes the frames through unchanged.
 #
-# Für alles oberhalb dieser Datei ändert die gedrehte Richtung nichts: über die Leitung
-# läuft ganz normales obs-websocket 5 - Hello/Identify beim Aufbau, danach Requests des
-# Bots und Events von OBS. Auch die Anmeldung an obs-websocket macht weiterhin der Bot
-# selbst (_identify), das Relais kennt OBS_PASSWORD gar nicht.
+# For everything above this file the reversed direction changes nothing: what runs over the
+# line is perfectly ordinary obs-websocket 5 - Hello/Identify on setup, then the bot's
+# requests and OBS's events. The sign-in to obs-websocket is still done by the bot itself
+# (_identify); the relay does not know OBS_PASSWORD at all.
 #
-# Zwei Prüfungen bewachen den Port:
-#   - der Token im WebSocket-Handschlag (_check_token). Passt er nicht, kommt gar keine
-#     WebSocket-Verbindung zustande, sondern eine HTTP-401-Antwort.
-#   - danach OBS selbst, per Challenge/Response gegen OBS_PASSWORD.
+# Two checks guard the port:
+#   - the token in the WebSocket handshake (_check_token). If it does not match, no WebSocket
+#     connection comes about at all, but an HTTP 401 response.
+#   - then OBS itself, by challenge/response against OBS_PASSWORD.
 #
-# Es gilt immer nur *eine* Sitzung: meldet sich ein zweites Relais, gewinnt das neue und
-# das alte wird geschlossen. Sonst bliebe nach jedem OBS-Neustart eine Karteileiche
-# stehen, und Anfragen gingen in die tote Verbindung.
+# There is only ever *one* session: if a second relay signs in, the new one wins and the old
+# one is closed. Otherwise a dead record would stay standing after every OBS restart, and
+# requests would go into the dead connection.
 
 import asyncio
 import base64
@@ -32,7 +32,7 @@ import json
 
 import websockets
 
-# --- Protokoll (obs-websocket 5.x) --------------------------------------------------
+# --- Protocol (obs-websocket 5.x) ---------------------------------------------------
 OP_HELLO = 0
 OP_IDENTIFY = 1
 OP_IDENTIFIED = 2
@@ -42,36 +42,36 @@ OP_REQUEST_RESPONSE = 7
 
 RPC_VERSION = 1
 
-# Bitmaske der abonnierten Ereignis-Kategorien. Bits 0..10 sind "alles außer den
-# Vielrednern" - InputVolumeMeters & Co. (ab Bit 16) sind bewusst nicht dabei: die feuern
-# mehrfach pro Sekunde und hätten hier nichts zu melden, was sich mitzuschreiben lohnt.
+# Bitmask of the subscribed event categories. Bits 0..10 are "everything except the
+# chatterboxes" - InputVolumeMeters and friends (from bit 16) are deliberately not included:
+# they fire several times per second and would have nothing to report here worth recording.
 EVENTS_ALL = (1 << 11) - 1
 
-# Der Header, in dem das Relais den Token mitschickt. Zusätzlich wird "Authorization:
-# Bearer <token>" akzeptiert, damit die Verbindung auch durch einen Reverse-Proxy oder
-# einen anderen Client geführt werden kann, der nur damit umgehen kann.
+# The header the relay sends the token in. "Authorization: Bearer <token>" is accepted as
+# well, so the connection can also be led through a reverse proxy or another client that can
+# only handle that.
 TOKEN_HEADER = "X-BugBot-Token"
 
-# Voreinstellungen; die tatsächlichen Werte kommen aus obs.json ("timings") und werden
-# über den Rückruf `timings` hereingereicht - so bleibt diese Datei beim reinen Protokoll
-# und weiß nichts von Konfigurationsdateien.
+# Defaults; the actual values come from obs.json ("timings") and are passed in through the
+# `timings` callback - which keeps this file on the pure protocol and ignorant of
+# configuration files.
 HANDSHAKE_TIMEOUT = 20
 REQUEST_TIMEOUT = 10
 
-# Schließcodes von obs-websocket, die kein Netzproblem sind, sondern eine Aussage.
+# Close codes from obs-websocket that are not a network problem but a statement.
 CLOSE_REASONS = {
-    4008: "OBS hat die Identify-Nachricht nicht akzeptiert",
-    4009: "falsches Passwort - OBS_PASSWORD stimmt nicht mit den WebSocket-Servereinstellungen überein",
-    4010: f"OBS spricht nicht RPC-Version {RPC_VERSION}",
-    4011: "von OBS getrennt (Sitzung ausgeschlossen)",
+    4008: "OBS did not accept the Identify message",
+    4009: "wrong password - OBS_PASSWORD does not match the WebSocket server settings",
+    4010: f"OBS does not speak RPC version {RPC_VERSION}",
+    4011: "disconnected by OBS (session kicked)",
 }
 
 
 class OBSError(RuntimeError):
-    """Eine Anfrage an OBS ist fehlgeschlagen oder gar nicht erst losgeschickt worden.
+    """A request to OBS failed, or was never sent in the first place.
 
-    `code` ist der requestStatus.code von obs-websocket (0, wenn der Fehler vor der
-    Antwort passiert ist - keine Verbindung, Zeitüberschreitung)."""
+    `code` is the requestStatus.code from obs-websocket (0 when the error happened before the
+    response - no connection, timeout)."""
 
     def __init__(self, message, code=0):
         super().__init__(message)
@@ -79,32 +79,31 @@ class OBSError(RuntimeError):
 
 
 def auth_response(password, salt, challenge):
-    """Challenge/Response von obs-websocket 5: base64(sha256(base64(sha256(pw+salt)) + challenge))."""
+    """Challenge/response of obs-websocket 5: base64(sha256(base64(sha256(pw+salt)) + challenge))."""
     secret = base64.b64encode(hashlib.sha256((password + salt).encode("utf-8")).digest())
     return base64.b64encode(hashlib.sha256(secret + challenge.encode("utf-8")).digest()).decode()
 
 
 def describe(error):
-    """Fehlermeldung mit Klartext, wo obs-websocket nur einen Schließcode schickt."""
+    """Error message in plain words where obs-websocket only sends a close code."""
     hint = CLOSE_REASONS.get(getattr(error, "code", None))
     return f"{hint} ({error!r})" if hint else repr(error)
 
 
 class OBSLink:
-    """Lauscht auf das Relais und hält die laufende obs-websocket-Sitzung.
+    """Listens for the relay and holds the running obs-websocket session.
 
-    on_event(event_type, data)  wird für jedes Ereignis von OBS aufgerufen, jeweils als
-                                eigener Task - ein Handler darf also selbst request()
-                                benutzen, ohne den Leser zu blockieren (der die Antwort
-                                erst zustellen müsste).
-    on_connected()              nach jeder erfolgreichen Anmeldung, ebenfalls als Task.
+    on_event(event_type, data)  called for every event from OBS, each as its own task - so a
+                                handler may use request() itself without blocking the reader
+                                (which would have to deliver the response first).
+    on_connected()              after every successful sign-in, likewise as a task.
     """
 
     def __init__(self, token, password="", on_event=None, on_connected=None,
                  bind="0.0.0.0", port=4456, timings=None):
         self._token = token
-        # Rückruf, der {"request_timeout": ..., "handshake_timeout": ...} liefert - bei
-        # jedem Zugriff neu, damit eine Änderung ohne Neustart wirkt.
+        # Callback returning {"request_timeout": ..., "handshake_timeout": ...} - afresh on
+        # every access, so a change takes effect without a restart.
         self._timings = timings or (lambda: {})
         self._password = password or ""
         self._on_event = on_event
@@ -118,20 +117,20 @@ class OBSLink:
         self._ids = itertools.count(1)
         self._tasks = set()
 
-        #: Version von obs-websocket auf der Gegenseite, sobald bekannt.
+        #: Version of obs-websocket on the far side, as soon as it is known.
         self.version = ""
-        #: Adresse des zuletzt verbundenen Relais - fürs Log und den Statusbefehl.
+        #: Address of the most recently connected relay - for the log and the status command.
         self.peer = ""
 
     @property
     def connected(self):
         return self._ws is not None
 
-    # --- Lauscher -------------------------------------------------------------------
+    # --- Listener -------------------------------------------------------------------
 
     async def start(self):
-        """Öffnet den Port und kehrt sofort zurück. Ob sich je ein Relais meldet, ist von
-        hier aus offen - OBS läuft typischerweise erst Stunden später."""
+        """Opens the port and returns immediately. Whether a relay ever signs in is an open
+        question from here - OBS typically only runs hours later."""
         self._server = await websockets.serve(
             self._session, self._bind, self._port, process_request=self._check_token,
         )
@@ -147,30 +146,29 @@ class OBSLink:
         await self._close_session()
 
     def _check_token(self, connection, request):
-        """Läuft noch im HTTP-Handschlag, bevor die WebSocket-Verbindung steht. Gibt es
-        eine Antwort zurück, wird der Aufbau damit abgelehnt; None heißt "durchlassen".
+        """Still runs during the HTTP handshake, before the WebSocket connection stands.
+        Returning a response rejects the setup; None means "let through".
 
-        Der Vergleich läuft über compare_digest, damit die Laufzeit nichts über den Token
-        verrät. Ein offener Port im Internet wird gescannt - hier ist das die einzige
-        Hürde vor der Fernsteuerung einer fremden OBS-Instanz."""
+        The comparison goes through compare_digest, so the running time gives nothing away
+        about the token. An open port on the internet gets scanned - here this is the only
+        hurdle in front of remote-controlling somebody else's OBS instance."""
         header = request.headers.get(TOKEN_HEADER, "")
         if not header:
             bearer = request.headers.get("Authorization", "")
             header = bearer[7:] if bearer.lower().startswith("bearer ") else ""
 
         if not hmac.compare_digest(header, self._token):
-            print(f"⛔ OBS-Relais von {connection.remote_address} abgewiesen: falscher/fehlender Token.")
+            print(f"⛔ OBS relay from {connection.remote_address} rejected: wrong/missing token.")
             return connection.respond(http.HTTPStatus.UNAUTHORIZED, "invalid token\n")
         return None
 
     async def _session(self, connection):
-        """Eine eingehende Relais-Verbindung: anmelden, dann bis zum Abbruch lesen."""
+        """One incoming relay connection: sign in, then read until it breaks."""
         peer = f"{connection.remote_address[0]}:{connection.remote_address[1]}"
         if self._ws is not None:
-            # Neu schlägt alt: eine halb tote Vorgängerverbindung (OBS neu gestartet,
-            # Leitung weggefallen, ohne dass ein FIN ankam) darf die frische nicht
-            # blockieren.
-            print(f"ℹ️ OBS-Relais {peer} übernimmt - vorherige Verbindung wird geschlossen.")
+            # New beats old: a half-dead previous connection (OBS restarted, line dropped
+            # without a FIN arriving) must not block the fresh one.
+            print(f"ℹ️ OBS relay {peer} is taking over - closing the previous connection.")
             await self._close_session()
 
         try:
@@ -178,13 +176,13 @@ class OBSLink:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"⚠️ OBS-Anmeldung über {peer} fehlgeschlagen: {describe(e)}")
+            print(f"⚠️ OBS sign-in via {peer} failed: {describe(e)}")
             await connection.close()
             return
 
         self._ws = connection
         self.peer = peer
-        print(f"🎛️ OBS verbunden über Relais {peer} (obs-websocket {self.version or '?'}).")
+        print(f"🎛️ OBS connected via relay {peer} (obs-websocket {self.version or '?'}).")
         if self._on_connected:
             self._spawn(self._on_connected())
 
@@ -193,37 +191,37 @@ class OBSLink:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"⚠️ OBS-Leitung ({peer}) gestört: {describe(e)}")
+            print(f"⚠️ OBS line ({peer}) disturbed: {describe(e)}")
         finally:
-            # Nur aufräumen, wenn diese Sitzung noch die aktuelle ist: hat inzwischen ein
-            # neues Relais übernommen, gehört ihm der Zustand.
+            # Only clean up when this session is still the current one: if a new relay has
+            # taken over in the meantime, the state belongs to it.
             if self._ws is connection:
                 self._drop_session()
-                print(f"🔌 OBS-Leitung zu {peer} beendet - warte auf neue Verbindung.")
+                print(f"🔌 OBS line to {peer} ended - waiting for a new connection.")
 
-    # --- obs-websocket-Anmeldung ----------------------------------------------------
+    # --- obs-websocket sign-in ------------------------------------------------------
 
     async def _identify(self, connection):
-        """Hello -> Identify -> Identified. Die Frames kommen vom echten obs-websocket auf
-        dem OBS-PC; das Relais reicht sie nur durch."""
+        """Hello -> Identify -> Identified. The frames come from the real obs-websocket on
+        the OBS machine; the relay only passes them through."""
         hello = await self._recv_json(connection)
         if hello.get("op") != OP_HELLO:
-            raise OBSError(f"unerwartete Begrüßung (op={hello.get('op')}) - spricht die Gegenseite obs-websocket 5?")
+            raise OBSError(f"unexpected greeting (op={hello.get('op')}) - does the far side speak obs-websocket 5?")
 
         greeting = hello.get("d", {})
         payload = {"rpcVersion": RPC_VERSION, "eventSubscriptions": EVENTS_ALL}
         auth = greeting.get("authentication")
         if auth:
             if not self._password:
-                raise OBSError("obs-websocket verlangt ein Passwort, OBS_PASSWORD ist aber leer")
+                raise OBSError("obs-websocket demands a password, but OBS_PASSWORD is empty")
             payload["authentication"] = auth_response(self._password, auth["salt"], auth["challenge"])
         elif self._password:
-            print("ℹ️ OBS verlangt kein Passwort - OBS_PASSWORD bleibt ungenutzt.")
+            print("ℹ️ OBS demands no password - OBS_PASSWORD stays unused.")
 
         await connection.send(json.dumps({"op": OP_IDENTIFY, "d": payload}))
         answer = await self._recv_json(connection)
         if answer.get("op") != OP_IDENTIFIED:
-            raise OBSError(f"Anmeldung abgelehnt (op={answer.get('op')})")
+            raise OBSError(f"sign-in rejected (op={answer.get('op')})")
         self.version = greeting.get("obsWebSocketVersion", "")
 
     def timing(self, key, default):
@@ -234,7 +232,7 @@ class OBSLink:
         timeout = self.timing("handshake_timeout", HANDSHAKE_TIMEOUT)
         return json.loads(await asyncio.wait_for(connection.recv(), timeout=timeout))
 
-    # --- Lesen und Antworten zustellen ----------------------------------------------
+    # --- Reading and delivering responses -------------------------------------------
 
     async def _read_loop(self, connection):
         async for raw in connection:
@@ -254,9 +252,9 @@ class OBSLink:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            # Wie bei den EventSub-Handlern in platforms/twitch/bot.py: ein kaputter
-            # Handler darf die Leitung nicht mitreißen.
-            print(f"⚠️ Fehler im OBS-Handler für {event_type}: {e}")
+            # As with the EventSub handlers in platforms/twitch/bot.py: a broken handler
+            # must not drag the line down with it.
+            print(f"⚠️ Error in the OBS handler for {event_type}: {e}")
 
     def _settle(self, data):
         future = self._pending.pop(data.get("requestId"), None)
@@ -266,18 +264,18 @@ class OBSLink:
         if status.get("result"):
             future.set_result(data.get("responseData") or {})
         else:
-            comment = status.get("comment") or f"Fehlercode {status.get('code')}"
+            comment = status.get("comment") or f"error code {status.get('code')}"
             future.set_exception(OBSError(f"{data.get('requestType')}: {comment}", code=status.get("code", 0)))
 
-    # --- Anfragen -------------------------------------------------------------------
+    # --- Requests -------------------------------------------------------------------
 
     async def request(self, request_type, data=None, timeout=None):
-        """Schickt eine obs-websocket-Anfrage und gibt deren responseData zurück.
-        Wirft OBSError - auch dann, wenn gerade gar kein Relais verbunden ist. Der
-        Aufrufer muss also nie prüfen, ob OBS läuft, sondern nur den Fehler behandeln."""
+        """Sends an obs-websocket request and returns its responseData. Raises OBSError -
+        including when no relay is connected at all. So the caller never has to check whether
+        OBS is running, only to handle the error."""
         connection = self._ws
         if connection is None:
-            raise OBSError("keine Verbindung zu OBS (Relais nicht eingewählt)")
+            raise OBSError("no connection to OBS (relay not dialled in)")
         if timeout is None:
             timeout = self.timing("request_timeout", REQUEST_TIMEOUT)
 
@@ -292,21 +290,20 @@ class OBSLink:
             }}))
             return await asyncio.wait_for(future, timeout)
         except TimeoutError:
-            raise OBSError(f"{request_type}: keine Antwort von OBS nach {timeout}s")
+            raise OBSError(f"{request_type}: no answer from OBS after {timeout}s")
         finally:
             self._pending.pop(request_id, None)
 
-    # --- Zustand ---------------------------------------------------------------------
+    # --- State -----------------------------------------------------------------------
 
     def _drop_session(self):
-        """Synchron, damit es auch in einem finally sicher ist: Verbindung vergessen und
-        alle offenen Anfragen mit einem Fehler beenden, statt sie in ihren Timeout laufen
-        zu lassen."""
+        """Synchronous, so it is safe inside a finally too: forget the connection and end
+        every open request with an error, rather than letting them run into their timeout."""
         self._ws = None
         self.version = ""
         for future in self._pending.values():
             if not future.done():
-                future.set_exception(OBSError("Verbindung zu OBS verloren"))
+                future.set_exception(OBSError("lost the connection to OBS"))
         self._pending.clear()
 
     async def _close_session(self):

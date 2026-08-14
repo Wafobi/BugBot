@@ -1,25 +1,24 @@
 # feature.py
-# Die Stream-Session als eigenes Feature (Fähigkeiten SESSIONS und RECORDING).
+# The stream session as a feature of its own (capabilities SESSIONS and RECORDING).
 #
-# Vorher steckte sie mitten im Statistik-Feature: `StatsStore._session_id` war der Zustand,
-# an dem sich *jede* Aufzeichnung bediente. Dadurch hingen Chat-Mitschnitt, Rohprotokoll und
-# Highscores zwangsweise mit im selben Paket - man konnte nicht den Mitschnitt abschalten
-# und die Zählung behalten, weil beide dieselbe private Variable lasen.
+# It used to sit in the middle of the statistics feature: `StatsStore._session_id` was the
+# state *every* recording helped itself to. That forced the chat record, the raw log and the
+# highscores into the same package - you could not switch the record off and keep the
+# counting, because both read the same private variable.
 #
-# Jetzt ist "läuft gerade ein Stream, und welcher?" eine Fähigkeit, die andere Features über
-# `requires` anfordern. Sie stempeln ihre Zeilen mit `current_session_id`, statt eine eigene
-# Buchführung zu haben - es bleibt bei einer einzigen Wahrheit darüber, was zu welchem
-# Stream gehört.
+# Now "is a stream running, and which one?" is a capability other features request via
+# `requires`. They stamp their rows with `current_session_id` instead of keeping books of
+# their own - there remains a single truth about what belongs to which stream.
 #
-# Zwei Dinge hängen daran, dass eine Session weiß, wem sie gehört (Feature.owner, gesetzt
-# von core/registry.py aus dem Ordner):
+# Two things hang on a session knowing who it belongs to (Feature.owner, set by
+# core/registry.py from the folder):
 #
-#   Es zählt nur der eigene Stream. Meldet eine zweite Plattform STREAM_START, wird das
-#   hier ignoriert statt eine zweite Session für denselben Abend anzulegen - vorher hätte
-#   genau das passieren können, und die Regel dagegen stand nur als Kommentar in der
-#   OBS-Plattform ("meldet bewusst keinen Stream").
-#   Die Zeile hält fest, wessen Stream es war. Ohne diese Spalte behauptet die Tabelle
-#   stillschweigend, es könne nur einen geben.
+#   Only our own stream counts. If a second platform reports STREAM_START, it is ignored here
+#   rather than creating a second session for the same evening - previously exactly that could
+#   have happened, and the rule against it stood only as a comment in the OBS platform
+#   ("deliberately reports no stream").
+#   The row records whose stream it was. Without that column the table silently claims there
+#   can only ever be one.
 
 import asyncio
 
@@ -40,7 +39,7 @@ class StreamSessionsFeature(feature_api.Feature):
     async def setup(self, bus):
         db = bus.feature_with(feature_api.STORAGE)
         if db is None:
-            raise RuntimeError("kein Feature mit der Fähigkeit STORAGE geladen")
+            raise RuntimeError("no feature with the STORAGE capability loaded")
         self.store = SessionStore(db, self.owner)
         self._bus = bus
         await self._run(self.store.init_schema)
@@ -51,7 +50,7 @@ class StreamSessionsFeature(feature_api.Feature):
 
     @staticmethod
     async def _run(fn, *args):
-        """Alles im Store ist blockierendes sqlite3 - gehört damit in den Executor."""
+        """Everything in the store is blocking sqlite3 - so it belongs in the executor."""
         return await asyncio.get_event_loop().run_in_executor(None, fn, *args)
 
     # --- Aufzeichnung (Push) --------------------------------------------------------
@@ -62,14 +61,13 @@ class StreamSessionsFeature(feature_api.Feature):
         return await self._run(self.store.start, title, category)
 
     async def on_stream_end(self, platform):
-        """Schließt die Session und gibt erst danach über SESSION_ENDED bekannt, welche id
-        es war. Wer den beendeten Stream auswertet, hängt dort und nicht an STREAM_END -
-        sonst hinge die Reihenfolge daran, in welcher die Features zufällig abonniert haben.
+        """Closes the session and only then announces which id it was, via SESSION_ENDED.
+        Whoever evaluates the ended stream hangs on that and not on STREAM_END - otherwise the
+        order would depend on which features happened to subscribe first.
 
-        Die erste nicht-leere Antwort der SESSION_ENDED-Abonnenten wird durchgereicht: die
-        Plattform holt sich ihre Abschlussfelder weiterhin als Rückgabe von
-        publish(STREAM_END) ab (siehe platforms/twitch/bot.py) und muss von der Aufteilung
-        in zwei Topics nichts wissen."""
+        The first non-empty answer from the SESSION_ENDED subscribers is passed through: the
+        platform still collects its closing fields as the return value of publish(STREAM_END)
+        (see platforms/twitch/bot.py) and need know nothing of the split into two topics."""
         if not self.handles(platform):
             return None
         session_id = await self._run(self.store.end)
@@ -86,15 +84,15 @@ class StreamSessionsFeature(feature_api.Feature):
 
     @property
     def current_session_id(self):
-        """Die laufende Session, oder None wenn offline. Bewusst synchron: das ist eine
-        Zahl im RAM und wird pro Chat-Nachricht abgefragt."""
+        """The running session, or None when offline. Deliberately synchronous: this is a
+        number in RAM and is asked for on every chat message."""
         return self.store.current_session_id
 
     async def last_session_id(self):
         return await self._run(self.store.last_session_id)
 
     async def session(self, session_id=None):
-        """Stammdaten einer Session (Default: der laufenden), oder None."""
+        """Master data of a session (default: the running one), or None."""
         return await self._run(self.store.get, self.store.resolve(session_id))
 
     async def segments(self, session_id=None):

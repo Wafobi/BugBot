@@ -1,14 +1,14 @@
-"""Prüft die OBS-Zugangsdaten, soweit das von hier aus überhaupt geht.
+"""Checks the OBS credentials, as far as that is possible from here at all.
 
-Aufgerufen von check_credentials.py im Projektstamm. Der Vertrag ist eine Funktion
-check(), die (Stufe, Meldung)-Paare liefert; Stufen sind "ok", "warn", "fail", "skip"
-und "detail" (Fortsetzungszeile zur vorherigen Meldung).
+Called by check_credentials.py in the project root. The contract is a check() function
+yielding (level, message) pairs; levels are "ok", "warn", "fail", "skip" and "detail"
+(continuation line for the previous message).
 
-Der Vorbehalt gleich vorweg: OBS läuft auf dem Rechner des Streamers und ruft *uns* an
-(siehe docs/obs.md). Von hier aus lässt sich deshalb nicht feststellen, ob OBS läuft, ob
-das Relais eingewählt ist oder ob OBS_PASSWORD stimmt - das weiß erst der laufende Bot,
-und `!obs` im Chat sagt es. Prüfbar ist nur die eigene Seite: sind die Geheimnisse
-gesetzt, ist der Port frei, passt die Konfiguration zusammen.
+The caveat right up front: OBS runs on the streamer's machine and calls *us* (see
+docs/obs.md). From here it is therefore impossible to tell whether OBS is running, whether
+the relay has dialled in, or whether OBS_PASSWORD is right - only the running bot knows
+that, and `!obs` in chat says so. What can be checked is our own side: are the secrets set,
+is the port free, does the configuration add up.
 """
 
 import os
@@ -19,8 +19,8 @@ DEFAULT_BIND = "0.0.0.0"
 
 
 def _port_is_free(bind, port):
-    """Kann der Bot diesen Port überhaupt öffnen? Belegt heißt nicht kaputt - meistens
-    heißt es, dass der Bot schon läuft."""
+    """Can the bot open this port at all? Occupied does not mean broken - most of the time
+    it means the bot is already running."""
     family = socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as probe:
         probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -38,40 +38,40 @@ def check():
     bind = os.environ.get("OBS_BRIDGE_BIND", "").strip() or DEFAULT_BIND
 
     if not token:
-        yield "skip", ("OBS_BRIDGE_TOKEN ist nicht gesetzt - die OBS-Plattform wird nicht "
-                       "geladen. So betreibt man den Bot ohne OBS.")
+        yield "skip", ("OBS_BRIDGE_TOKEN is not set - the OBS platform will not be loaded. "
+                       "That is how you run the bot without OBS.")
         return
 
-    # --- Das gemeinsame Geheimnis ----------------------------------------------------
+    # --- The shared secret -----------------------------------------------------------
     if len(token) < 32:
-        yield "warn", (f"OBS_BRIDGE_TOKEN ist nur {len(token)} Zeichen lang - er ist das "
-                       f"einzige Passwort zur Fernsteuerung einer laufenden Sendung. "
-                       f"Frisch erzeugen mit: openssl rand -hex 32")
+        yield "warn", (f"OBS_BRIDGE_TOKEN is only {len(token)} characters long - it is the "
+                       f"only password guarding remote control of a live broadcast. "
+                       f"Generate a fresh one with: openssl rand -hex 32")
     else:
-        yield "ok", f"OBS_BRIDGE_TOKEN gesetzt ({len(token)} Zeichen)."
+        yield "ok", f"OBS_BRIDGE_TOKEN set ({len(token)} characters)."
 
     if not password:
-        yield "warn", ("OBS_PASSWORD ist leer - richtig nur, wenn in OBS unter "
-                       "Werkzeuge -> WebSocket-Server die Authentifizierung aus ist.")
+        yield "warn", ("OBS_PASSWORD is empty - correct only when authentication is off in "
+                       "OBS under Tools -> WebSocket Server Settings.")
     else:
-        yield "ok", "OBS_PASSWORD gesetzt."
+        yield "ok", "OBS_PASSWORD set."
 
-    # --- Der Port --------------------------------------------------------------------
+    # --- The port ----------------------------------------------------------------------
     if raw_port and not raw_port.isdigit():
-        yield "fail", f"OBS_BRIDGE_PORT ist keine Zahl: {raw_port!r}"
+        yield "fail", f"OBS_BRIDGE_PORT is not a number: {raw_port!r}"
         return
     port = int(raw_port) if raw_port else DEFAULT_PORT
 
     if _port_is_free(bind, port):
-        yield "ok", f"Port {bind}:{port} ist frei."
+        yield "ok", f"Port {bind}:{port} is free."
     else:
-        yield "warn", (f"Port {bind}:{port} ist belegt - normal, wenn der Bot gerade läuft. "
-                       f"Sonst hört dort etwas anderes zu.")
+        yield "warn", (f"Port {bind}:{port} is occupied - normal when the bot is running. "
+                       f"Otherwise something else is listening there.")
 
     if bind == "0.0.0.0":
-        yield "detail", ("Bind auf 0.0.0.0 ist im Container richtig: die Beschränkung auf "
-                         "Loopback steht dort auf der Host-Seite (PublishPort in "
-                         "bugbot.container). Ohne Container gehört hier 127.0.0.1 hin.")
+        yield "detail", ("Binding to 0.0.0.0 is correct in a container: the restriction to "
+                         "loopback sits on the host side there (PublishPort in "
+                         "bugbot.container). Without a container 127.0.0.1 belongs here.")
 
-    yield "detail", ("ob OBS läuft, das Relais eingewählt ist und OBS_PASSWORD stimmt, "
-                     "beantwortet erst `!obs` im Chat - siehe docs/obs.md.")
+    yield "detail", ("whether OBS is running, the relay has dialled in and OBS_PASSWORD is "
+                     "right is only answered by `!obs` in chat - see docs/obs.md.")

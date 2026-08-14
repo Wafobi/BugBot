@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Einmal-Helfer: holt einen Twitch-User-Access-Token über den Authorization-Code-Flow
-und schreibt ihn samt Refresh-Token in .env.
+"""One-off helper: fetches a Twitch user access token through the authorization code flow
+and writes it, together with the refresh token, into .env.
 
-Warum es das gibt: der Chat-Token muss von *unserer eigenen* App (TWITCH_CLIENT_ID)
-stammen. Twitch verlangt beim Refresh-Grant das Client-Secret genau der App, die den
-Token ausgestellt hat - ein Token aus einem fremden Token-Generator kann deshalb nie
-erneuert werden (siehe platforms/twitch/api.py:refresh_chat_token). Wird der Token hier
-erzeugt, gilt TWITCH_CHAT_CLIENT_ID == TWITCH_CLIENT_ID, der Fallback in
-core/config.py greift und der Token-Wächter in platforms/twitch/bot.py kann seinen Job tun.
+Why it exists: the chat token has to come from *our own* app (TWITCH_CLIENT_ID). On the
+refresh grant Twitch demands the client secret of exactly the app that issued the token - so a
+token from a foreign token generator can never be renewed (see
+platforms/twitch/api.py:refresh_chat_token). If the token is created here, TWITCH_CHAT_CLIENT_ID
+== TWITCH_CLIENT_ID holds, the fallback in core/config.py applies, and the token watchdog in
+platforms/twitch/bot.py can do its job.
 
-Voraussetzung: in der App auf https://dev.twitch.tv/console/apps muss
-http://localhost:3000 als OAuth Redirect URL eingetragen sein (Twitch prüft exakt).
+Prerequisite: in the app at https://dev.twitch.tv/console/apps, http://localhost:3000 has to be
+entered as an OAuth redirect URL (Twitch matches it exactly).
 
-Aufruf:  python3 -m platforms.twitch.get_token   (aus dem Projektverzeichnis)
+Call:  python3 -m platforms.twitch.get_token   (from the project directory)
 """
 
 import http.server
@@ -27,23 +27,23 @@ from dotenv import find_dotenv, set_key
 REDIRECT_URI = "http://localhost:3000"
 PORT = 3000
 
-# Die Scope-Liste lebt in scopes.py, damit sie nur an einer Stelle gepflegt werden
-# muss - der Bot prüft beim Start gegen dieselbe Liste.
+# The scope list lives in scopes.py so that it only has to be maintained in one place - the
+# bot checks against the same list at startup.
 from . import scopes
 
 try:
     from . import config
 except KeyError as missing:
-    sys.exit(f"❌ .env unvollständig - {missing} fehlt. Erst .env nach dem Muster von "
-             f".env.example ausfüllen (die Chat-Token-Zeilen dürfen leer bleiben, die "
-             f"füllt dieses Skript).")
+    sys.exit(f"❌ .env incomplete - {missing} is missing. Fill in .env after the pattern of "
+             f".env.example first (the chat token lines may stay empty, this script fills "
+             f"those).")
 
 SCOPES = scopes.REQUIRED
 
 
 class CallbackHandler(http.server.BaseHTTPRequestHandler):
-    """Nimmt genau einen Redirect von Twitch entgegen und legt das Ergebnis auf der
-    Server-Instanz ab, damit serve_forever() danach beendet werden kann."""
+    """Accepts exactly one redirect from Twitch and puts the result on the server instance, so
+    that serve_forever() can be ended afterwards."""
 
     def do_GET(self):
         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -52,7 +52,7 @@ class CallbackHandler(http.server.BaseHTTPRequestHandler):
         if error:
             body = f"<h1>Fehlgeschlagen</h1><p>{error}: {query.get('error_description', [''])[0]}</p>"
         else:
-            body = "<h1>Geschafft.</h1><p>Token geholt - du kannst das Fenster schliessen.</p>"
+            body = "<h1>Done.</h1><p>Token fetched - you can close this window.</p>"
         encoded = f"<!doctype html><meta charset='utf-8'>{body}".encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -61,13 +61,13 @@ class CallbackHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def log_message(self, *args):
-        pass  # kein Request-Logging auf stderr
+        pass  # no request logging on stderr
 
 
 def main():
     env_path = find_dotenv()
     if not env_path:
-        sys.exit("❌ Keine .env gefunden - bitte im Projektverzeichnis ausführen.")
+        sys.exit("❌ No .env found - please run this from the project directory.")
 
     client_id = config.TWITCH_CLIENT_ID
     client_secret = config.TWITCH_CLIENT_SECRET
@@ -81,13 +81,13 @@ def main():
         "response_type": "code",
         "scope": " ".join(SCOPES),
         "state": state,
-        # erzwingt den Zustimmungs-Dialog, auch wenn die App schon autorisiert war -
-        # sonst bekommt man bei geänderter Scope-Liste stillschweigend die alten Scopes
+        # forces the consent dialog even when the app was already authorised - otherwise a
+        # changed scope list silently gets you the old scopes
         "force_verify": "true",
     })
 
-    print(f"🔑 Fordere {len(SCOPES)} Scopes für Client-ID {client_id} an.")
-    print("\n🌐 Öffne diese URL im Browser (falls sie nicht automatisch aufgeht):\n")
+    print(f"🔑 Requesting {len(SCOPES)} scopes for client id {client_id}.")
+    print("\n🌐 Open this URL in a browser (if it does not open by itself):\n")
     print(auth_url + "\n")
     try:
         webbrowser.open(auth_url)
@@ -108,14 +108,14 @@ def main():
         sys.exit(f"❌ Twitch hat abgelehnt: {server.result['error'][0]} - "
                  f"{server.result.get('error_description', [''])[0]}")
 
-    # State-Vergleich: ohne ihn könnte ein fremder Tab einen untergeschobenen Code
-    # auf unseren localhost-Listener schicken.
+    # State comparison: without it a foreign tab could send a planted code to our localhost
+    # listener.
     if server.result.get("state", [None])[0] != state:
-        sys.exit("❌ State stimmt nicht überein - Antwort verworfen.")
+        sys.exit("❌ State does not match - response discarded.")
 
     code = server.result.get("code", [None])[0]
     if not code:
-        sys.exit("❌ Kein Code in der Antwort.")
+        sys.exit("❌ No code in the response.")
 
     print("🔄 Tausche Code gegen Token…")
     response = requests.post("https://id.twitch.tv/oauth2/token", timeout=15, data={
@@ -135,21 +135,21 @@ def main():
 
     set_key(env_path, "TWITCH_CHAT_ACCESS_TOKEN", access)
     set_key(env_path, "TWITCH_CHAT_REFRESH_TOKEN", refresh)
-    # ab jetzt identisch mit TWITCH_CLIENT_ID - dadurch findet core/config.py das
-    # passende Secret von allein und TWITCH_CHAT_CLIENT_SECRET darf leer bleiben
+    # identical to TWITCH_CLIENT_ID from now on - which lets core/config.py find the matching
+    # secret by itself, and TWITCH_CHAT_CLIENT_SECRET may stay empty
     set_key(env_path, "TWITCH_CHAT_CLIENT_ID", client_id)
 
     print("\n✅ In .env geschrieben.")
     print(f"   Account:     {info.get('login')} (id {info.get('user_id')})")
     print(f"   Client-ID:   {info.get('client_id')}")
-    print(f"   Gültig für:  {info.get('expires_in')} Sekunden "
-          f"(~{(info.get('expires_in') or 0) // 3600} h) - wird ab jetzt automatisch erneuert")
+    print(f"   Valid for:   {info.get('expires_in')} seconds "
+          f"(~{(info.get('expires_in') or 0) // 3600} h) - renewed automatically from now on")
     granted = set(info.get("scopes") or [])
     missing = [s for s in SCOPES if s not in granted]
-    print(f"   Scopes:      {len(granted)} erteilt"
-          + (f", FEHLEN: {', '.join(missing)}" if missing else " (alle angefragten)"))
-    print("\n👉 Nicht vergessen: dieselben drei Werte auch in die .env auf dem Server "
-          "übertragen und den Bot dort neu starten.")
+    print(f"   Scopes:      {len(granted)} granted"
+          + (f", MISSING: {', '.join(missing)}" if missing else " (all requested)"))
+    print("\n👉 Do not forget: copy the same three values into the .env on the server too "
+          "and restart the bot there.")
 
 
 if __name__ == "__main__":

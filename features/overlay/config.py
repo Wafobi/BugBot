@@ -1,11 +1,12 @@
-"""Zugangsdaten des Overlay-Lauschers aus der Umgebung/.env.
+"""Credentials of the overlay listener, from the environment/.env.
 
-Gegenstück zu platforms/obs/config.py, und aus demselben Grund getrennt von overlay.json:
-in die JSON-Dateien schaut man beim Anpassen, Geheimnisse haben dort nichts verloren.
+Counterpart to platforms/obs/config.py, and separate from overlay.json for the same reason:
+the JSON files are what you look into when adapting things, and secrets have no business
+being there.
 
-Ohne OVERLAY_TOKEN öffnet das Feature keinen Port. Es lädt trotzdem - seine Befehle
-(Todeszähler) funktionieren auch ohne Overlay. Das ist zugleich die Zusicherung, dass der
-Port nie ohne Geheimnis offensteht.
+Without OVERLAY_TOKEN the feature opens no port. It still loads - its commands (death
+counter) work without an overlay too. That is at the same time the guarantee that the port
+never stands open without a secret.
 """
 
 import os
@@ -13,18 +14,19 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Idempotent und unabhängig von der Import-Reihenfolge - die Plattformen laden dieselbe
-# Datei, load_dotenv überschreibt bereits gesetzte Variablen aber nicht.
+# Idempotent and independent of import order - the platforms load the same file, but
+# load_dotenv does not overwrite variables that are already set.
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
-# Gemeinsames Geheimnis mit den Browser-Quellen. Leer = kein Lauscher, siehe oben.
+# Shared secret with the browser sources. Empty = no listener, see above.
 OVERLAY_TOKEN = os.environ.get("OVERLAY_TOKEN", "")
 
-# Port, auf dem der Bot auf die Overlays wartet.
+# Port on which the bot waits for the overlays.
 OVERLAY_PORT = int(os.environ.get("OVERLAY_PORT") or 4457)
 
-# Bind-Adresse. Dieselbe Überlegung wie bei OBS_BRIDGE_BIND: im Container 0.0.0.0, weil
-# Podmans Portweiterleitung den Container-Loopback nicht erreicht - beschränkt wird dann
-# auf der Host-Seite über PublishPort=127.0.0.1:4457:4457 in bugbot.container. Ohne
-# Container ist 127.0.0.1 richtig, dann ist der Port von außen gar nicht zu sehen.
+# Bind address. Same consideration as for OBS_BRIDGE_BIND: 0.0.0.0 in the container,
+# because Podman's port forwarding does not reach the container's loopback - the
+# restriction then happens on the host side via PublishPort=127.0.0.1:4457:4457 in
+# bugbot.container. Without a container 127.0.0.1 is the right value, and the port is then
+# not visible from outside at all.
 OVERLAY_BIND = os.environ.get("OVERLAY_BIND") or "0.0.0.0"

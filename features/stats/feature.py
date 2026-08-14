@@ -1,26 +1,26 @@
 # feature.py
-# Statistik als Feature (Fähigkeiten RECORDING und STATS).
+# Statistics as a feature (capabilities RECORDING and STATS).
 #
-# Das Feature, für das sich der Push-Weg am deutlichsten lohnt: vorher stand in beiden
-# Plattformen an ~30 Stellen ein stats.record_*-Aufruf mit voller Signatur. Jetzt melden
-# die Plattformen nur noch "das ist passiert" auf den Bus, und alles Mitschreiben liegt
-# in den Abonnements hier unten. Wer die Statistik abschaltet (BUGBOT_FEATURES), ändert
-# an den Plattformen keine Zeile.
+# The feature for which the push route pays off most clearly: previously both platforms
+# held a stats.record_* call with the full signature in about 30 places. Now the platforms
+# only report "this happened" onto the bus, and all the recording lives in the subscriptions
+# further down. Switching the statistics off (BUGBOT_FEATURES) changes not one line in the
+# platforms.
 #
-# Zählen ist alles, was hier noch passiert. Der Wortlaut der Nachrichten (features/chat_log),
-# das Rohprotokoll (platforms/twitch/features/raw_log) und die Stream-Sessions selbst
-# (platforms/twitch/features/stream_sessions) sind eigene Features. Deren Zahlen holt sich
-# die Stream-Auswertung über deren Fähigkeiten dazu - fehlt eines, fehlt genau seine Kennzahl
-# und sonst nichts.
+# Counting is all that still happens here. The wording of the messages (features/chat_log),
+# the raw log (platforms/twitch/features/raw_log) and the stream sessions themselves
+# (platforms/twitch/features/stream_sessions) are features of their own. The stream
+# evaluation fetches their numbers via their capabilities - if one is missing, exactly its
+# figure is missing and nothing else.
 #
-# SESSIONS ist deshalb bewusst *nicht* in `requires`: das Feature kommt von Twitch, und ein
-# Bot, der nur auf Discord läuft, soll trotzdem mitzählen. Ohne SESSIONS bleibt
-# stream_session_id einfach NULL, !stats funktioniert unverändert, und nur die
-# stream-bezogene Auswertung hat nichts zu zeigen.
+# SESSIONS is therefore deliberately *not* in `requires`: that feature comes from Twitch, and
+# a bot running only on Discord should still count. Without SESSIONS the stream_session_id
+# simply stays NULL, !stats works unchanged, and only the stream-related evaluation has
+# nothing to show.
 #
-# Die Befehle !stats, !streamstats, !highscores und !leaderboard bringt das Feature
-# ebenfalls selbst mit - vorher waren !stats zweimal (einmal je Plattform) gebaut und die
-# übrigen drei nur auf Twitch verfügbar.
+# The commands !stats, !streamstats, !highscores and !leaderboard are likewise brought along
+# by the feature itself - previously !stats was built twice (once per platform) and the other
+# three were available on Twitch only.
 
 import asyncio
 from dataclasses import replace
@@ -29,10 +29,9 @@ from core import events, feature as feature_api, runtime_config
 
 from .store import HIGHSCORE_METRICS, StatsStore
 
-# Sämtliche Beschriftungen, Sätze und Farben dieses Features stehen in stats.json - hier
-# nicht noch einmal. Die mitgelieferte Datei ist der Default-Stand: ein gelöschter Text
-# fällt auf ihre Fassung zurück (siehe core/runtime_config.py, text()), alles andere auf
-# den Default am Aufrufer.
+# All labels, sentences and colours of this feature live in stats.json - not a second time
+# here. The shipped file is the default state: a deleted text falls back to its version (see
+# core/runtime_config.py, text()), everything else to the default at the call site.
 
 
 class StatsFeature(feature_api.Feature):
@@ -51,12 +50,12 @@ class StatsFeature(feature_api.Feature):
     async def setup(self, bus):
         db = bus.feature_with(feature_api.STORAGE)
         if db is None:
-            raise RuntimeError("kein Feature mit der Fähigkeit STORAGE geladen")
+            raise RuntimeError("no feature with the STORAGE capability loaded")
         self.store = StatsStore(db)
         await self._run(self.store.init_schema)
 
-        # Alle drei optional - jedes fehlende kostet genau seinen Beitrag zur Auswertung,
-        # nicht die Auswertung.
+        # All three optional - each missing one costs exactly its contribution to the
+        # evaluation, not the evaluation.
         self._sessions = bus.feature_with(feature_api.SESSIONS)
         self._chat_log = bus.feature_with(feature_api.CHAT_LOG)
         self._raw_log = bus.feature_with(feature_api.RAW_LOG)
@@ -68,27 +67,26 @@ class StatsFeature(feature_api.Feature):
         bus.subscribe(events.VIEWERS, self.on_viewers)
         bus.subscribe(events.AD_BREAK, self.on_ad_break)
         if self._sessions is not None:
-            # Nicht STREAM_END: die id des beendeten Streams steht erst danach fest.
+            # Not STREAM_END: the id of the ended stream is only settled afterwards.
             bus.subscribe(events.SESSION_ENDED, self.on_session_ended)
 
     @staticmethod
     async def _run(fn, *args):
-        """Alles im Store ist blockierendes sqlite3 - gehört damit in den Executor,
-        genau wie die Helix-Aufrufe in platforms/twitch/api.py."""
+        """Everything in the store is blocking sqlite3 - so it belongs in the executor,
+        exactly like the Helix calls in platforms/twitch/api.py."""
         return await asyncio.get_event_loop().run_in_executor(None, fn, *args)
 
     @property
     def _session_id(self):
-        """Der laufende Stream, oder None - auch dann, wenn gar kein SESSIONS-Feature
-        geladen ist."""
+        """The running stream, or None - including when no SESSIONS feature is loaded at
+        all."""
         return self._sessions.current_session_id if self._sessions is not None else None
 
-    # --- Aufzeichnung (Push) --------------------------------------------------------
+    # --- Recording (push) -----------------------------------------------------------
 
     async def on_message_accepted(self, message):
-        """Nach der Moderation: der Nachrichtenzähler, damit ein Verstoß nicht als
-        reguläre Nachricht mitzählt. (Der volle Text hängt an MESSAGE - siehe
-        features/chat_log.)"""
+        """After moderation: the message counter, so that an offence does not count as a
+        regular message. (The full text hangs on MESSAGE - see features/chat_log.)"""
         await self._run(self.store.record_message, self._session_id, message.platform, message.user_name)
 
     async def on_command(self, platform, command, user_name):
@@ -109,12 +107,12 @@ class StatsFeature(feature_api.Feature):
         await self._run(self.store.record_ad_break, self._session_id, duration_seconds)
 
     async def on_session_ended(self, session_id):
-        """Gleicht die Highscores ab und gibt die Kennzahlen des Streams als fertige Felder
-        zurück - das SESSIONS-Feature reicht sie an die Plattform durch, die daraus ihren
-        Abschlussbericht baut, ohne das Kennzahlen-Dict auseinandernehmen zu müssen.
+        """Reconciles the highscores and returns the stream's figures as finished fields -
+        the SESSIONS feature passes them on to the platform, which builds its closing report
+        from them without having to take the metrics dict apart.
 
-        Die Werte kommen aus der DB statt aus einem Zähler-Dict im RAM - dadurch überlebt ein
-        Bot-Neustart mitten im Stream die Highscore-Erfassung."""
+        The values come from the DB rather than from a counter dict in RAM - which is how a
+        bot restart mid-stream survives the highscore capture."""
         session_stats = await self.stream_stats(session_id)
         if session_stats is None:
             return ()
@@ -122,12 +120,11 @@ class StatsFeature(feature_api.Feature):
             await self._run(self.store.update_highscore, metric, session_stats.get(key, 0), session_id)
         return self.session_fields(session_stats)
 
-    # --- Abfragen (Pull) ------------------------------------------------------------
+    # --- Queries (pull) -------------------------------------------------------------
 
     async def summary(self):
-        """Die All-Time-Zahlen. Öffentlich, damit Plattformen sie in eigene Berichte
-        einbauen können - der Discord-Stundenbericht mischt sie mit seinen lokalen
-        Zählern."""
+        """The all-time numbers. Public so that platforms can build them into their own
+        reports - the Discord hourly report mixes them with its local counters."""
         summary = await self._run(self.store.get_summary)
         sessions, minutes = await self._sessions.totals() if self._sessions is not None else (0, 0)
         summary["total_stream_sessions"] = sessions
@@ -136,9 +133,9 @@ class StatsFeature(feature_api.Feature):
         return summary
 
     async def stream_stats(self, session_id=None):
-        """Sämtliche Kennzahlen eines einzelnen Streams (Default: der laufende), aus den
-        Beiträgen aller beteiligten Features zusammengesetzt. None, falls es die Session
-        nicht gibt - oder gar keine Stream-Sessions geführt werden."""
+        """All figures of a single stream (default: the running one), assembled from the
+        contributions of every feature involved. None if the session does not exist - or if
+        no stream sessions are kept at all."""
         if self._sessions is None:
             return None
         session = await self._sessions.session(session_id)
@@ -158,22 +155,22 @@ class StatsFeature(feature_api.Feature):
             "eventsub_notifications": await self._raw_log.count(session_id) if self._raw_log is not None else 0,
         }
 
-    # --- Darstellung ----------------------------------------------------------------
+    # --- Presentation ---------------------------------------------------------------
 
     def _field(self, key, **values):
-        """Ein Announcement-Field, dessen Beschriftung und Wert beide aus stats.json
-        kommen: "<key>.name" und "<key>.value"."""
+        """An Announcement field whose label and value both come from stats.json:
+        "<key>.name" and "<key>.value"."""
         return feature_api.Field(
             self.config.text(f"{key}.name"), self.config.text(f"{key}.value", **values),
         )
 
     def _breakdown(self, messages_by_platform):
-        """Die Aufschlüsselung nach Plattform, z.B. " (twitch 120, discord 30)" - leer,
-        solange nur eine Plattform beigetragen hat.
+        """The breakdown by platform, e.g. " (twitch 120, discord 30)" - empty as long as
+        only one platform contributed.
 
-        Steht hier anstelle der früheren festen Twitch-Zahl: dieselbe Auskunft, aber aus
-        den Daten gelesen statt aus einem Plattformnamen im Code. Welche Dienste es gibt,
-        sagen die Zeilen in der Datenbank."""
+        Stands here in place of the former fixed Twitch number: the same information, but
+        read from the data instead of from a platform name in the code. Which services exist
+        is what the rows in the database say."""
         contributing = {name: count for name, count in sorted(messages_by_platform.items()) if count}
         if len(contributing) < 2:
             return ""
@@ -184,7 +181,7 @@ class StatsFeature(feature_api.Feature):
         return self.config.text("session.chat.breakdown", entries=entries)
 
     def session_fields(self, session_stats):
-        """Kennzahlen eines beendeten Streams als Announcement-Felder."""
+        """Figures of an ended stream as Announcement fields."""
         if not session_stats:
             return ()
         hours, minutes = divmod(session_stats["duration_minutes"], 60)
@@ -220,8 +217,8 @@ class StatsFeature(feature_api.Feature):
         return tuple(fields)
 
     def summary_fields(self, summary):
-        """Die All-Time-Zahlen als Felder - auch von außen nutzbar, z.B. für den
-        Stundenbericht des Discord-Bots, der sie mit eigenen Werten kombiniert."""
+        """The all-time numbers as fields - usable from outside too, e.g. for the Discord
+        bot's hourly report, which combines them with its own values."""
         return (
             self._field(
                 "summary.messages",
@@ -242,11 +239,11 @@ class StatsFeature(feature_api.Feature):
             ),
         )
 
-    # --- Befehle --------------------------------------------------------------------
+    # --- Commands -------------------------------------------------------------------
 
     def commands(self):
-        """Die Namen hier sind die Standardnamen: umbenennen, aliasen oder abschalten
-        lässt sie der Abschnitt "command_names" in stats.json, angewendet vom Bus (siehe
+        """The names here are the default names: the "command_names" section in stats.json
+        lets them be renamed, aliased or switched off, applied by the bus (see
         core/events.py)."""
         return (
             feature_api.Command("!stats", self.cmd_stats, mod_only=True,
@@ -268,8 +265,8 @@ class StatsFeature(feature_api.Feature):
         )
 
     async def cmd_streamstats(self, message):
-        """Kennzahlen des laufenden Streams (oder des zuletzt beendeten, wenn gerade
-        offline). Alles davon kommt aus der DB und ist dort auch pro Stream auswertbar."""
+        """Figures of the running stream (or of the last ended one when currently offline).
+        All of it comes from the DB and can be evaluated per stream there too."""
         if self._sessions is None:
             return self.config.text("session.disabled")
         session_stats = await self.stream_stats()
@@ -292,8 +289,8 @@ class StatsFeature(feature_api.Feature):
         highscores = await self._run(self.store.get_highscores)
         if not highscores:
             return self.config.text("highscores.none")
-        # Reihenfolge aus HIGHSCORE_METRICS: die Rekorde, die es gibt, in fester Folge -
-        # die Beschriftung dazu kommt je Metrik aus stats.json ("highscore.<metrik>").
+        # Order from HIGHSCORE_METRICS: the records that exist, in a fixed sequence - the
+        # label for each comes per metric from stats.json ("highscore.<metric>").
         entries = [
             self.config.text(
                 "highscores.line",

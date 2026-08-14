@@ -1,14 +1,13 @@
 # store.py
-# Die Stream-Sessions: wann lief ein Stream, unter welchem Titel, in welcher Kategorie.
-# Übernommen aus features/stats/store.py - dort war die Session der stille Mittelpunkt, an
-# dem alles andere hing (jede Aufzeichnung stempelte `self._session_id` mit), ohne dass man
-# sie einzeln an- oder abschalten konnte.
+# The stream sessions: when a stream ran, under which title, in which category. Taken over
+# from features/stats/store.py - there the session was the silent centre everything else hung
+# on (every recording stamped `self._session_id` along), without being separately switchable.
 #
-# Tabellen und Spalten sind unverändert übernommen: eine bestehende bugbot.db findet hier
-# genau das wieder, was vorher das Statistik-Feature angelegt hat.
+# Tables and columns are taken over unchanged: an existing bugbot.db finds exactly what the
+# statistics feature created before.
 #
-# Alles hier ist blockierendes sqlite3 und muss von async Code aus per
-# loop.run_in_executor(None, ...) aufgerufen werden.
+# Everything here is blocking sqlite3 and has to be called from async code via
+# loop.run_in_executor(None, ...).
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS stream_sessions (
@@ -32,27 +31,27 @@ INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_stream_segments_session ON stream_segments (stream_session_id, id);
 """
 
-# Dauer in Minuten, aus started_at und ended_at (bzw. jetzt, solange die Session läuft).
-# Als Ausdruck ausgelagert, weil ihn get() und totals() beide brauchen.
+# Duration in minutes, from started_at and ended_at (resp. now, while the session runs).
+# Factored out as an expression because get() and totals() both need it.
 _DURATION_MINUTES = (
     "CAST((julianday(COALESCE(ended_at, datetime('now'))) - julianday(started_at)) * 1440 AS INTEGER)"
 )
 
 
 class SessionStore:
-    """`db` ist das Feature mit der Fähigkeit STORAGE (siehe features/sql_db)."""
+    """`db` is the feature with the STORAGE capability (see features/sql_db)."""
 
     def __init__(self, db, platform=""):
         self._db = db
-        # Wessen Stream hier aufgezeichnet wird. Kommt vom Feature (Feature.owner) und
-        # landet in der Spalte: eine Session ohne diese Angabe behauptet stillschweigend,
-        # es gebe nur einen Dienst, der streamen kann. Alte Zeilen haben sie nicht - dort
-        # bleibt sie NULL, und das ist die ehrliche Auskunft "damals nicht erfasst".
+        # Whose stream is recorded here. Comes from the feature (Feature.owner) and lands in
+        # the column: a session without it silently claims there is only one service that can
+        # stream. Old rows do not have it - there it stays NULL, and that is the honest answer
+        # "not recorded back then".
         self._platform = platform
-        # id der gerade laufenden Stream-Session, oder None wenn offline. Andere Features
-        # fragen das über die Fähigkeit SESSIONS ab, statt es selbst zu führen - vorher gab
-        # es diesen Zustand nur im Statistik-Feature, weshalb Chat-Mitschnitt und
-        # Rohprotokoll dort mit drinstecken mussten.
+        # id of the currently running stream session, or None when offline. Other features
+        # ask for it through the SESSIONS capability instead of keeping it themselves -
+        # previously this state existed only in the statistics feature, which is why the chat
+        # record and the raw log had to sit in there too.
         self._session_id = None
 
     # --- Schema ---------------------------------------------------------------------
@@ -60,18 +59,17 @@ class SessionStore:
     def init_schema(self):
         with self._db.connect() as conn:
             conn.executescript(SCHEMA)
-            # Bestehende Datenbanken kennen die Spalte noch nicht (SQLite hat kein
-            # "ADD COLUMN IF NOT EXISTS", daher der Helfer aus dem sql_db-Feature). Alte
-            # Sessions behalten NULL: nachträglich eine Plattform hineinzuschreiben wäre
-            # geraten, nicht erfasst.
+            # Existing databases do not know the column yet (SQLite has no "ADD COLUMN IF
+            # NOT EXISTS", hence the helper from the sql_db feature). Old sessions keep NULL:
+            # writing a platform in after the fact would be guessed, not recorded.
             self._db.add_column_if_missing(conn, "stream_sessions", "platform", "TEXT")
             conn.executescript(INDEXES)
         self._restore_current_session()
 
     def _restore_current_session(self):
-        """Nach einem Neustart mitten im Stream gibt es eine offene stream_sessions-Zeile,
-        aber noch keinen Prozess-Zustand - ohne das hier würde bis zum nächsten Streamstart
-        nichts mehr der Session zugeordnet (und der Chat gar nicht mehr mitgeschnitten)."""
+        """After a restart mid-stream there is an open stream_sessions row but no process
+        state yet - without this, nothing would be assigned to the session until the next
+        stream start (and the chat would not be recorded at all)."""
         with self._db.connect() as conn:
             row = conn.execute(
                 "SELECT id FROM stream_sessions WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1"
@@ -85,12 +83,12 @@ class SessionStore:
     # --- Start/Ende -----------------------------------------------------------------
 
     def start(self, title, game_name):
-        """Gibt die id der neu angelegten Session zurück. Ab hier stempeln die anderen
-        Features ihre Zeilen damit.
+        """Returns the id of the newly created session. From here on the other features stamp
+        their rows with it.
 
-        Läuft bereits eine offene Session (Bot-Neustart mitten im Stream), wird deren id
-        weiterverwendet statt eine zweite anzulegen - sonst bliebe die erste für immer offen
-        und der Stream zerfiele in zwei Sessions."""
+        If an open session already exists (bot restart mid-stream), its id is reused rather
+        than creating a second one - otherwise the first would stay open forever and the stream
+        would fall apart into two sessions."""
         if self._session_id is not None:
             return self._session_id
         with self._db.connect() as conn:
@@ -104,8 +102,8 @@ class SessionStore:
         return self._session_id
 
     def end(self):
-        """Setzt ended_at auf die zuletzt gestartete, noch offene Session und gibt deren id
-        zurück (oder None, falls keine offene Session existiert)."""
+        """Sets ended_at on the most recently started, still open session and returns its id
+        (or None when no open session exists)."""
         self._session_id = None
         with self._db.connect() as conn:
             row = conn.execute(
@@ -118,9 +116,9 @@ class SessionStore:
             return session_id
 
     def record_segment(self, title, game_name):
-        """Ein Titel-/Kategorie-Abschnitt innerhalb eines Streams. Wird beim Streamstart und
-        danach bei jeder Änderung angelegt - so bleibt nachvollziehbar, was wann gespielt
-        wurde, statt nur den Zustand beim Einschalten festzuhalten."""
+        """A title/category segment within a stream. Created at stream start and on every
+        change afterwards - which keeps it traceable what was played when, rather than only
+        recording the state at switch-on."""
         if self._session_id is None:
             return False
         with self._db.connect() as conn:
@@ -128,8 +126,8 @@ class SessionStore:
                 "SELECT title, game_name FROM stream_segments WHERE stream_session_id = ? ORDER BY id DESC LIMIT 1",
                 (self._session_id,),
             ).fetchone()
-            # Die Plattform meldet auch Änderungen, die uns nicht interessieren (Sprache,
-            # Tags) - unveränderte Abschnitte nicht doppelt anlegen.
+            # The platform also reports changes we do not care about (language, tags) - do
+            # not create unchanged segments twice.
             if last is not None and tuple(last) == (title, game_name):
                 return False
             conn.execute(
@@ -141,19 +139,19 @@ class SessionStore:
     # --- Abfragen -------------------------------------------------------------------
 
     def resolve(self, session_id):
-        """Die laufende Session, falls der Aufrufer keine bestimmte nennt."""
+        """The running session, when the caller names no particular one."""
         return self._session_id if session_id is None else session_id
 
     def last_session_id(self):
-        """id der zuletzt gestarteten Session (auch wenn sie längst beendet ist), oder None.
-        Damit beantwortet sich "der letzte Stream" ohne eine zweite Abfrage über alles."""
+        """id of the most recently started session (even if it ended long ago), or None. That
+        answers "the last stream" without a second query across everything."""
         with self._db.connect() as conn:
             row = conn.execute("SELECT id FROM stream_sessions ORDER BY id DESC LIMIT 1").fetchone()
         return row[0] if row is not None else None
 
     def get(self, session_id):
-        """Stammdaten einer Session als Dict, oder None. Die Kennzahlen dazu (Nachrichten,
-        Events, Zuschauer) liegen bei den Features, die sie aufzeichnen."""
+        """Master data of a session as a dict, or None. The figures for it (messages, events,
+        viewers) live with the features that record them."""
         if session_id is None:
             return None
         with self._db.connect() as conn:
@@ -182,7 +180,7 @@ class SessionStore:
         }
 
     def segments(self, session_id):
-        """[(started_at, title, game_name), ...] chronologisch - der Verlauf eines Streams."""
+        """[(started_at, title, game_name), ...] chronologically - the course of a stream."""
         if session_id is None:
             return []
         with self._db.connect() as conn:
@@ -193,11 +191,11 @@ class SessionStore:
         return [tuple(row) for row in rows]
 
     def recent(self, limit=10):
-        """[{session_id, started_at, ended_at, title, game_name}, ...] der letzten Streams,
-        neueste zuerst - Einstiegspunkt, um dann in einen einzelnen Stream reinzuschauen.
+        """[{session_id, started_at, ended_at, title, game_name}, ...] of the last streams,
+        newest first - the entry point for then looking into a single stream.
 
-        Bewusst nur die Stammdaten: die Nachrichtenzahl und der Zuschauer-Peak, die hier
-        früher mit drinhingen, gehören dem Statistik-Feature und werden dort ergänzt."""
+        Deliberately only the master data: the message count and the viewer peak that used to
+        hang in here belong to the statistics feature and are added there."""
         with self._db.connect() as conn:
             rows = conn.execute(
                 """
@@ -215,8 +213,8 @@ class SessionStore:
         ]
 
     def totals(self):
-        """(Anzahl Sessions, Gesamtdauer in Minuten) über alle Streams - für die
-        All-Time-Ausgabe von !stats."""
+        """(number of sessions, total duration in minutes) across all streams - for the
+        all-time output of !stats."""
         with self._db.connect() as conn:
             count, minutes = conn.execute(
                 f"SELECT COUNT(*), COALESCE(SUM({_DURATION_MINUTES}), 0) FROM stream_sessions"

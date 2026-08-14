@@ -1,12 +1,11 @@
-"""Die Zähler des Overlays, dauerhaft abgelegt.
+"""The overlay's counters, stored persistently.
 
-Bisher genau einer: der Todeszähler. Er steht hier und nicht in features/stats, weil er
-nichts misst, was von selbst passiert - jemand zählt ihn hoch. Die Tabelle ist trotzdem
-allgemein gehalten, damit der nächste Zähler (Siege, Abstürze, Kaffee) keine neue
-braucht.
+So far exactly one: the death counter. It lives here and not in features/stats because it
+measures nothing that happens by itself - somebody counts it up. The table is kept general
+nonetheless, so that the next counter (wins, crashes, coffees) needs no new one.
 
-Gegenstück zu features/stats/store.py und mit derselben Arbeitsteilung: hier steht SQL,
-im Feature steht, wann es läuft.
+Counterpart to features/stats/store.py and with the same division of labour: SQL lives
+here, when it runs lives in the feature.
 """
 
 SCHEMA = """
@@ -27,11 +26,11 @@ class OverlayStore:
             conn.executescript(SCHEMA)
 
     def under(self, prefix):
-        """{Name: Stand} aller Zähler unter einem Präfix.
+        """{name: value} of all counters under a prefix.
 
-        substr() statt LIKE: der Präfix käme zwar nur aus dem Code, aber mit LIKE hinge an
-        dieser Zeile die stille Annahme, dass darin nie ein % oder _ steht. So hängt an ihr
-        gar nichts."""
+        substr() rather than LIKE: the prefix would only ever come from the code, but with
+        LIKE this line would carry the silent assumption that it never contains a % or _.
+        This way it carries nothing at all."""
         with self._db.connect() as conn:
             rows = conn.execute(
                 "SELECT name, value FROM overlay_counters WHERE substr(name, 1, ?) = ?"
@@ -48,8 +47,8 @@ class OverlayStore:
         return int(row[0]) if row else 0
 
     def add(self, name, delta=1):
-        """Um delta erhöhen und den neuen Stand zurückgeben. Ein noch unbekannter Zähler
-        beginnt bei 0, das INSERT legt ihn nebenbei an."""
+        """Increase by delta and return the new value. A counter not yet known starts at 0,
+        and the INSERT creates it along the way."""
         with self._db.connect() as conn:
             conn.execute(
                 """INSERT INTO overlay_counters (name, value) VALUES (?, ?)

@@ -1,16 +1,14 @@
 # feature.py
-# Das Rohprotokoll als eigenes Feature (Fähigkeiten RECORDING und RAW_LOG).
+# The raw log as a feature of its own (capabilities RECORDING and RAW_LOG).
 #
-# Lag vorher im Statistik-Feature, hat mit Statistik aber nichts zu tun: es wertet nichts
-# aus, sondern hebt ausnahmslos alles auf, was die Plattform gemeldet hat - auch das, wofür
-# es noch gar keinen Handler gibt. Das ist der Grund, es einzeln an- und abschaltbar zu
-# machen: es ist die Tabelle, die am schnellsten wächst, und die einzige, die man aus
-# Platzgründen vielleicht nicht haben will.
+# It used to sit in the statistics feature but has nothing to do with statistics: it evaluates
+# nothing and keeps everything without exception that the platform reported - including what
+# has no handler at all yet. That is the reason to make it separately switchable: it is the
+# table that grows fastest, and the only one you might not want for space reasons.
 #
-# Anders als der Chat-Mitschnitt braucht es SESSIONS *nicht*: außerhalb eines Streams wird
-# weiter protokolliert, dann eben ohne Session-Zuordnung. Genau dafür ist die Spalte
-# nullable. Ist gar kein SESSIONS-Feature geladen, läuft das Rohprotokoll trotzdem - es
-# verliert nur den Bezug zum Stream.
+# Unlike the chat record it does *not* need SESSIONS: outside a stream logging continues, just
+# without a session assignment. That is exactly what the column is nullable for. If no SESSIONS
+# feature is loaded at all, the raw log still runs - it merely loses the link to the stream.
 
 import asyncio
 
@@ -32,9 +30,9 @@ class RawLogFeature(feature_api.Feature):
     async def setup(self, bus):
         db = bus.feature_with(feature_api.STORAGE)
         if db is None:
-            raise RuntimeError("kein Feature mit der Fähigkeit STORAGE geladen")
+            raise RuntimeError("no feature with the STORAGE capability loaded")
         self.store = RawLogStore(db)
-        # Optional, deshalb nicht in `requires`: fehlt es, bleibt stream_session_id NULL.
+        # Optional, hence not in `requires`: if it is missing, stream_session_id stays NULL.
         self._sessions = bus.feature_with(feature_api.SESSIONS)
         await self._run(self.store.init_schema)
 

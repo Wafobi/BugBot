@@ -1,25 +1,25 @@
 # filters.py
-# Die reinen Filter des Moderations-Features: Bannwörter, Links, Caps-/Symbol-/Emote-Spam.
-# Absichtlich zustandslose Funktionen - die Eskalation (wie oft, wie lange stumm) sitzt
-# in feature.py, das diese hier nur befragt.
+# The pure filters of the moderation feature: banned words, links, caps/symbol/emote spam.
+# Deliberately stateless functions - the escalation (how often, how long muted) sits in
+# feature.py, which only asks these.
 #
-# Schwellenwerte/Zusatz-Bannwörter kommen pro Plattform aus discord.json/twitch.json
-# (siehe core/runtime_config.py) und werden hier mit den Defaults unten gemergt - dadurch
-# lässt sich z.B. die Emoji-Spam-Empfindlichkeit oder die Bannwortliste zur Laufzeit
-# je Plattform unterschiedlich einstellen, ohne den Bot neu zu starten.
+# Thresholds/additional banned words come per platform from discord.json/twitch.json (see
+# core/runtime_config.py) and are merged here with the defaults below - so that, say, the
+# emoji spam sensitivity or the banned word list can be set differently per platform at
+# runtime, without restarting the bot.
 
 import re
 from functools import lru_cache
 
-# Bannwörter/-phrasen: ursprüngliche Kuratierung + Merge aus der öffentlichen
-# LDNOOBW-Liste (DE+EN, https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words),
-# dedupliziert. Bewusst ausgeschlossen aus der LDNOOBW-Quelle: die Phrasen
-# "how to kill"/"how to murder" - in einem Gaming-Chat ("how to kill the boss")
-# wären das garantierte Fehlalarme, nicht Missbrauch.
+# Banned words/phrases: the original curation + a merge of the public LDNOOBW list
+# (DE+EN, https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words),
+# deduplicated. Deliberately excluded from the LDNOOBW source: the phrases
+# "how to kill"/"how to murder" - in a gaming chat ("how to kill the boss") those would be
+# guaranteed false alarms, not abuse.
 #
-# Das ist die gemeinsame Basisliste für beide Plattformen. Zusätzliche, plattform-
-# spezifische Wörter kommen zur Laufzeit über "moderation.extra_banned_words" in
-# discord.json/twitch.json dazu (siehe build_settings unten).
+# This is the shared base list for both platforms. Additional, platform-specific words are
+# added at runtime via "moderation.extra_banned_words" in discord.json/twitch.json (see
+# build_settings below).
 BASE_BANNED_WORDS = [
     "bread",
     "2 girls 1 cup", "2g1c", "acrotomophilia", "alabama hot pocket", "alaskan pipeline", "anal",
@@ -91,9 +91,10 @@ BASE_BANNED_WORDS = [
     "yellow showers", "yiffy", "zoophilia",
 ]
 
-# Klartext zu jedem Verstoß, wie er im Chat und im Mod-Log auftaucht. Die Schlüssel sind
-# die Textschlüssel des Features (moderation.json, Abschnitt "texts") - wer die Meldungen
-# umformulieren oder übersetzen will, ändert sie dort.
+# Plain text for every offence, as it appears in chat and in the mod log. The keys are the
+# feature's text keys (moderation.json, section "texts") - anyone wanting to rephrase or
+# translate the notices changes them there. The values below are only the fallback for a
+# missing file, which is why they are in the operator's language, not in the code's.
 VIOLATION_REASON_LABELS = {
     "reason.banned_word": "unerlaubtes Wort",
     "reason.link_spam": "nicht erlaubter Link",
@@ -107,7 +108,7 @@ LINK_PATTERN = re.compile(
     re.IGNORECASE
 )
 
-# Defaults, falls twitch.json/discord.json einen Wert (noch) nicht setzen.
+# Defaults in case twitch.json/discord.json does not (yet) set a value.
 DEFAULT_MODERATION_SETTINGS = {
     "extra_banned_words": [],
     "allowed_link_domains": ["twitch.tv", "steampowered.com", "discord.gg", "discord.com"],
@@ -125,12 +126,12 @@ DEFAULT_MODERATION_SETTINGS = {
 
 @lru_cache(maxsize=8)
 def _compile_banned_words_pattern(words):
-    """None, wenn gar kein Wort übrig ist - ein leeres Pattern würde auf *jede* Nachricht
-    passen, und "ich will keine Bannwörter" darf nicht "alles ist ein Verstoß" heißen."""
+    """None when no word is left at all - an empty pattern would match *every* message,
+    and "I want no banned words" must not mean "everything is an offence"."""
     if not words:
         return None
-    # Wortgrenzen-Match statt reinem Substring, damit z.B. "opfer" nicht auch in
-    # "Verkehrsopfer" o.ä. anschlägt.
+    # Word-boundary match rather than a plain substring, so that e.g. "opfer" does not
+    # also fire inside "Verkehrsopfer" and the like.
     return re.compile(
         r"(?<!\w)(" + "|".join(re.escape(w) for w in words) + r")(?!\w)",
         re.IGNORECASE,
@@ -138,12 +139,12 @@ def _compile_banned_words_pattern(words):
 
 
 def banned_word_list(word_config, extra_words=()):
-    """Die tatsächliche Wortliste aus dem "banned_words"-Abschnitt von moderation.json:
-    mitgelieferte Basisliste (abschaltbar) + "extra" + die plattformeigenen
-    extra_banned_words, abzüglich "remove".
+    """The actual word list from the "banned_words" section of moderation.json: the
+    shipped base list (switchable) + "extra" + the platform's own extra_banned_words, minus
+    "remove".
 
-    Das Entfernen gibt es, weil die Basisliste breit kuratiert ist: was in der einen
-    Community ein Verstoß ist, ist in der nächsten das Thema des Streams."""
+    Removal exists because the base list is broadly curated: what is an offence in one
+    community is the subject of the stream in the next."""
     config = word_config or {}
     words = list(BASE_BANNED_WORDS) if config.get("use_builtin_list", True) else []
     words += list(config.get("extra") or [])
@@ -153,10 +154,10 @@ def banned_word_list(word_config, extra_words=()):
 
 
 def build_settings(base=None, overrides=None, word_config=None):
-    """Legt die Werte übereinander - Defaults aus dem Code, dann moderation.json (`base`),
-    dann der "moderation"-Abschnitt der Plattform (`overrides`) - und kompiliert das
-    Bannwort-Pattern dazu. Wird pro Nachricht neu aufgerufen: billig, weil das
-    Pattern-Compile per lru_cache an der tatsächlichen Wortliste hängt."""
+    """Lays the values on top of each other - defaults from the code, then moderation.json
+    (`base`), then the platform's "moderation" section (`overrides`) - and compiles the
+    banned-word pattern along with it. Called afresh per message: cheap, because the pattern
+    compile hangs on the actual word list via lru_cache."""
     settings = {**DEFAULT_MODERATION_SETTINGS, **(base or {}), **(overrides or {})}
     settings["banned_words_pattern"] = _compile_banned_words_pattern(
         banned_word_list(word_config, settings.get("extra_banned_words"))
@@ -203,9 +204,9 @@ def check_emote_spam(text, settings):
 
 
 def moderate_message(text, settings, relaxed=False):
-    """Prüft eine Nachricht gegen alle Filter und gibt (reason, detail) des ersten
-    Treffers zurück, sonst None. `relaxed=True` (z.B. für Subscriber) überspringt
-    die reinen Spam-Heuristiken (Caps/Symbole/Emotes), Bannwörter & Links greifen weiterhin."""
+    """Checks a message against all filters and returns (reason, detail) of the first hit,
+    otherwise None. `relaxed=True` (e.g. for subscribers) skips the pure spam heuristics
+    (caps/symbols/emotes); banned words and links still apply."""
     word = check_banned_words(text, settings)
     if word:
         return ("banned_word", word)

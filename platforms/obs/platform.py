@@ -1,13 +1,13 @@
 # platform.py
-# OBS als Platform-Implementierung (Vertrag: core/platform.py).
+# OBS as a Platform implementation (contract: core/platform.py).
 #
-# Wie bei Twitch und Discord nur die Hülle - die Logik steht in bot.py, das Protokoll in
+# As with Twitch and Discord, only the shell - the logic is in bot.py, the protocol in
 # link.py.
 #
-# Angemeldet ist allein ANNOUNCE: OBS hat keinen Chat (kein CHAT), moderiert nichts (kein
-# MODERATE) und meldet bewusst keinen Stream-Beginn (kein STREAM) - die Stream-Session
-# gehört Twitch, zwei Melder wären zwei Sessions für denselben Stream. Was OBS dazu weiß,
-# geht als gewöhnliches PLATFORM_EVENT auf den Bus (siehe bot.py).
+# ANNOUNCE alone is declared: OBS has no chat (no CHAT), moderates nothing (no MODERATE) and
+# deliberately reports no stream start (no STREAM) - the stream session belongs to Twitch,
+# and two reporters would mean two sessions for the same stream. What OBS knows about it
+# goes onto the bus as an ordinary PLATFORM_EVENT (see bot.py).
 
 from core import platform as platform_api
 
@@ -17,25 +17,25 @@ from . import bot
 class OBSPlatform(platform_api.Platform):
     name = "obs"
     capabilities = frozenset({
-        platform_api.ANNOUNCE,   # Text-Quelle im Bild, siehe announce() unten
+        platform_api.ANNOUNCE,   # text source on screen, see announce() below
     })
 
     async def start(self):
-        # Kehrt zurück, sobald der Port offen ist. Ob je ein Relais anruft, entscheidet
-        # der Streaming-PC.
+        # Returns as soon as the port is open. Whether a relay ever calls is up to the
+        # streaming PC.
         await bot.start_obs()
 
     async def close(self):
         await bot.close()
 
-    # wait_ready() bleibt absichtlich beim Default (sofort bereit): OBS läuft meist noch
-    # gar nicht, wenn der Bot startet. Würde hier auf die Verbindung gewartet, hinge der
-    # Live-Abgleich von Twitch an einem ausgeschalteten Rechner (siehe bot.start_obs).
+    # wait_ready() deliberately stays at the default (ready immediately): OBS is usually not
+    # even running when the bot starts. If the connection were waited for here, Twitch's
+    # live reconciliation would hang on a switched-off machine (see bot.start_obs).
 
     async def announce(self, announcement):
-        """Blendet die Ankündigung als Text im Stream ein - aber nur die Arten, die in
-        obs.json unter announce.kinds stehen. Default ist leer: was der Chat ohnehin
-        sieht, muss nicht zusätzlich ins Bild."""
+        """Shows the announcement as text on stream - but only the kinds listed in obs.json
+        under announce.kinds. The default is empty: what the chat sees anyway need not
+        additionally go on screen."""
         return await bot.show_announcement(announcement)
 
 

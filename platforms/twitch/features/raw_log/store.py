@@ -1,12 +1,12 @@
 # store.py
-# Das Rohprotokoll: jede Benachrichtigung der Plattform im Originalzustand. Übernommen aus
-# features/stats/store.py, Tabelle und Spalten unverändert.
+# The raw log: every notification from the platform in its original state. Taken over from
+# features/stats/store.py, table and columns unchanged.
 #
-# Tabelle und Spalte heißen weiterhin eventsub_log/subscription_type: dort liegen die
-# bisherigen Daten, und ein Rename wäre eine Migration ohne Gegenwert.
+# Table and column are still called eventsub_log/subscription_type: that is where the existing
+# data sits, and a rename would be a migration without a return.
 #
-# Alles hier ist blockierendes sqlite3 und muss von async Code aus per
-# loop.run_in_executor(None, ...) aufgerufen werden.
+# Everything here is blocking sqlite3 and has to be called from async code via
+# loop.run_in_executor(None, ...).
 
 import json
 
@@ -27,7 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_eventsub_log_type ON eventsub_log (subscription_t
 
 
 class RawLogStore:
-    """`db` ist das Feature mit der Fähigkeit STORAGE (siehe features/sql_db)."""
+    """`db` is the feature with the STORAGE capability (see features/sql_db)."""
 
     def __init__(self, db):
         self._db = db
@@ -38,11 +38,11 @@ class RawLogStore:
             conn.executescript(INDEXES)
 
     def record(self, session_id, event_type, payload):
-        """Legt JEDE Plattform-Benachrichtigung im Rohzustand ab - auch die, für die es
-        (noch) keinen Handler gibt, und auch außerhalb eines Streams (dann ohne Session).
-        Damit geht nichts verloren, was die Plattform je gemeldet hat: neue Abos liefern
-        sofort auswertbare Daten, ohne dass vorher Code dafür existieren muss. Die
-        typisierten Tabellen der anderen Features bleiben die bequeme Auswertungsebene."""
+        """Stores EVERY platform notification in its raw state - including those with no
+        handler (yet), and outside a stream too (then without a session). That way nothing the
+        platform ever reported is lost: new subscriptions deliver evaluable data immediately,
+        without code having to exist for them beforehand. The other features' typed tables
+        remain the convenient evaluation layer."""
         with self._db.connect() as conn:
             conn.execute(
                 "INSERT INTO eventsub_log (stream_session_id, subscription_type, payload) VALUES (?, ?, ?)",
@@ -50,8 +50,8 @@ class RawLogStore:
             )
 
     def recent(self, event_type=None, session_id=None, limit=100):
-        """[(ts, event_type, payload_dict), ...] neueste zuerst - zum Nachschauen, was die
-        Plattform tatsächlich geschickt hat."""
+        """[(ts, event_type, payload_dict), ...] newest first - for looking up what the
+        platform actually sent."""
         where, params = [], []
         if event_type is not None:
             where.append("subscription_type = ?")

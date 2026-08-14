@@ -1,11 +1,10 @@
 # store.py
-# Der Chat-Mitschnitt: die einzige Stelle im Bot, die den *Inhalt* von Nachrichten
-# aufbewahrt. Übernommen aus features/stats/store.py - Tabelle und Index unverändert, eine
-# bestehende bugbot.db findet hier genau das wieder, was vorher das Statistik-Feature
-# angelegt hat.
+# The chat record: the only place in the bot that keeps the *content* of messages. Taken
+# over from features/stats/store.py - table and index unchanged, so an existing bugbot.db
+# finds exactly what the statistics feature created before.
 #
-# Alles hier ist blockierendes sqlite3 und muss von async Code aus per
-# loop.run_in_executor(None, ...) aufgerufen werden.
+# Everything here is blocking sqlite3 and has to be called from async code via
+# loop.run_in_executor(None, ...).
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS chat_log (
@@ -25,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_log_session ON chat_log (stream_session_id, 
 
 
 class ChatLogStore:
-    """`db` ist das Feature mit der Fähigkeit STORAGE (siehe features/sql_db)."""
+    """`db` is the feature with the STORAGE capability (see features/sql_db)."""
 
     def __init__(self, db):
         self._db = db
@@ -44,8 +43,8 @@ class ChatLogStore:
             )
 
     def recent(self, session_id, limit=200):
-        """[(platform, user_name, message, ts), ...] der jüngsten Nachrichten einer Session,
-        chronologisch aufsteigend."""
+        """[(platform, user_name, message, ts), ...] of a session's most recent messages,
+        in chronological order."""
         if session_id is None:
             return []
         with self._db.connect() as conn:
@@ -61,9 +60,9 @@ class ChatLogStore:
         return [tuple(row) for row in reversed(rows)]
 
     def session_metrics(self, session_id):
-        """(mitgeschriebene Nachrichten, verschiedene Chatter) einer Session. Das
-        Statistik-Feature holt sich das hier, statt selbst in chat_log zu greifen - die
-        Tabelle gehört diesem Feature, und ohne es fehlt die Kennzahl schlicht."""
+        """(messages recorded, distinct chatters) of a session. The statistics feature
+        fetches this from here rather than reaching into chat_log itself - the table belongs
+        to this feature, and without it the figure is simply missing."""
         if session_id is None:
             return 0, 0
         with self._db.connect() as conn:

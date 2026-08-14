@@ -15,7 +15,7 @@ fi
 # bugbot.db is bind-mounted (see bugbot.container). If the source file doesn't exist
 # yet, Podman creates an empty directory there instead of a file, which breaks
 # sqlite3.connect() inside the container - so make sure it exists first.
-touch bugbot.db
+touch features/sql_db/bugbot.db
 
 echo "🏗️  Building image..."
 podman build -t bugbot .

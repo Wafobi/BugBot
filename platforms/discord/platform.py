@@ -1,10 +1,10 @@
 # platform.py
-# Discord als Platform-Implementierung (Vertrag: core/platform.py).
+# Discord as a Platform implementation (contract: core/platform.py).
 #
-# Wie bei Twitch nur die Hülle: die Bot-Logik (Moderation, Befehle, Rollen-Reaktionen)
-# bleibt in bot.py. Discord meldet bewusst kein CHAT an - es hat keinen einzelnen
-# "Hauptkanal", in den freier Text gehören würde; alles Eingehende läuft über
-# announce() und die dort hinterlegte Kanalzuordnung.
+# As with Twitch, only the shell: the bot logic (moderation, commands, reaction roles) stays
+# in bot.py. Discord deliberately declares no CHAT - it has no single "main channel" free
+# text would belong in; everything incoming runs through announce() and the channel mapping
+# stored there.
 
 from core import platform as platform_api
 
@@ -15,13 +15,13 @@ from . import config
 class DiscordPlatform(platform_api.Platform):
     name = "discord"
     capabilities = frozenset({
-        platform_api.ANNOUNCE,   # Embeds in den zur kind passenden Kanal
-        platform_api.MODERATE,   # eigene Moderation in on_message
+        platform_api.ANNOUNCE,   # embeds into the channel matching the kind
+        platform_api.MODERATE,   # its own moderation in on_message
     })
 
     async def start(self):
-        # Blockiert für die gesamte Laufzeit. Der Kontextmanager sorgt dafür, dass die
-        # Session auch dann geschlossen wird, wenn start() von außen abgebrochen wird.
+        # Blocks for its entire lifetime. The context manager makes sure the session is
+        # closed even when start() is cancelled from outside.
         async with bot.bot:
             await bot.bot.start(config.TOKEN)
 
@@ -29,8 +29,8 @@ class DiscordPlatform(platform_api.Platform):
         await bot.bot.close()
 
     async def wait_ready(self):
-        # Vor on_ready kennt der Client seine Server nicht - Ankündigungen würden dann
-        # stillschweigend ins Leere laufen (siehe core/platform.py:Platform.wait_ready).
+        # Before on_ready the client does not know its guilds - announcements would then run
+        # silently into nothing (see core/platform.py:Platform.wait_ready).
         await bot.bot.wait_until_ready()
 
     async def announce(self, announcement):

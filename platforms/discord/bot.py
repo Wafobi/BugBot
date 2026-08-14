@@ -15,39 +15,38 @@ intents.message_content = True
 intents.members = True
 intents.reactions = True
 
-# Der Bot darf einzelne Leute erwähnen, aber niemals alle.
+# The bot may mention individual people, but never everyone.
 #
-# discord.py pingt ohne diese Angabe alles, was in einem Text nach einer Erwähnung aussieht
-# - auch das, was gerade aus dem Chat kam. Ein "!announce @everyone ..." wäre damit ein Weg,
-# sich das Recht des Bots zu leihen: Wer @everyone selbst nicht darf, dürfte es über ihn.
-# Dasselbe über die Begründungen von !warn, !timeout und !ban, die freier Text sind.
+# Without this setting discord.py pings anything in a text that looks like a mention -
+# including what just came out of the chat. An "!announce @everyone ..." would thereby be a
+# way of borrowing the bot's rights: whoever may not do @everyone themselves could do it
+# through the bot. The same via the reasons of !warn, !timeout and !ban, which are free text.
 #
-# users bleibt an, everyone und roles gehen aus. Die Grenze verläuft dort, weil eine
-# einzelne Erwähnung das ist, was diese Befehle sollen - ein !warn benachrichtigt den
-# Verwarnten -, während @everyone und ein Rollen-Ping die halbe Gilde aufwecken. Wo eine
-# Nachricht wirklich alle erreichen soll, gibt man am send() ein eigenes allowed_mentions
-# mit; dann steht die Absicht an der Stelle, an der sie gilt.
+# users stays on, everyone and roles go off. The line runs there because a single mention is
+# what these commands are for - a !warn notifies the person warned - whereas @everyone and a
+# role ping wake half the guild. Where a message really is meant to reach everyone, you pass
+# an allowed_mentions of your own at the send(); the intent then stands where it applies.
 bot = commands.Bot(
     command_prefix="!", intents=intents,
     allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True),
 )
 
-# Läuft gerade ein Stream? Wird ausschließlich über den Event-Bus gepflegt (siehe
-# _on_stream_online/_on_stream_offline weiter unten) - der Discord-Bot fragt Twitch dafür
-# nicht mehr selbst, sondern erfährt es von der Plattform, die es ohnehin weiß.
+# Is a stream running? Maintained exclusively through the event bus (see
+# _on_stream_online/_on_stream_offline further down) - the Discord bot no longer asks Twitch
+# itself, but learns it from the platform that knows anyway.
 is_live = False
 start_time = datetime.now()
 TOTAL_BANS = defaultdict(int)
 TOTAL_MOD_ACTIONS = defaultdict(int)
 
-# Alles Einstellbare - Rollen- und Kanalnamen, Farben, Texte, Befehlsnamen, Regeln,
-# statische Befehle, Moderations-Schwellen - kommt aus discord.json und wird bei Änderung
-# neu gelesen (siehe core/runtime_config.py). Im Code steht nichts davon noch einmal: die
-# mitgelieferte Datei ist der Default-Stand, auf den gelöschte Texte zurückfallen.
+# Everything adjustable - role and channel names, colours, texts, command names, rules,
+# static commands, moderation thresholds - comes from discord.json and is re-read on change
+# (see core/runtime_config.py). None of it appears a second time in the code: the shipped file
+# is the default state deleted texts fall back to.
 #
-# Namen sind hier keine Kosmetik. Der Bot findet Rollen und Kanäle über genau diese
-# Zeichenketten - stimmt der Moderator-Rollenname nicht, ist auf diesem Server niemand
-# Moderator, und das fällt erst auf, wenn ein Mod-Befehl wortlos nichts tut.
+# Names are not cosmetics here. The bot finds roles and channels by exactly these strings - if
+# the moderator role name is wrong, nobody on that server is a moderator, and that only
+# becomes apparent when a mod command silently does nothing.
 DISCORD_CONFIG = runtime_config.LiveConfig(Path(__file__).parent / "discord.json")
 
 
@@ -60,7 +59,7 @@ def channel_name(key):
 
 
 def reaction_roles():
-    """Emoji -> Rollenname. Die _comment-Zeile aus der JSON ist keine Rolle."""
+    """Emoji -> role name. The _comment line from the JSON is not a role."""
     return {
         emoji: name
         for emoji, name in DISCORD_CONFIG.section("reaction_roles").items()
@@ -69,20 +68,20 @@ def reaction_roles():
 
 
 def find_channel(guild, key):
-    """Der Kanal zu einem Schlüssel aus "channels", oder None - auch dann, wenn der Name
-    leer ist (so schaltet man die Funktion ab, ohne den Kanal löschen zu müssen)."""
+    """The channel for a key from "channels", or None - including when the name is empty
+    (that is how you switch the function off without having to delete the channel)."""
     name = channel_name(key)
     return discord.utils.get(guild.text_channels, name=name) if name else None
 
 
 async def _render(template, author):
-    """Ein statischer Befehl aus discord.json, fertig zum Absenden - dieselben Platzhalter
-    wie auf Twitch, aus demselben Feature (features/variables). Genau dafür ist es eines:
-    wer sich {steam} einmal definiert, hat es auf beiden Plattformen.
+    """A static command from discord.json, ready to send - the same placeholders as on
+    Twitch, from the same feature (features/variables). That is exactly why it is one: define
+    {steam} once and you have it on both platforms.
 
-    Nur der Kontext ist plattformeigen: {u} bleibt die Erwähnung, damit der Befehl den
-    Angesprochenen anpingt, {user} ist der reine Name für Sätze, in denen ein Ping stört,
-    und {channel} ist hier der Server."""
+    Only the context is platform-specific: {u} stays the mention, so the command pings the
+    person addressed, {user} is the plain name for sentences a ping would disturb, and
+    {channel} is the server here."""
     values = {
         "u": author.mention,
         "user": author.display_name,
@@ -94,7 +93,7 @@ async def _render(template, author):
 
 
 def get_discord_commands():
-    # "_..."-Schlüssel sind Kommentare für den Bearbeiter der Datei, keine Befehle.
+    # "_..." keys are comments for whoever edits the file, not commands.
     commands_map = {
         name: value for name, value in DISCORD_CONFIG.get("commands", {}).items()
         if not name.startswith("_")
@@ -103,14 +102,14 @@ def get_discord_commands():
     return commands_map
 
 
-# Plattformname, wie er in jeder Bus-Meldung und in der DB auftaucht. Muss zu
-# platform.py:DiscordPlatform.name passen.
+# Platform name as it appears in every bus notification and in the DB. Has to match
+# platform.py:DiscordPlatform.name.
 NAME = "discord"
 
 
 async def _publish_mod_action(user_name, reason, action):
-    """Meldet eine Moderationsaktion auf den Bus. Wer sie mitschreibt - und ob überhaupt
-    jemand - ist von hier aus nicht zu sehen."""
+    """Reports a moderation action onto the bus. Who records it - and whether anybody does -
+    is not visible from here."""
     await events.bus.publish(
         events.MOD_ACTION, platform=NAME, user_name=user_name, reason=reason, action=action,
     )
@@ -121,10 +120,9 @@ async def _record_command(name, user_name):
 
 
 async def _send_command_reply(message, reply):
-    """Antwort eines Befehls in den Kanal schicken, aus dem er kam. Feature-Befehle
-    dürfen statt eines Strings eine Announcement zurückgeben - daraus wird hier ein Embed,
-    auf Twitch eine Textzeile. So kann ein Feature einmal formulieren und trotzdem überall
-    passend aussehen."""
+    """Send a command's reply into the channel it came from. Feature commands may return an
+    Announcement instead of a string - here that becomes an embed, on Twitch a line of text.
+    So a feature can word things once and still look right everywhere."""
     if not reply:
         return
     if isinstance(reply, platform_api.Announcement):
@@ -134,13 +132,13 @@ async def _send_command_reply(message, reply):
 
 
 def moderation_overrides():
-    """Der "moderation"-Abschnitt aus discord.json, so wie er dasteht. Gemergt und
-    ausgewertet wird er im Moderations-Feature."""
+    """The "moderation" section from discord.json, exactly as it stands. Merging and
+    evaluating happen in the moderation feature."""
     return DISCORD_CONFIG.get("moderation", {})
 
 
 def is_discord_mod(member):
-    """Administrator oder die in discord.json unter roles.moderator genannte Rolle."""
+    """Administrator, or the role named under roles.moderator in discord.json."""
     moderator = role_name("moderator")
     return member.guild_permissions.administrator or (
         bool(moderator) and discord.utils.get(member.roles, name=moderator) is not None
@@ -154,19 +152,19 @@ async def log_action(guild, title, description, color=None):
         await report_channel.send(embed=embed)
 
 
-# --- Ankündigungen vom Event-Bus ---------------------------------------------------
-# Discords Seite der Platform-API: aus einer neutralen core.platform.Announcement wird
-# hier ein Embed im passenden Kanal. Ersetzt die früheren Einzelfunktionen
-# post_bug_report/post_clip_announcement/announce_stream_online/offline, die jede für
-# sich fast dasselbe taten - und die Twitch per verzögertem Import direkt aufrief.
+# --- Announcements from the event bus ----------------------------------------------
+# Discord's side of the Platform API: a neutral core.platform.Announcement becomes an embed in
+# the matching channel here. Replaces the former individual functions
+# post_bug_report/post_clip_announcement/announce_stream_online/offline, which each did almost
+# the same thing - and which Twitch called directly via a deferred import.
 
 def announce_channel_name(kind):
-    """Kanalname für eine Ankündigungs-Art, oder None wenn Discord sie nicht darstellt.
-    Die Zuordnung steht vollständig in discord.json unter "announce_channels" - eine neue
-    Art bekommt dort einen Kanal, ohne dass hier etwas dazukommt."""
+    """Channel name for a kind of announcement, or None when Discord does not present it.
+    The mapping lives entirely in discord.json under "announce_channels" - a new kind gets a
+    channel there, without anything being added here."""
     channels = DISCORD_CONFIG.section("announce_channels")
-    # "clip_channel" ist der Vorgänger von "announce_channels" und wird weiter beachtet,
-    # damit bestehende discord.json-Dateien unverändert weiterlaufen.
+    # "clip_channel" is the predecessor of "announce_channels" and is still honoured, so
+    # that existing discord.json files keep running unchanged.
     if kind == platform_api.CLIP:
         return DISCORD_CONFIG.get("clip_channel") or channels.get(kind)
     return channels.get(kind)
@@ -192,8 +190,8 @@ def build_announcement_embed(announcement):
 
 
 async def post_announcement(announcement):
-    """Erfüllt core.platform.Platform.announce für Discord (siehe platform.py). True,
-    sobald die Ankündigung in mindestens einem Server gepostet wurde."""
+    """Fulfils core.platform.Platform.announce for Discord (see platform.py). True as soon
+    as the announcement was posted in at least one guild."""
     channel_name = announce_channel_name(announcement.kind)
     if not channel_name:
         return False
@@ -209,14 +207,14 @@ async def post_announcement(announcement):
                 await channel.send(content=content, embed=embed)
                 posted = True
             except discord.HTTPException as e:
-                print(f"⚠️ Ankündigung '{announcement.kind}' in #{channel_name} fehlgeschlagen: {e}")
+                print(f"⚠️ Announcement '{announcement.kind}' in #{channel_name} failed: {e}")
         if announcement.log:
             await log_action(guild, announcement.title, announcement.text or announcement.url, announcement.color)
     return posted
 
 
-# Zustand nachziehen, unabhängig davon, ob die Ankündigung auch gepostet wurde: der
-# Live-Status im Statusbericht soll auch dann stimmen, wenn #🎥-stream-live fehlt.
+# Update the state regardless of whether the announcement was posted: the live status in
+# the status report should be right even when #🎥-stream-live is missing.
 async def _on_stream_online(announcement):
     global is_live
     is_live = True
@@ -232,10 +230,10 @@ events.bus.subscribe(platform_api.STREAM_OFFLINE, _on_stream_offline)
 
 
 async def build_status_embed(guild):
-    """Der Stundenbericht: eigene Zahlen dieses Bots (Laufzeit, was er in dieser Session
-    weggeräumt hat) plus die All-Time-Zahlen aus dem Statistik-Feature. Die kennt Discord
-    nicht selbst - fehlt das Feature, bleibt der Bericht eben auf den lokalen Teil
-    beschränkt, statt gar nicht zu erscheinen."""
+    """The hourly report: this bot's own numbers (uptime, what it cleared away this session)
+    plus the all-time numbers from the statistics feature. Discord does not know those itself -
+    if the feature is missing, the report simply stays limited to the local part rather than
+    not appearing at all."""
     uptime = datetime.now() - start_time
     hours, remainder = divmod(int(uptime.total_seconds()), 3600)
     minutes, _ = divmod(remainder, 60)
@@ -261,9 +259,9 @@ async def build_status_embed(guild):
     return embed
 
 
-# Befehle mit Argumenten/Serveraktionen - anders als die statischen Text-Maps in
-# discord.json. Handler bekommen (message, arg_text) und geben den zu postenden Text
-# zurück (oder None für keine zusätzliche Antwort).
+# Commands with arguments/server actions - unlike the static text maps in discord.json.
+# Handlers receive (message, arg_text) and return the text to post (or None for no additional
+# reply).
 
 async def cmd_roles(message, arg_text):
     lines = "\n".join(
@@ -275,8 +273,8 @@ async def cmd_roles(message, arg_text):
 
 
 async def cmd_bug(message, arg_text):
-    """Geht wie der Twitch-!bug über den Event-Bus - derselbe Weg für beide Plattformen,
-    auch wenn er hier fast immer wieder in Discord selbst landet."""
+    """Goes over the event bus like the Twitch !bug - the same route for both platforms, even
+    though here it almost always lands back in Discord itself."""
     if not arg_text:
         return DISCORD_CONFIG.text("bug.usage")
     delivered = await events.bus.announce(platform_api.Announcement(
@@ -336,7 +334,7 @@ async def cmd_purge(message, arg_text):
         return DISCORD_CONFIG.text("purge.usage")
     count = max(1, min(count, 100))
     try:
-        await message.channel.purge(limit=count + 1)  # +1 löscht auch den !purge-Aufruf selbst
+        await message.channel.purge(limit=count + 1)  # +1 also deletes the !purge call itself
     except discord.Forbidden:
         return DISCORD_CONFIG.text("purge.forbidden")
     return None
@@ -442,11 +440,11 @@ def _build_overwrites(profile, everyone_role, role_objects):
 
 
 async def cmd_setup(message, arg_text):
-    """Baut die komplette Kanal-/Rollenstruktur laut discord.json["setup"] neu auf -
-    Nachfolger von server_setup.py, jetzt als Mod-Befehl statt separatem Skript.
-    Löscht dabei ALLE Kanäle außer dem aktuellen, daher die Bestätigungspflicht und
-    die eigene, striktere Administrator-Prüfung (is_discord_mod allein reicht hier
-    nicht - eine reine Moderator-Rolle darf den Server nicht plattmachen können)."""
+    """Rebuilds the complete channel/role structure per discord.json["setup"] - successor to
+    server_setup.py, now a mod command instead of a separate script. It deletes ALL channels
+    except the current one, hence the mandatory confirmation and its own, stricter administrator
+    check (is_discord_mod alone is not enough here - a plain moderator role must not be able to
+    flatten the server)."""
     if not message.author.guild_permissions.administrator:
         return DISCORD_CONFIG.text("setup.admin_only")
     if arg_text.strip().lower() != "confirm":
@@ -460,13 +458,13 @@ async def cmd_setup(message, arg_text):
     current_channel_id = message.channel.id
     await message.channel.send(DISCORD_CONFIG.text("setup.working"))
 
-    # 1. Kanäle löschen (außer dem aktuellen)
+    # 1. Delete channels (except the current one)
     for channel in guild.channels:
         if channel.id != current_channel_id:
             try:
                 await channel.delete()
             except Exception as e:
-                print(f"⚠️ Kanal {channel.name} konnte nicht gelöscht werden: {e}")
+                print(f"⚠️ Channel {channel.name} could not be deleted: {e}")
 
     # 2. Rollen erstellen
     role_objects = {}
@@ -484,8 +482,8 @@ async def cmd_setup(message, arg_text):
     rules_channel = None
     roles_channel = None
 
-    # 3. Kategorien & Kanäle erstellen (mit optionalem Permission-Override pro Kanal,
-    # z.B. #📢-dev-logs strenger als der Rest seiner Kategorie)
+    # 3. Create categories and channels (with an optional permission override per channel,
+    # e.g. #📢-dev-logs stricter than the rest of its category)
     for category_def in setup_cfg.get("categories", []):
         profile = permission_profiles.get(category_def.get("permission_profile"), {})
         overwrites = _build_overwrites(profile, everyone_role, role_objects)
@@ -521,7 +519,7 @@ async def cmd_setup(message, arg_text):
         for emoji in reaction_roles():
             await msg.add_reaction(emoji)
 
-    # 6. Aufräumen
+    # 6. Clean up
     await message.channel.send(DISCORD_CONFIG.text("setup.done"))
     await asyncio.sleep(2)
     await message.channel.delete()
@@ -543,16 +541,16 @@ DISCORD_DYNAMIC_MOD_COMMANDS = {
 async def on_ready():
     print("=== LIVE-BOT AKTIV ===")
     print(f"Eingeloggt als: {bot.user.name}")
-    # Intervall aus discord.json, 0 schaltet den Bericht ab. Gesetzt wird es erst hier:
-    # der Decorator unten läuft beim Import, und change_interval greift nur an einem
-    # Loop, der noch nicht gestartet ist.
+    # Interval from discord.json, 0 switches the report off. It is only set here: the
+    # decorator below runs at import time, and change_interval only takes on a loop that has
+    # not been started yet.
     hours = DISCORD_CONFIG.get("status_report_hours", 1)
     if not hours:
         print("ℹ️ Statusbericht deaktiviert (status_report_hours = 0).")
         return
     if status_report.is_running():
-        # on_ready kommt nach jedem Reconnect erneut - ein zweites start() wäre ein
-        # RuntimeError mitten im Ready-Handler.
+        # on_ready comes again after every reconnect - a second start() would be a
+        # RuntimeError in the middle of the ready handler.
         status_report.change_interval(hours=hours)
         return
     status_report.change_interval(hours=hours)
@@ -560,9 +558,9 @@ async def on_ready():
 
 @tasks.loop(hours=1)
 async def status_report():
-    # discord.ext.tasks beendet einen Loop bei einer unbehandelten Exception endgültig -
-    # ohne dieses try/except wäre der Statusbericht nach einem einzelnen Fehler (z.B.
-    # fehlende Kanalrechte) bis zum nächsten Bot-Neustart weg.
+    # discord.ext.tasks ends a loop for good on an unhandled exception - without this
+    # try/except the status report would be gone after a single failure (e.g. missing channel
+    # permissions) until the next bot restart.
     try:
         await bot.wait_until_ready()
         for guild in bot.guilds:
@@ -592,7 +590,7 @@ async def on_message(message):
             await _publish_mod_action(user.name, "honey_pot", "ban")
             return
         except Exception as e:
-            print(f"⚠️ Honey-Pot-Bann fehlgeschlagen für {user} ({user.id}): {e}")
+            print(f"⚠️ Honeypot ban failed for {user} ({user.id}): {e}")
 
     msg_lower = message.content.lower()
     command_word, _, arg_text = message.content.partition(" ")
@@ -604,8 +602,8 @@ async def on_message(message):
         user_id=str(message.author.id),
         user_name=message.author.display_name,
         text=message.content,
-        # Mods/Admins sind von der Spam-/Bannwort-Filterung ausgenommen - dass daraus
-        # "wird nicht moderiert" folgt, entscheidet das Moderations-Feature.
+        # Mods/admins are exempt from the spam/banned-word filtering - whether that amounts
+        # to "is not moderated" is decided by the moderation feature.
         is_privileged=is_discord_mod(message.author),
         command=command_word,
         arg_text=arg_text,
@@ -614,8 +612,8 @@ async def on_message(message):
 
     await events.bus.publish(events.MESSAGE, message=msg)
 
-    # Moderation: das erste Feature, das etwas beanstandet, gewinnt. Ist keines geladen,
-    # wird schlicht nicht moderiert.
+    # Moderation: the first feature to object wins. If none is loaded, there simply is no
+    # moderation.
     for moderator in events.bus.features_with(feature_api.MODERATION):
         verdict = await moderator.review(msg, moderation_overrides())
         if verdict:
@@ -624,10 +622,10 @@ async def on_message(message):
 
     await events.bus.publish(events.MESSAGE_ACCEPTED, message=msg)
 
-    # Befehle: Mod-Befehle (dynamisch + statisch) dürfen in jedem Kanal laufen - z.B.
-    # !purge direkt dort, wo gerade Spam passiert - und nur für die Moderator-Rolle bzw.
-    # Admins (roles.moderator). Öffentliche Befehle nur im Befehlskanal
-    # (channels.commands); beide Namen stehen in discord.json.
+    # Commands: mod commands (dynamic + static) may run in any channel - e.g. !purge right
+    # where the spam is happening - and only for the moderator role resp. admins
+    # (roles.moderator). Public commands only in the command channel (channels.commands); both
+    # names live in discord.json.
     mod_commands = DISCORD_CONFIG.section("mod_commands")
     feature_command = events.bus.commands().get(command_word)
     dynamic_mod_commands = DISCORD_CONFIG.resolve_commands(DISCORD_DYNAMIC_MOD_COMMANDS)
@@ -642,14 +640,14 @@ async def on_message(message):
             await _record_command(msg_lower, message.author.name)
             await message.channel.send(await _render(mod_commands[msg_lower], message.author))
     elif feature_command is not None and feature_command.mod_only:
-        # Mod-Befehle der Features verhalten sich wie die eigenen: überall erlaubt,
-        # aber nur für Moderatoren.
+        # The features' mod commands behave like our own: allowed everywhere, but only for
+        # moderators.
         if is_discord_mod(message.author):
             await _record_command(command_word, message.author.name)
             await _send_command_reply(message, await feature_command.handler(msg))
     elif not channel_name("commands") or message.channel.name == channel_name("commands"):
-        # Öffentliche Befehle nur im dafür vorgesehenen Kanal - ist keiner konfiguriert,
-        # gelten sie überall.
+        # Public commands only in the channel meant for them - if none is configured, they
+        # apply everywhere.
         if command_word in dynamic_commands:
             await _record_command(command_word, message.author.name)
             await _send_command_reply(message, await dynamic_commands[command_word](message, arg_text))
@@ -666,10 +664,9 @@ async def on_message(message):
 
 
 async def handle_discord_violation(message, verdict):
-    """Führt das Urteil des Moderations-Features aus. Was ein Verstoß ist und ab wann ein
-    Timeout fällig wird, steht nicht mehr hier (und auch nicht mehr ein zweites Mal im
-    Twitch-Bot), sondern in features/moderation - hier bleibt nur, wie man auf Discord
-    löscht und stummschaltet."""
+    """Carries out the moderation feature's verdict. What counts as an offence and when a
+    timeout is due no longer stands here (nor a second time in the Twitch bot), but in
+    features/moderation - what remains here is only how to delete and time out on Discord."""
     guild = message.guild
     detail_suffix = DISCORD_CONFIG.text("violation.detail", detail=verdict.detail) if verdict.detail else ""
 
@@ -685,7 +682,7 @@ async def handle_discord_violation(message, verdict):
             )
             await _publish_mod_action(message.author.name, verdict.reason, "delete")
         except Exception as e:
-            print(f"⚠️ Nachricht konnte nicht gelöscht werden ({message.id}): {e}")
+            print(f"⚠️ Message could not be deleted ({message.id}): {e}")
 
     if verdict.timeout_seconds:
         try:
@@ -699,13 +696,13 @@ async def handle_discord_violation(message, verdict):
             )
             await _publish_mod_action(message.author.name, verdict.reason, "timeout")
         except Exception as e:
-            print(f"⚠️ Timeout fehlgeschlagen für {message.author} ({message.author.id}): {e}")
+            print(f"⚠️ Timeout failed for {message.author} ({message.author.id}): {e}")
 
 
 async def _on_level_up(message, level):
-    """Der Levelaufstieg kommt vom Level-Feature; welche Rolle es dafür gibt, weiß nur
-    Discord (discord.json "levels"). Genau diese Teilung ist der Grund, warum das Feature
-    kein Rollen-Wissen braucht."""
+    """The level-up comes from the levels feature; which role you get for it is known only to
+    Discord (discord.json "levels"). Exactly that division is why the feature needs no
+    knowledge of roles."""
     if message.platform != NAME or message.raw is None:
         return
     origin = message.raw

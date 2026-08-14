@@ -1,64 +1,62 @@
 # feature.py
-# Die Feature-API - der Vertrag für alles, was Plattformen *benutzen*, statt selbst eine
-# zu sein. Gegenstück zu core/platform.py.
+# The Feature API - the contract for everything that *uses* platforms rather than being one.
+# Counterpart to core/platform.py.
 #
-# Konvention wie bei den Plattformen: jedes Feature lebt in features/<name>/ und stellt in
-# features/<name>/feature.py eine Funktion create_feature() bereit (siehe core/registry.py).
+# Same convention as the platforms: every feature lives in features/<name>/ and provides a
+# create_feature() function in features/<name>/feature.py (see core/registry.py).
 #
-# Ein Feature meldet über `provides` an, was es kann, und wird auf zwei Wegen genutzt:
+# A feature declares what it can do via `provides`, and gets used in two ways:
 #
-#   Push  - es abonniert im setup() die Topics aus core/events.py und schreibt mit, was
-#           passiert. Die Plattform publiziert nur "das ist passiert" und weiß nicht, wer
-#           zuhört. So läuft die gesamte Aufzeichnung: vorher rief jede Plattform ~30 mal
-#           stats.record_* mit voller Signatur auf.
-#   Pull  - die Plattform holt sich ein Feature über seine Fähigkeit und ruft dessen
-#           Methoden auf. Nötig, wo sie eine *Antwort* braucht, bevor sie weitermachen
-#           kann - allen voran die Moderation, die ein Urteil zur Nachricht liefert.
+#   Push  - in setup() it subscribes to the topics from core/events.py and records what
+#           happens. The platform only publishes "this happened" and does not know who is
+#           listening. All recording works this way: previously every platform called
+#           stats.record_* about 30 times, with the full signature each time.
+#   Pull  - the platform looks a feature up by its capability and calls its methods.
+#           Needed wherever it needs an *answer* before it can continue - above all
+#           moderation, which returns a verdict on a message.
 #
-# Zusätzlich bringt ein Feature seine eigenen Befehle mit (commands()). Die Plattformen
-# hängen sie in ihre Befehlsauflösung ein, ohne sie zu kennen - !rank oder !leaderboard
-# funktionieren dadurch überall, ohne dass jemand Twitch- oder Discord-Code dafür
-# schreibt.
+# On top of that a feature brings its own commands (commands()). The platforms wire them
+# into their command resolution without knowing them - which is how !rank or !leaderboard
+# work everywhere without anyone writing Twitch- or Discord-specific code for them.
 
 from abc import ABC
 from dataclasses import dataclass
 
-# Announcement/Field sind die neutrale Darstellungssprache zwischen Plattformen und
-# Features: eine Plattform rendert sie (Embed/Chatzeile), ein Feature erzeugt sie als
-# Befehlsantwort oder Kennzahlenblock. Sie liegen in core/platform.py, weil dort der
-# rendernde Teil des Vertrags steht - hier nur weitergereicht, damit Feature-Code nicht
-# quer in die Platform-API greifen muss.
-from .platform import Announcement, Field, STATUS  # noqa: F401  (bewusster Re-Export)
+# Announcement/Field are the neutral presentation language between platforms and features:
+# a platform renders them (embed/chat line), a feature produces them as a command reply or
+# a block of figures. They live in core/platform.py because that is where the rendering
+# half of the contract sits - passed through here so feature code need not reach sideways
+# into the Platform API.
+from .platform import Announcement, Field, STATUS  # noqa: F401  (deliberate re-export)
 
-# Ebenso re-exportiert: die Fähigkeiten der Plattformen. Ein Feature soll sagen können,
-# *welche Art* Plattform es angeht ("die, die einen Stream meldet"), ohne quer in die
-# Platform-API zu greifen - und ohne einen Dienst beim Namen zu nennen.
+# Re-exported for the same reason: the platform capabilities. A feature should be able to
+# say *which kind* of platform concerns it ("the one that reports a stream") without
+# reaching into the Platform API - and without naming a service.
 from .platform import ANNOUNCE, CHAT, MODERATE, STREAM  # noqa: F401
 
 
-# --- Fähigkeiten -------------------------------------------------------------------
-STORAGE = "storage"        # persistente Ablage für andere Features (siehe features/sql_db)
-RECORDING = "recording"    # schreibt mit, was auf den Plattformen passiert
-MODERATION = "moderation"  # liefert ein Urteil zu einer Nachricht (review)
-STATS = "stats"            # beantwortet Kennzahlen-Abfragen
-LEVELS = "levels"          # XP/Level je User
-SESSIONS = "sessions"      # kennt die laufende Stream-Session (siehe features/stream_sessions)
-CHAT_LOG = "chat_log"      # Mitschnitt des vollen Nachrichtentextes
-RAW_LOG = "raw_log"        # Rohprotokoll der Plattform-Benachrichtigungen
-VARIABLES = "variables"    # füllt die {platzhalter} statischer Befehle (resolve), und kennt
-                           # die Zeitzone des Betreibers (zone) - siehe features/variables
+# --- Capabilities ----------------------------------------------------------------------
+STORAGE = "storage"        # persistent storage for other features (see features/sql_db)
+RECORDING = "recording"    # records what happens on the platforms
+MODERATION = "moderation"  # returns a verdict on a message (review)
+STATS = "stats"            # answers queries about figures
+LEVELS = "levels"          # XP/level per user
+SESSIONS = "sessions"      # knows the running stream session (see features/stream_sessions)
+CHAT_LOG = "chat_log"      # records the full message text
+RAW_LOG = "raw_log"        # raw log of the platform notifications
+VARIABLES = "variables"    # fills the {placeholders} of static commands (resolve), and knows
+                           # the operator's timezone (zone) - see features/variables
 
 
 @dataclass
 class Message:
-    """Eine eingehende Nachricht, plattformneutral - das, was Features von einer
-    Plattform zu sehen bekommen.
+    """An incoming message, platform-neutral - what a feature gets to see of a platform.
 
-    `raw` ist das plattformspezifische Original (discord.Message bzw. der Twitch-
-    Kontext). Features sollten es nur anfassen, wenn sie ohnehin plattformspezifisch
-    handeln; alles Neutrale steht in den Feldern darüber.
+    `raw` is the platform-specific original (discord.Message or the Twitch context).
+    Features should only touch it when they are acting platform-specifically anyway;
+    everything neutral is in the fields above.
 
-    command/arg_text sind gefüllt, wenn die Nachricht als Befehl erkannt wurde."""
+    command/arg_text are filled when the message was recognised as a command."""
     platform: str
     user_id: str = ""
     user_name: str = ""
@@ -72,24 +70,24 @@ class Message:
 
 @dataclass(frozen=True)
 class Verdict:
-    """Das Urteil eines MODERATION-Features zu einer Nachricht. Die Plattform führt es
-    aus - sie weiß als Einzige, wie man auf ihr löscht und stummschaltet -, entscheidet
-    es aber nicht mehr selbst. Auch die Eskalation (ab dem wievielten Verstoß ein
-    Timeout fällig ist) steckt hier drin und nicht mehr doppelt in beiden Plattformen."""
-    reason: str                 # maschinenlesbar, z.B. "banned_word"
-    label: str                  # Klartext für Chat/Log, z.B. "unerlaubtes Wort"
-    detail: str = ""            # optionaler Fund, z.B. das Wort selbst
+    """The verdict of a MODERATION feature on a message. The platform carries it out - it
+    alone knows how to delete and time out on itself - but no longer decides it. The
+    escalation (at which offence a timeout is due) lives here too, rather than twice over
+    in both platforms."""
+    reason: str                 # machine-readable, e.g. "banned_word"
+    label: str                  # plain text for chat/log, e.g. "disallowed word"
+    detail: str = ""            # optional finding, e.g. the word itself
     delete: bool = True
-    timeout_seconds: int = 0    # 0 = kein Timeout
+    timeout_seconds: int = 0    # 0 = no timeout
     violation_count: int = 1
 
 
 @dataclass(frozen=True)
 class Command:
-    """Ein Befehl, den ein Feature mitbringt. Der Handler bekommt eine Message (mit
-    gefülltem command/arg_text) und gibt zurück, was gepostet werden soll:
-    einen String, eine Announcement (für Plattformen, die reichhaltig darstellen
-    können - Discord macht daraus ein Embed, Twitch eine Textzeile) oder None."""
+    """A command contributed by a feature. The handler receives a Message (with command/
+    arg_text filled in) and returns what should be posted: a string, an Announcement (for
+    platforms that can present richly - Discord turns it into an embed, Twitch into a line
+    of text) or None."""
     name: str
     handler: object
     mod_only: bool = False
@@ -97,70 +95,70 @@ class Command:
 
 
 class Feature(ABC):
-    """Basisklasse jedes Features. Nichts davon ist Pflicht: ein Feature, das nur
-    zuhört, überschreibt setup(); eines, das nur Befehle beisteuert, nur commands()."""
+    """Base class of every feature. None of it is mandatory: a feature that only listens
+    overrides setup(); one that only contributes commands, only commands()."""
 
-    #: kurzer, eindeutiger Name ("stats", "moderation", "levels")
+    #: short, unique name ("stats", "moderation", "levels")
     name = ""
 
-    #: Name der Plattform, der dieses Feature gehört - gesetzt von core/registry.py aus dem
-    #: Ordner, in dem es liegt (platforms/discord/features/levels -> "discord"). Leer bei
-    #: den neutralen Features aus features/.
+    #: name of the platform this feature belongs to - set by core/registry.py from the
+    #: folder it lives in (platforms/discord/features/levels -> "discord"). Empty for the
+    #: neutral features in features/.
     #:
-    #: Dafür da, dass ein plattformeigenes Feature den Namen seines Dienstes nirgends
-    #: hinschreiben muss: `if message.platform != self.owner` sagt "nicht meine Plattform"
-    #: und bleibt richtig, wenn der Ordner einmal anders heißt. Ein Feature *muss* nicht
-    #: filtern - das Rohprotokoll etwa hebt bewusst alles auf, was hereinkommt.
+    #: There so that a platform-owned feature need not write the name of its service
+    #: anywhere: `if message.platform != self.owner` says "not my platform" and stays
+    #: correct if the folder is ever renamed. A feature does *not* have to filter - the raw
+    #: log, for instance, deliberately keeps everything that comes in.
     owner = ""
 
-    #: Der Bus, an dem dieses Feature hängt. Setzt core/registry.py vor setup(), damit auch
-    #: Methoden außerhalb von setup() an das Verzeichnis der Plattformen kommen.
+    #: The bus this feature is attached to. core/registry.py sets it before setup(), so
+    #: that methods outside setup() can reach the directory of platforms too.
     bus = None
 
-    #: Fähigkeiten, die eine *Plattform* haben muss, damit ihre Meldungen dieses Feature
-    #: angehen (aus core/platform.py: CHAT, ANNOUNCE, STREAM, MODERATE). Leer = alle.
+    #: Capabilities a *platform* must have for its notifications to concern this feature
+    #: (from core/platform.py: CHAT, ANNOUNCE, STREAM, MODERATE). Empty = all of them.
     #:
-    #: Das ist die Sprache, in der ein neutrales Feature über Plattformen reden darf:
-    #: "die mit einem Stream" statt "Twitch". Sie überlebt einen Dienstwechsel, sie stimmt
-    #: auf einer Installation, die es nie gab, und sie kann nicht still ins Leere zeigen -
-    #: anders als ein Name, der auf der falschen Installation einfach nie zutrifft.
+    #: This is the language in which a neutral feature may talk about platforms: "the ones
+    #: with a stream" instead of "Twitch". It survives a change of service, it is right on
+    #: an installation that never existed, and it cannot quietly point at nothing - unlike
+    #: a name, which on the wrong installation simply never matches.
     platform_capabilities = frozenset()
 
-    #: frozenset der oben definierten Fähigkeiten, die dieses Feature anbietet
+    #: frozenset of the capabilities defined above that this feature offers
     provides = frozenset()
 
-    #: Fähigkeiten, die dieses Feature von *anderen* Features braucht. core/registry.py
-    #: richtet die Features in Abhängigkeitsreihenfolge ein und überspringt eines, dessen
-    #: Bedarf niemand deckt - ein halb funktionierendes Feature ist schlimmer als keines.
+    #: Capabilities this feature needs from *other* features. core/registry.py sets the
+    #: features up in dependency order and skips one whose needs nobody covers - a
+    #: half-working feature is worse than none.
     requires = frozenset()
 
-    #: Die eigene LiveConfig (features/<name>/<name>.json), oder None für ein Feature
-    #: ohne Einstellungen. Wer eine setzt, bekommt zweierlei geschenkt: seine Texte über
-    #: config.text() und die Umbenennung seiner Befehle - der Bus wendet den Abschnitt
-    #: "command_names" beim Einsammeln an, das Feature muss dafür nichts tun (siehe
+    #: This feature's own LiveConfig (features/<name>/<name>.json), or None for a feature
+    #: without settings. Setting one gets you two things for free: your texts via
+    #: config.text() and the renaming of your commands - the bus applies the "command_names"
+    #: section when collecting them, and the feature has to do nothing for it (see
     #: core/events.py:EventBus.commands).
     config = None
 
-    #: Fähigkeiten, die dieses Feature *mitnimmt, wenn es sie gibt*. Sie entscheiden nur
-    #: über die Reihenfolge, nie über das Ob: ist niemand da, der sie anbietet, wird das
-    #: Feature trotzdem eingerichtet und muss im setup() mit None zurechtkommen.
+    #: Capabilities this feature *takes along if they exist*. They only decide the order,
+    #: never the whether: if nobody offers them, the feature is set up anyway and has to
+    #: cope with None in setup().
     #:
-    #: Nötig, weil sonst genau das passiert, was `requires` verhindern soll - nur
-    #: umgekehrt: ohne diese Angabe liefe setup() womöglich, bevor das optionale Feature
-    #: registriert ist, und der Verzeichnis-Blick ginge still ins Leere. Beispiel: die
-    #: Statistik nimmt die Stream-Sessions mit, wenn Twitch mitläuft, zählt aber auch ohne.
+    #: Needed because otherwise exactly what `requires` prevents would happen, only the
+    #: other way round: without this declaration setup() might run before the optional
+    #: feature is registered, and the look into the directory would quietly find nothing.
+    #: Example: stats takes the stream sessions along when Twitch is running, but counts
+    #: without them too.
     optional = frozenset()
 
     def supports(self, capability):
         return capability in self.provides
 
     def platform_scope(self):
-        """Die Namen der Plattformen, die dieses Feature angehen - oder None für "alle".
+        """The names of the platforms that concern this feature - or None for "all".
 
-        Erst die eigene Plattform (bei einem plattformeigenen Feature), sonst die, die die
-        geforderten Fähigkeiten mitbringen. Wird bei jedem Aufruf neu bestimmt: welche
-        Plattformen es gibt, steht erst nach dem Start fest - die Features werden vorher
-        eingerichtet."""
+        First the own platform (for a platform-owned feature), otherwise those bringing the
+        required capabilities. Determined afresh on every call: which platforms exist is
+        only settled after startup - the features are set up before that."""
         if self.owner:
             return {self.owner}
         if not self.platform_capabilities or self.bus is None:
@@ -172,25 +170,24 @@ class Feature(ABC):
         }
 
     def handles(self, platform_name):
-        """Geht mich eine Meldung dieser Plattform etwas an?"""
+        """Does a notification from this platform concern me?"""
         scope = self.platform_scope()
         return scope is None or platform_name in scope
 
     async def setup(self, bus):
-        """Wird einmal beim Start aufgerufen, bevor die Plattformen hochfahren: Tabellen
-        anlegen, Topics abonnieren, Zustand wiederherstellen. Der Bus ist mitgegeben,
-        damit ein Feature hier auch die Features holen kann, die es laut `requires`
-        braucht (siehe features/stats: Ablage über die Fähigkeit STORAGE)."""
+        """Called once at startup, before the platforms come up: create tables, subscribe
+        to topics, restore state. The bus is passed in so a feature can also fetch the
+        features it needs per `requires` here (see features/stats: storage via the STORAGE
+        capability)."""
         return
 
     async def close(self):
-        """Aufräumen beim Herunterfahren. Muss auch dann funktionieren, wenn setup()
-        nie oder nur halb durchgelaufen ist."""
+        """Clean up on shutdown. Must work even when setup() never ran, or only halfway."""
         return
 
     def commands(self):
-        """Befehle dieses Features, als Tupel von Command. Die Plattformen hängen sie
-        in ihre eigene Befehlsauflösung ein."""
+        """This feature's commands, as a tuple of Command. The platforms wire them into
+        their own command resolution."""
         return ()
 
     def __repr__(self):

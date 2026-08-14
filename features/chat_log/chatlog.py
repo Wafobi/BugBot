@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
-"""Das Archiv der mitgeschnittenen Stream-Chats.
+"""The archive of the recorded stream chats.
 
-    python3 chatlog.py                    welche Streams es gibt
-    python3 chatlog.py 7                  den Chat von Stream #7 lesen
-    python3 chatlog.py 7 --suche tallneck nur Zeilen, die das enthalten
-    python3 chatlog.py 7 --html           eine Seite zum Blättern, im Browser zu öffnen
-    python3 chatlog.py --alle --html      jeden Stream als eigene Seite, plus Übersicht
+Called from the repository root:
 
-Der Bot schreibt den Wortlaut mit (features/chat_log), gibt ihn aber nirgends wieder
-heraus - er beantwortet nur zwei Abfragen für sich selbst. Ohne dieses Skript käme man an
-das Archiv nur mit einer SQL-Abfrage von Hand, und das ist keine Antwort auf "was wurde
-letzten Dienstag geschrieben".
+    python3 features/chat_log/chatlog.py                      which streams exist
+    python3 features/chat_log/chatlog.py 7                    read the chat of stream #7
+    python3 features/chat_log/chatlog.py 7 --search tallneck  only lines containing that
+    python3 features/chat_log/chatlog.py 7 --html             a page to browse, opened in a browser
+    python3 features/chat_log/chatlog.py --all --html         every stream as its own page, plus an index
 
-Zwei Dinge nimmt es einem ab, die man sonst jedes Mal falsch macht:
+The bot records the wording (features/chat_log) but hands it out nowhere - it answers only
+two queries for itself. Without this script the archive would be reachable only through a
+hand-written SQL query, and that is no answer to "what was written last Tuesday".
 
-  * Die Datenbank speichert UTC (SQLite datetime('now')). Hier stehen die Zeiten in der
-    Zeitzone aus features/variables/variables.json - derselben, in der der Bot auch {time}
-    ausgibt. Ein Stream, der laut Datenbank um 11:03 begann, war um 13:03.
-  * Gelesen wird ausdrücklich nur (mode=ro). Das Skript läuft gefahrlos, während der Bot
-    weiterschreibt - auch mitten im Stream.
+It takes two things off your hands that otherwise get done wrong every time:
 
-Mitgeschnitten wird nur während eines Streams; außerhalb gibt es keine Session, und dann
-steht auch nichts in der Tabelle (siehe features/chat_log/chat_log.json, _live_only).
+  * The database stores UTC (SQLite datetime('now')). Here the times are in the timezone
+    from features/variables/variables.json - the same one the bot prints {time} in. A stream
+    that began at 11:03 according to the database began at 13:03.
+  * Reading is explicitly read-only (mode=ro). The script runs safely while the bot keeps
+    writing - mid-stream too.
+
+Recording only happens during a stream; outside of one there is no session, and then there
+is nothing in the table either (see features/chat_log/chat_log.json, _live_only).
 """
 
 import argparse
@@ -35,14 +36,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-ROOT = Path(__file__).resolve().parent
+# features/chat_log/ -> repository root. The paths below are written from there, because
+# they point at other features' files; so they do not follow the script when it moves.
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def database_path():
-    """Dieselbe Reihenfolge wie in features/sql_db/feature.py: BUGBOT_DB, dann db_path aus
-    sql_db.json, dann bugbot.db neben dem Code. Hier noch einmal und nicht importiert,
-    damit das Skript ohne die Abhängigkeiten des Bots läuft - man will ein Archiv auch auf
-    einem Rechner lesen können, auf dem discord.py nicht installiert ist."""
+    """The same order as in features/sql_db/feature.py: BUGBOT_DB, then db_path from
+    sql_db.json, then bugbot.db next to the code. Repeated here rather than imported, so the
+    script runs without the bot's dependencies - you want to be able to read an archive on a
+    machine where discord.py is not installed."""
     from_env = os.environ.get("BUGBOT_DB")
     if from_env:
         return Path(from_env)
@@ -50,13 +53,13 @@ def database_path():
         configured = json.loads((ROOT / "features/sql_db/sql_db.json").read_text("utf-8")).get("db_path")
     except (OSError, json.JSONDecodeError):
         configured = None
-    return Path(configured) if configured else ROOT / "bugbot.db"
+    return Path(configured) if configured else ROOT / "features/sql_db/bugbot.db"
 
 
 def apply_locale():
-    """Dieselbe Sprache wie im Chat: "locale" aus variables.json bestimmt, ob hier
-    "Sonntag" oder "Sunday" steht. Ohne das richtete sich das Archiv nach dem Rechner, auf
-    dem man es gerade erzeugt - derselbe Stream sähe je nach Login anders aus."""
+    """The same language as in chat: "locale" from variables.json decides whether this
+    reads "Sonntag" or "Sunday". Without it the archive would follow the machine it is
+    generated on - the same stream would look different depending on the login."""
     name = _setting("locale")
     if not name:
         return
@@ -66,7 +69,7 @@ def apply_locale():
             return
         except locale.Error:
             continue
-    print(f"⚠️ Locale {name!r} ist hier nicht verfügbar, Wochentage bleiben englisch.", file=sys.stderr)
+    print(f"⚠️ Locale {name!r} is not available here, weekdays stay English.", file=sys.stderr)
 
 
 def _setting(key):
@@ -77,20 +80,20 @@ def _setting(key):
 
 
 def local_zone():
-    """Die Zeitzone aus variables.json - die, in der der Bot auch {time} ausgibt. Fehlt sie
-    oder ist sie unbekannt, bleibt es bei der des Rechners; ein Archiv soll an einer
-    kaputten Zeitzone nicht scheitern."""
+    """The timezone from variables.json - the one the bot prints {time} in as well. If it is
+    missing or unknown, the machine's own is used; an archive should not fail on a broken
+    timezone."""
     name = _setting("timezone")
     if name:
         try:
             return ZoneInfo(str(name))
         except (ZoneInfoNotFoundError, ValueError, OSError):
-            print(f"⚠️ Zeitzone {name!r} unbekannt, nehme die dieses Rechners.", file=sys.stderr)
+            print(f"⚠️ Timezone {name!r} unknown, using this machine's.", file=sys.stderr)
     return None
 
 
 def to_local(stamp, zone):
-    """"2026-08-09 11:03:49" (UTC, wie SQLite es schreibt) -> datetime in `zone`."""
+    """"2026-08-09 11:03:49" (UTC, as SQLite writes it) -> datetime in `zone`."""
     try:
         moment = datetime.fromisoformat(str(stamp)).replace(tzinfo=timezone.utc)
     except ValueError:
@@ -100,13 +103,13 @@ def to_local(stamp, zone):
 
 def connect(path):
     if not path.exists():
-        sys.exit(f"❌ Keine Datenbank unter {path} - stimmt der Pfad (BUGBOT_DB, sql_db.json)?")
+        sys.exit(f"❌ No database at {path} - is the path right (BUGBOT_DB, sql_db.json)?")
     connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
     try:
         connection.execute("SELECT 1 FROM chat_log LIMIT 1")
     except sqlite3.OperationalError:
-        sys.exit("❌ In dieser Datenbank gibt es keine Tabelle chat_log - lief das Feature 'chat_log' je?")
+        sys.exit("❌ This database has no chat_log table - did the 'chat_log' feature ever run?")
     return connection
 
 
@@ -135,27 +138,28 @@ def messages(connection, session_id, needle=None):
 def describe(row, zone):
     started = to_local(row["started_at"], zone)
     when = started.strftime("%a %d.%m.%Y %H:%M") if started else str(row["started_at"])
-    what = row["game_name"] or row["title"] or "ohne Kategorie"
+    what = row["game_name"] or row["title"] or "no category"
     return when, what
 
 
-# --- Ausgaben --------------------------------------------------------------------------
+# --- Output ----------------------------------------------------------------------------
 
 def print_sessions(rows, zone):
     if not rows:
-        print("Noch kein Stream aufgezeichnet.")
+        print("No stream recorded yet.")
         return
-    print(f"{'#':>4}  {'Wann':<22} {'Was':<28} {'Zeilen':>7} {'Chatter':>8}")
+    print(f"{'#':>4}  {'When':<22} {'What':<28} {'Lines':>7} {'Chatters':>8}")
     for row in rows:
         when, what = describe(row, zone)
-        live = "" if row["ended_at"] else "  (läuft)"
+        live = "" if row["ended_at"] else "  (running)"
         print(f"{row['id']:>4}  {when:<22} {what[:28]:<28} {row['messages']:>7} {row['chatters']:>8}{live}")
-    print(f"\nEinen davon lesen: python3 {Path(__file__).name} <#>")
+    # The path from the repository root, not just the file name: that is where you call it.
+    print(f"\nRead one of them: python3 {Path(__file__).resolve().relative_to(ROOT)} <#>")
 
 
 def print_messages(rows, zone):
     if not rows:
-        print("Nichts gefunden.")
+        print("Nothing found.")
         return
     day = None
     for row in rows:
@@ -168,9 +172,9 @@ def print_messages(rows, zone):
 
 
 def write_html(path, session, rows, zone):
-    """Eine Seite je Stream, ohne Fremdinhalte: kein Skript von außen, keine Schrift von
-    außen, nichts, was beim Öffnen ins Netz greift. Ein Archiv soll in fünf Jahren noch
-    genauso aussehen und auch offline funktionieren."""
+    """One page per stream, without foreign content: no script from outside, no font from
+    outside, nothing that reaches into the network when opened. An archive should still look
+    the same in five years and work offline too."""
     when, what = describe(session, zone)
     title = f"Stream #{session['id']} - {when}"
     lines, day = [], None
@@ -186,7 +190,7 @@ def write_html(path, session, rows, zone):
             f'<span>{html.escape(row["message"])}</span></p>'
         )
     path.write_text(f"""<!doctype html>
-<html lang="de"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>
 <style>
@@ -207,8 +211,8 @@ def write_html(path, session, rows, zone):
   @media (max-width: 34rem) {{ p {{ grid-template-columns: 4.6rem 1fr; }} b {{ grid-column: 2; }}
                                span {{ grid-column: 2; }} }}
 </style></head><body>
-<header><h1>{html.escape(title)}</h1><em>{html.escape(what)} &middot; {len(rows)} Zeilen</em></header>
-<input id="q" type="search" placeholder="Filtern…" autocomplete="off">
+<header><h1>{html.escape(title)}</h1><em>{html.escape(what)} &middot; {len(rows)} lines</em></header>
+<input id="q" type="search" placeholder="Filter…" autocomplete="off">
 <main>{chr(10).join(lines)}</main>
 <script>
   const rows = [...document.querySelectorAll('main p')];
@@ -226,13 +230,13 @@ def write_index(path, written, zone):
     items = "".join(
         f'<li><a href="{html.escape(file.name)}">Stream #{session["id"]} &middot; '
         f'{html.escape(describe(session, zone)[0])}</a> '
-        f'<em>{html.escape(describe(session, zone)[1])} &middot; {session["messages"]} Zeilen</em></li>'
+        f'<em>{html.escape(describe(session, zone)[1])} &middot; {session["messages"]} lines</em></li>'
         for session, file in written
     )
     path.write_text(f"""<!doctype html>
-<html lang="de"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chat-Archiv</title>
+<title>Chat archive</title>
 <style>
   :root {{ color-scheme: light dark; }}
   body {{ font: 15px/1.7 system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }}
@@ -241,22 +245,22 @@ def write_index(path, written, zone):
   li {{ padding: .35rem 0; border-bottom: 1px solid #8883; }}
   em {{ opacity: .6; font-style: normal; }}
 </style></head><body>
-<h1>Chat-Archiv</h1><ul>{items}</ul></body></html>
+<h1>Chat archive</h1><ul>{items}</ul></body></html>
 """, encoding="utf-8")
     return path
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Archiv der mitgeschnittenen Stream-Chats.",
-        epilog="Ohne Argumente: die Liste der aufgezeichneten Streams.",
+        description="Archive of the recorded stream chats.",
+        epilog="Without arguments: the list of recorded streams.",
     )
-    parser.add_argument("session", nargs="?", type=int, help="Nummer aus der Liste")
-    parser.add_argument("--alle", action="store_true", help="alle Streams (nur mit --html sinnvoll)")
-    parser.add_argument("--suche", metavar="TEXT", help="nur Zeilen mit diesem Text (auch im Namen)")
-    parser.add_argument("--html", action="store_true", help="als Seite(n) schreiben statt auszugeben")
-    parser.add_argument("--out", metavar="ORDNER", default="chat-archiv", type=Path,
-                        help="wohin die Seiten sollen (Vorgabe: chat-archiv/)")
+    parser.add_argument("session", nargs="?", type=int, help="number from the list")
+    parser.add_argument("--all", action="store_true", help="all streams (only useful with --html)")
+    parser.add_argument("--search", metavar="TEXT", help="only lines containing this text (name included)")
+    parser.add_argument("--html", action="store_true", help="write page(s) instead of printing")
+    parser.add_argument("--out", metavar="FOLDER", default="chat-archive", type=Path,
+                        help="where the pages should go (default: chat-archive/)")
     args = parser.parse_args()
 
     apply_locale()
@@ -264,13 +268,13 @@ def main():
     connection = connect(database_path())
     available = sessions(connection)
 
-    if not args.alle and args.session is None:
+    if not args.all and args.session is None:
         print_sessions(available, zone)
         return 0
 
-    wanted = available if args.alle else [row for row in available if row["id"] == args.session]
+    wanted = available if args.all else [row for row in available if row["id"] == args.session]
     if not wanted:
-        print(f"❌ Kein Stream #{args.session}. Vorhanden:", file=sys.stderr)
+        print(f"❌ No stream #{args.session}. Available:", file=sys.stderr)
         print_sessions(available, zone)
         return 1
 
@@ -278,23 +282,23 @@ def main():
         for session in wanted:
             when, what = describe(session, zone)
             print(f"=== Stream #{session['id']} - {when} - {what} ===")
-            print_messages(messages(connection, session["id"], args.suche), zone)
+            print_messages(messages(connection, session["id"], args.search), zone)
         return 0
 
     args.out.mkdir(parents=True, exist_ok=True)
     written = []
     for session in wanted:
-        rows = messages(connection, session["id"], args.suche)
+        rows = messages(connection, session["id"], args.search)
         if not rows:
             continue
         file = write_html(args.out / f"stream-{session['id']:04d}.html", session, rows, zone)
         written.append((session, file))
-        print(f"📄 {file}  ({len(rows)} Zeilen)")
+        print(f"📄 {file}  ({len(rows)} lines)")
     if not written:
-        print("Nichts zu schreiben - keine mitgeschnittenen Zeilen.")
+        print("Nothing to write - no recorded lines.")
         return 0
     index = write_index(args.out / "index.html", written, zone)
-    print(f"\n✅ Archiv: {index}")
+    print(f"\n✅ Archive: {index}")
     return 0
 
 

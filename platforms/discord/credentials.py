@@ -1,17 +1,17 @@
-"""Prüft die Discord-Zugangsdaten - und ob der Bot auf dem Server das vorfindet, was in
-discord.json steht.
+"""Checks the Discord credentials - and whether the bot finds on the server what
+discord.json says.
 
-Aufgerufen von check_credentials.py im Projektstamm. Der Vertrag ist eine Funktion
-check(), die (Stufe, Meldung)-Paare liefert; Stufen sind "ok", "warn", "fail", "skip"
-und "detail" (Fortsetzungszeile zur vorherigen Meldung).
+Called by check_credentials.py in the project root. The contract is a check() function
+yielding (level, message) pairs; levels are "ok", "warn", "fail", "skip" and "detail"
+(continuation line for the previous message).
 
-Die Namensprüfung ist hier mit drin, weil sie denselben Fehler abfängt wie ein falscher
-Token, nur leiser: Rollen und Kanäle werden *über ihren Namen* gesucht. Steht in
-roles.moderator etwas, das es auf dem Server nicht gibt, ist dort niemand Moderator, und
-die Mod-Befehle tun still gar nichts.
+The name check is in here because it catches the same failure as a wrong token, only more
+quietly: roles and channels are looked up *by their name*. If roles.moderator names something
+that does not exist on the server, nobody there is a moderator, and the mod commands silently
+do nothing.
 
-Liest die Umgebung selbst statt config.py zu importieren - das wirft bei fehlendem Token,
-also genau in dem Fall, den dieses Modul melden soll.
+Reads the environment itself instead of importing config.py - that one raises on a missing
+token, i.e. in exactly the case this module is supposed to report.
 """
 
 import json
@@ -24,10 +24,10 @@ API = "https://discord.com/api/v10"
 TIMEOUT = 10
 CONFIG_PATH = Path(__file__).parent / "discord.json"
 
-# Application-Flags, mit denen Discord meldet, welche privilegierten Intents im
-# Entwicklerportal eingeschaltet sind. Es gibt sie doppelt: die "LIMITED"-Fassung heißt
-# "eingeschaltet, aber die App ist dafür nicht geprüft" - unter 100 Servern funktioniert
-# sie trotzdem. Für "ist der Haken gesetzt?" zählen deshalb beide.
+# Application flags by which Discord reports which privileged intents are switched on in the
+# developer portal. They exist twice over: the "LIMITED" variant means "switched on, but the
+# app is not verified for it" - below 100 servers it works regardless. So for "is the box
+# ticked?" both count.
 INTENT_FLAGS = {
     "Server Members": (1 << 14) | (1 << 15),
     "Message Content": (1 << 18) | (1 << 19),
@@ -44,8 +44,8 @@ def _get(path, token, **params):
 
 
 def _configured_names():
-    """(Rollennamen, Kanalnamen) aus discord.json - also das, was auf dem Server
-    existieren muss. Leere Namen sind Absicht: so schaltet man eine Funktion ab."""
+    """(role names, channel names) from discord.json - i.e. what has to exist on the server.
+    Empty names are deliberate: that is how you switch a function off."""
     try:
         data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -65,27 +65,27 @@ def _configured_names():
 def check():
     token = os.environ.get("DISCORD_TOKEN", "").strip()
     if not token:
-        yield "skip", "DISCORD_TOKEN ist nicht gesetzt - die Plattform würde nicht laden."
+        yield "skip", "DISCORD_TOKEN is not set - the platform would not load."
         return
 
-    # --- Der Token ------------------------------------------------------------------
+    # --- The token ------------------------------------------------------------------
     try:
         me = _get("/users/@me", token)
     except requests.RequestException as e:
-        yield "fail", f"Discord nicht erreichbar: {e}"
+        yield "fail", f"Discord not reachable: {e}"
         return
 
     if me.status_code == 401:
-        yield "fail", "DISCORD_TOKEN wird abgelehnt - im Entwicklerportal neu erzeugen."
+        yield "fail", "DISCORD_TOKEN is rejected - generate a new one in the developer portal."
         return
     if me.status_code != 200:
-        yield "fail", f"/users/@me antwortet {me.status_code}: {me.text[:120]}"
+        yield "fail", f"/users/@me answers {me.status_code}: {me.text[:120]}"
         return
 
     user = me.json()
-    yield "ok", f"Token gültig, Bot ist '{user.get('username')}' (id {user.get('id')})."
+    yield "ok", f"Token valid, the bot is '{user.get('username')}' (id {user.get('id')})."
 
-    # --- Die privilegierten Intents --------------------------------------------------
+    # --- The privileged intents -------------------------------------------------------
     try:
         app = _get("/applications/@me", token)
         flags = app.json().get("flags", 0) if app.status_code == 200 else None
@@ -93,30 +93,30 @@ def check():
         flags = None
 
     if flags is None:
-        yield "warn", "Intents nicht prüfbar - /applications/@me antwortet nicht."
+        yield "warn", "Intents not checkable - /applications/@me does not answer."
     else:
         for label, mask in INTENT_FLAGS.items():
             if flags & mask:
-                yield "ok", f"Intent '{label}' ist eingeschaltet."
+                yield "ok", f"Intent '{label}' is switched on."
             else:
-                yield "fail", (f"Intent '{label}' ist AUS - im Entwicklerportal unter Bot "
-                               f"einschalten, sonst sieht der Bot nichts.")
+                yield "fail", (f"Intent '{label}' is OFF - switch it on in the developer "
+                               f"portal under Bot, otherwise the bot sees nothing.")
 
-    # --- Die Server -------------------------------------------------------------------
+    # --- The servers ------------------------------------------------------------------
     try:
         guilds_response = _get("/users/@me/guilds", token)
         guilds = guilds_response.json() if guilds_response.status_code == 200 else []
     except (requests.RequestException, ValueError) as e:
-        yield "warn", f"Server nicht abfragbar: {e}"
+        yield "warn", f"Servers not queryable: {e}"
         return
 
     if not guilds:
-        yield "fail", ("der Bot ist auf keinem Server - über OAuth2 -> URL Generator "
-                       "einladen (Scope 'bot').")
+        yield "fail", ("the bot is on no server - invite it via OAuth2 -> URL Generator "
+                       "(scope 'bot').")
         return
 
     wanted_roles, wanted_channels = _configured_names()
-    yield "ok", f"auf {len(guilds)} Server(n): {', '.join(g['name'] for g in guilds)}"
+    yield "ok", f"on {len(guilds)} server(s): {', '.join(g['name'] for g in guilds)}"
 
     for guild in guilds:
         guild_id, guild_name = guild["id"], guild["name"]
@@ -124,11 +124,11 @@ def check():
             roles = _get(f"/guilds/{guild_id}/roles", token)
             channels = _get(f"/guilds/{guild_id}/channels", token)
         except requests.RequestException as e:
-            yield "warn", f"'{guild_name}': nicht abfragbar ({e})"
+            yield "warn", f"'{guild_name}': not queryable ({e})"
             continue
         if roles.status_code != 200 or channels.status_code != 200:
-            yield "warn", (f"'{guild_name}': Rollen/Kanäle nicht lesbar - fehlt dem Bot "
-                           f"die Berechtigung?")
+            yield "warn", (f"'{guild_name}': roles/channels not readable - is the bot "
+                           f"missing the permission?")
             continue
 
         role_names = {r["name"] for r in roles.json()}
@@ -137,12 +137,12 @@ def check():
         missing_channels = sorted(wanted_channels - channel_names)
 
         if not missing_roles and not missing_channels:
-            yield "ok", f"'{guild_name}': alle Rollen und Kanäle aus discord.json vorhanden."
+            yield "ok", f"'{guild_name}': every role and channel from discord.json is present."
             continue
 
-        yield "warn", f"'{guild_name}': discord.json nennt Namen, die es dort nicht gibt -"
+        yield "warn", f"'{guild_name}': discord.json names things that do not exist there -"
         for name in missing_roles:
-            yield "detail", f"Rolle fehlt: {name}"
+            yield "detail", f"role missing: {name}"
         for name in missing_channels:
-            yield "detail", f"Kanal fehlt: {name}"
-        yield "detail", "solange das so ist, greift die betroffene Funktion still gar nicht."
+            yield "detail", f"channel missing: {name}"
+        yield "detail", "as long as that is so, the affected function silently does nothing."

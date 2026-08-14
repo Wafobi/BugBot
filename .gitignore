@@ -1,8 +1,8 @@
 .env
 bugbot.db
 
-# Ausgabe von chatlog.py - Zuschauer-Chat gehört nicht ins Repository
-chat-archiv/
+# Output of chatlog.py - viewer chat does not belong in the repository
+chat-archive/
 __pycache__/
 *.pyc
 

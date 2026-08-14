@@ -1,21 +1,19 @@
-"""Prüft die Twitch-Zugangsdaten - gegen Twitch selbst, nicht nur auf Vorhandensein.
+"""Checks the Twitch credentials - against Twitch itself, not merely for their presence.
 
-Aufgerufen von check_credentials.py im Projektstamm. Der Vertrag ist eine Funktion
-check(), die (Stufe, Meldung)-Paare liefert; Stufen sind "ok", "warn", "fail", "skip"
-und "detail" (Fortsetzungszeile zur vorherigen Meldung).
+Called by check_credentials.py in the project root. The contract is a check() function
+yielding (level, message) pairs; levels are "ok", "warn", "fail", "skip" and "detail"
+(continuation line for the previous message).
 
-Liest die Umgebung bewusst selbst statt config.py zu importieren: das dortige
-os.environ[...] wirft, sobald eine Variable fehlt - also genau in dem Fall, den dieses
-Modul diagnostizieren soll. Ein Zugangsdaten-Test, der an fehlenden Zugangsdaten
-abstürzt, wäre nutzlos.
+Deliberately reads the environment itself instead of importing config.py: the os.environ[...]
+in there raises as soon as a variable is missing - i.e. in exactly the case this module is
+supposed to diagnose. A credentials test that crashes on missing credentials would be useless.
 
-Die drei Teile hängen absichtlich nicht aneinander: ein toter User-Token soll nicht
-verhindern, dass App-Zugangsdaten und Kanal geprüft werden - gerade dann will man ja
-wissen, ob get_token.py überhaupt Aussicht auf Erfolg hat. Für die Kanalprüfung reicht
-notfalls der App-Token.
+The three parts deliberately do not hang together: a dead user token should not prevent the
+app credentials and the channel from being checked - that is precisely when you want to know
+whether get_token.py stands any chance at all. For the channel check the app token will do.
 
-Was hier gefragt wird, kostet nichts und ändert nichts: /oauth2/validate, ein App-Token
-(der einfach verfällt), zwei lesende Helix-Aufrufe.
+What is asked here costs nothing and changes nothing: /oauth2/validate, one app token (which
+simply expires), two reading Helix calls.
 """
 
 import os
@@ -31,7 +29,7 @@ TIMEOUT = 10
 
 
 def _duration(seconds):
-    """Restlaufzeit in etwas, das man lesen kann."""
+    """Remaining lifetime in something a human can read."""
     if seconds >= 86400:
         return f"{seconds // 86400}d {seconds % 86400 // 3600}h"
     if seconds >= 3600:
@@ -40,9 +38,9 @@ def _duration(seconds):
 
 
 def _check_app(client_id, client_secret, out):
-    """Sind CLIENT_ID/SECRET ein gültiges Paar? Gibt den App-Token zurück, den der
-    Versuch nebenbei abwirft - mit ihm lässt sich der Kanal auch dann nachschlagen, wenn
-    der User-Token hin ist. `out` sammelt die Meldungen."""
+    """Are CLIENT_ID/SECRET a valid pair? Returns the app token the attempt yields along the
+    way - with it the channel can be looked up even when the user token is dead. `out`
+    collects the messages."""
     if not (client_id and client_secret):
         return None
     try:
@@ -52,11 +50,11 @@ def _check_app(client_id, client_secret, out):
             "grant_type": "client_credentials",
         })
     except requests.RequestException as e:
-        out.append(("warn", f"App-Zugangsdaten nicht prüfbar: {e}"))
+        out.append(("warn", f"app credentials not checkable: {e}"))
         return None
 
     if response.status_code == 200:
-        out.append(("ok", "TWITCH_CLIENT_ID/SECRET sind ein gültiges App-Paar."))
+        out.append(("ok", "TWITCH_CLIENT_ID/SECRET are a valid app pair."))
         return response.json().get("access_token")
     try:
         detail = response.json().get("message", "")
@@ -68,18 +66,18 @@ def _check_app(client_id, client_secret, out):
 
 
 def _validate(access_token, out):
-    """Der User-Token bei /oauth2/validate. None, wenn er nicht (mehr) gilt."""
+    """The user token at /oauth2/validate. None when it is not (or no longer) valid."""
     try:
         response = requests.get(
             VALIDATE_URL, headers={"Authorization": f"OAuth {access_token}"}, timeout=TIMEOUT,
         )
     except requests.RequestException as e:
-        out.append(("fail", f"Twitch nicht erreichbar: {e}"))
+        out.append(("fail", f"Twitch not reachable: {e}"))
         return None
 
     if response.status_code == 401:
-        out.append(("fail", "TWITCH_CHAT_ACCESS_TOKEN ist abgelaufen oder ungültig - "
-                            "neu holen mit: python3 -m platforms.twitch.get_token"))
+        out.append(("fail", "TWITCH_CHAT_ACCESS_TOKEN has expired or is invalid - "
+                            "fetch a new one with: python3 -m platforms.twitch.get_token"))
         return None
     if response.status_code != 200:
         out.append(("fail", f"/oauth2/validate antwortet {response.status_code}: "
@@ -98,7 +96,7 @@ def check():
     chat_client_secret = os.environ.get("TWITCH_CHAT_CLIENT_SECRET", "").strip()
 
     if not any((channel, client_id, access_token)):
-        yield "skip", "keine Twitch-Variablen gesetzt - die Plattform würde nicht laden."
+        yield "skip", "no Twitch variables set - the platform would not load."
         return
 
     missing = [
@@ -110,7 +108,7 @@ def check():
         ) if not value
     ]
     if missing:
-        yield "fail", f"fehlt in der .env: {', '.join(missing)}"
+        yield "fail", f"missing from the .env: {', '.join(missing)}"
 
     # --- Die eigene App --------------------------------------------------------------
     messages = []
@@ -135,36 +133,35 @@ def check():
 
 def _report_token(info, client_id, client_secret, chat_client_id, chat_client_secret,
                   refresh_token):
-    """Alles, was am gültigen User-Token hängt: Besitzer, Laufzeit, Erneuerbarkeit,
-    Scopes."""
+    """Everything hanging on a valid user token: owner, lifetime, renewability, scopes."""
     login = (info.get("login") or "").lower()
     token_scopes = set(info.get("scopes") or [])
     expires_in = info.get("expires_in", 0)
     token_client_id = info.get("client_id", "")
 
-    yield "ok", f"Chat-Token gültig, gehört zu '{login}'."
+    yield "ok", f"Chat token valid, belongs to '{login}'."
 
     if chat_client_id and token_client_id != chat_client_id:
-        yield "warn", (f"TWITCH_CHAT_CLIENT_ID ({chat_client_id}) ist nicht die App, die den "
-                       f"Token ausgestellt hat ({token_client_id}) - der Refresh wird scheitern.")
+        yield "warn", (f"TWITCH_CHAT_CLIENT_ID ({chat_client_id}) is not the app that issued "
+                       f"the token ({token_client_id}) - the refresh will fail.")
 
     own_app = token_client_id == client_id
     effective_secret = chat_client_secret or (client_secret if own_app else "")
 
     if expires_in == 0:
-        yield "ok", "Token läuft nicht ab (expires_in: 0) - ein Refresh ist nie nötig."
+        yield "ok", "Token does not expire (expires_in: 0) - a refresh is never needed."
     else:
         yield ("ok" if refresh_token and effective_secret else "fail",
-               f"Token läuft in {_duration(expires_in)} ab.")
+               f"Token expires in {_duration(expires_in)}.")
         if not refresh_token:
-            yield "fail", "kein TWITCH_CHAT_REFRESH_TOKEN - der Token kann nicht erneuert werden."
+            yield "fail", "no TWITCH_CHAT_REFRESH_TOKEN - the token cannot be renewed."
         elif not effective_secret:
-            yield "fail", ("der Token stammt aus einer fremden App und TWITCH_CHAT_CLIENT_SECRET "
-                           "ist leer - er kann nie erneuert werden. Siehe docs/twitch.md#tokens")
+            yield "fail", ("the token comes from a foreign app and TWITCH_CHAT_CLIENT_SECRET "
+                           "is empty - it can never be renewed. See docs/twitch.md#tokens")
 
     if not own_app:
-        yield "warn", (f"der Chat-Token stammt nicht aus deiner eigenen App "
-                       f"({token_client_id} statt {client_id}).")
+        yield "warn", (f"the chat token does not come from your own app "
+                       f"({token_client_id} instead of {client_id}).")
 
     required = set(twitch_scopes.REQUIRED)
     lacking = sorted(required - token_scopes)
@@ -174,17 +171,17 @@ def _report_token(info, client_id, client_secret, chat_client_id, chat_client_se
             yield "detail", f"{scope} ({twitch_scopes.CAPABILITIES.get(scope, '?')})"
         yield "detail", "neu holen mit: python3 -m platforms.twitch.get_token"
     else:
-        yield "ok", f"alle {len(required)} benötigten Scopes vorhanden."
+        yield "ok", f"all {len(required)} required scopes present."
 
     extra = sorted(token_scopes - required)
     if extra:
-        yield "warn", (f"{len(extra)} Scope(s) mehr als nötig - jeder ungenutzte ist nur "
-                       f"zusätzlicher Schaden, falls der Token abhandenkommt: {', '.join(extra)}")
+        yield "warn", (f"{len(extra)} scope(s) more than needed - every unused one is only "
+                       f"additional damage should the token go astray: {', '.join(extra)}")
 
 
 def _report_channel(channel, info, access_token, app_token, client_id):
-    """Gibt es den Kanal, und darf der Token-Account dort moderieren? Der Kanal lässt
-    sich auch mit dem App-Token nachschlagen; der Moderator-Status nicht."""
+    """Does the channel exist, and may the token's account moderate there? The channel can be
+    looked up with the app token too; the moderator status cannot."""
     if not channel:
         return
 
@@ -201,42 +198,42 @@ def _report_channel(channel, info, access_token, app_token, client_id):
                              params={"login": channel}, timeout=TIMEOUT)
         data = users.json().get("data", []) if users.status_code == 200 else []
     except (requests.RequestException, ValueError) as e:
-        yield "warn", f"Kanal nicht prüfbar: {e}"
+        yield "warn", f"channel not checkable: {e}"
         return
 
     if not data:
-        yield "fail", f"den Kanal '{channel}' gibt es auf Twitch nicht."
+        yield "fail", f"the channel '{channel}' does not exist on Twitch."
         return
     broadcaster_id = data[0]["id"]
     yield "ok", f"Kanal '{channel}' gefunden (id {broadcaster_id})."
 
     if info is None:
-        yield "detail", "Moderator-Status erst prüfbar, wenn der Chat-Token wieder gilt."
+        yield "detail", "moderator status only checkable once the chat token is valid again."
         return
 
     login = (info.get("login") or "").lower()
     if login == channel:
-        yield "ok", ("der Token gehört dem Broadcaster selbst - Moderation und "
-                     "Werbepausen-Meldungen (channel:read:ads) funktionieren.")
+        yield "ok", ("the token belongs to the broadcaster themselves - moderation and "
+                     "ad-break notices (channel:read:ads) work.")
         return
 
-    # Ein fremder Account: ist er im Kanal überhaupt Moderator? /chat/settings verrät es,
-    # ohne etwas zu ändern - es antwortet nur dann mit den Moderator-Feldern, wenn
-    # moderator_id wirklich Moderator ist, und sonst mit 401.
-    yield "warn", ("der Token gehört nicht dem Broadcaster - Werbepausen-Meldungen bleiben "
-                   "aus, channel:read:ads gibt Twitch nur dem eigenen Account.")
+    # A foreign account: is it a moderator in the channel at all? /chat/settings reveals it
+    # without changing anything - it answers with the moderator fields only when moderator_id
+    # really is a moderator, and with 401 otherwise.
+    yield "warn", ("the token does not belong to the broadcaster - ad-break notices will not "
+                   "appear; Twitch grants channel:read:ads only to your own account.")
     try:
         settings = requests.get(f"{HELIX}/chat/settings", headers=headers, timeout=TIMEOUT,
                                 params={"broadcaster_id": broadcaster_id,
                                         "moderator_id": info.get("user_id", "")})
     except requests.RequestException as e:
-        yield "warn", f"Moderator-Status nicht prüfbar: {e}"
+        yield "warn", f"moderator status not checkable: {e}"
         return
 
     if settings.status_code == 200:
-        yield "ok", f"'{login}' ist Moderator in '{channel}' - Löschen und Timeouts gehen."
+        yield "ok", f"'{login}' is a moderator in '{channel}' - deleting and timeouts work."
     elif settings.status_code == 401:
-        yield "fail", (f"'{login}' ist in '{channel}' kein Moderator - Löschen und Timeouts "
-                       f"scheitern, egal welche Scopes der Token hat.")
+        yield "fail", (f"'{login}' is not a moderator in '{channel}' - deleting and timeouts "
+                       f"will fail, whatever scopes the token has.")
     else:
         yield "warn", f"Moderator-Status unklar (HTTP {settings.status_code})."

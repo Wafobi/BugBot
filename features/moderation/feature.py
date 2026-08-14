@@ -1,15 +1,13 @@
 # feature.py
-# Moderation als Feature (Fähigkeit MODERATION).
+# Moderation as a feature (capability MODERATION).
 #
-# Das einzige Feature, das per Pull genutzt wird: die Plattform braucht ein Urteil,
-# bevor sie mit der Nachricht weitermachen kann, ein "melde und vergiss" über den Bus
-# reicht dafür nicht.
+# The only feature used by pull: the platform needs a verdict before it can carry on with
+# the message, and a "report and forget" over the bus is not enough for that.
 #
-# Neu gegenüber core/moderation.py: das Feature entscheidet die *Konsequenz*, nicht nur
-# den Treffer. Die Eskalationslogik (ab dem wievielten Verstoß innerhalb welchen
-# Zeitfensters ein Timeout fällig wird) stand vorher wortgleich in beiden Plattformen
-# und ist jetzt genau einmal hier. Die Plattform führt das Urteil nur noch aus - sie
-# weiß als Einzige, wie man auf ihr löscht und stummschaltet.
+# New compared to core/moderation.py: the feature decides the *consequence*, not just the
+# hit. The escalation logic (at which offence within which time window a timeout is due)
+# used to stand word for word in both platforms and is now here exactly once. The platform
+# only carries the verdict out - it alone knows how to delete and time out on itself.
 
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -18,10 +16,10 @@ from core import feature as feature_api, runtime_config
 
 from . import filters
 
-# Die Werte aus moderation.json - hier noch einmal, damit das Feature auch ohne die Datei
-# moderiert (siehe core/runtime_config.py). Was ein Verstoß ist, steht damit an einer
-# Stelle für alle Plattformen; twitch.json/discord.json können einzelne Werte in ihrem
-# "moderation"-Abschnitt weiterhin überschreiben.
+# The values from moderation.json - repeated here so the feature moderates without the file
+# too (see core/runtime_config.py). What counts as an offence therefore lives in one place
+# for all platforms; twitch.json/discord.json can still override individual values in their
+# own "moderation" section.
 DEFAULTS = {
     "settings": dict(filters.DEFAULT_MODERATION_SETTINGS),
     "banned_words": {"use_builtin_list": True, "extra": [], "remove": []},
@@ -30,19 +28,19 @@ DEFAULTS = {
 
 
 def _mask(found):
-    """Der Fund, unlesbar gemacht: "Idiot" -> "I****".
+    """The finding, made unreadable: "Idiot" -> "I****".
 
-    Nötig, weil `detail` bei einem verbotenen Wort das Wort selbst ist (filters.py) und die
-    Plattformen es in ihre Verstoßmeldung schreiben. Ungekürzt hieße das: Der Bot löscht die
-    Nachricht und sagt das Wort anschließend selbst - und auf ihn wendet kein Filter etwas
-    an. Ein Troll bräuchte dafür nicht einmal einen Befehl, nur das Wort.
+    Needed because `detail` for a banned word is the word itself (filters.py) and the
+    platforms write it into their offence notice. Unabridged that would mean: the bot
+    deletes the message and then says the word itself - and no filter applies anything to
+    it. A troll would not even need a command for that, only the word.
 
-    Maskiert wird hier und nicht in den Plattformen, damit keine von ihnen den Fund je
-    ungefiltert in die Hand bekommt - eine dritte Plattform erbt den Schutz dadurch, ohne
-    etwas dafür zu tun.
+    Masking happens here and not in the platforms, so that none of them ever gets the
+    finding unfiltered - a third platform inherits the protection without doing anything
+    for it.
 
-    Der erste Buchstabe bleibt stehen, damit ein Mod die Meldung noch zuordnen kann. Bei
-    einem einzelnen Zeichen bleibt nichts - sonst wäre die Maske der Fund.
+    The first letter stays so a mod can still place the notice. With a single character
+    nothing stays - otherwise the mask would be the finding.
     """
     found = (found or "").strip()
     if not found:
@@ -56,22 +54,20 @@ class ModerationFeature(feature_api.Feature):
 
     def __init__(self):
         self.config = runtime_config.for_package(__file__, DEFAULTS)
-        # user_key -> Zeitstempel der jüngsten Verstöße, für die Eskalation. Bewusst nur
-        # im RAM: ein Neustart soll niemandem einen alten Verstoß nachtragen.
+        # user_key -> timestamps of the most recent offences, for the escalation.
+        # Deliberately in RAM only: a restart should hold no old offence against anyone.
         self._violations = defaultdict(list)
 
     async def review(self, message, overrides=None):
-        """Prüft eine Nachricht und gibt ein Verdict zurück - oder None, wenn nichts
-        dagegen spricht.
+        """Checks a message and returns a Verdict - or None when nothing speaks against it.
 
-        `overrides` ist der "moderation"-Abschnitt aus der JSON der aufrufenden
-        Plattform - er liegt über den gemeinsamen Werten aus moderation.json. Die
-        Plattform reicht ihn bei jeder Nachricht neu herein, damit die
-        Hot-Reload-Konfiguration weiter greift und beide Plattformen unterschiedlich
-        streng eingestellt bleiben können."""
+        `overrides` is the "moderation" section from the calling platform's JSON - it lies
+        on top of the shared values from moderation.json. The platform passes it in afresh
+        with every message, so that the hot-reload configuration keeps working and both
+        platforms can stay set to different levels of strictness."""
         if message.is_privileged:
-            # Broadcaster/Moderatoren/Admins sind ausgenommen - vorher prüfte das jede
-            # Plattform vor dem Aufruf selbst, jetzt gilt die Regel an einer Stelle.
+            # Broadcaster/moderators/admins are exempt - previously every platform checked
+            # that itself before the call, now the rule applies in one place.
             return None
 
         settings = filters.build_settings(
@@ -97,13 +93,13 @@ class ModerationFeature(feature_api.Feature):
 
     @staticmethod
     def _user_key(message):
-        """Zählt Verstöße pro User und Plattform. Die User-ID ist stabiler als der Name
-        (Umbenennungen, unterschiedliche Schreibweisen), deshalb hat sie Vorrang."""
+        """Counts offences per user and platform. The user id is more stable than the name
+        (renames, differing spellings), which is why it takes precedence."""
         return f"{message.platform}:{message.user_id or message.user_name.lower()}"
 
     def _record_violation(self, user_key, window_minutes):
-        """Zählt die Verstöße dieses Users innerhalb der letzten `window_minutes` Minuten
-        und gibt die aktuelle Anzahl zurück (Eskalation Löschen -> Timeout)."""
+        """Counts this user's offences within the last `window_minutes` minutes and returns
+        the current number (escalation delete -> timeout)."""
         now = datetime.now()
         history = self._violations[user_key]
         history.append(now)

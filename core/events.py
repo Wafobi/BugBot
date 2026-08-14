@@ -1,19 +1,19 @@
 # events.py
-# Der Bus: Nachrichtenverteilung *und* Verzeichnis aller Plattformen und Features. Alles,
-# was die Teile des Bots voneinander wissen, geht hier durch - direkte Importe zwischen
-# Plattform-Paketen oder von einer Plattform in ein Feature gibt es nicht mehr.
+# The bus: message distribution *and* directory of all platforms and features. Everything
+# the parts of the bot know about each other goes through here - there are no direct
+# imports between platform packages, or from a platform into a feature, any more.
 #
-# Drei Wege:
-#   publish(topic, **payload)  "das ist passiert" - Abonnenten ziehen eigenen Zustand
-#       nach oder schreiben mit. Darüber läuft die gesamte Aufzeichnung: eine Plattform
-#       meldet nur, dass eine Nachricht kam, und weiß nicht, ob ein Feature zuhört.
-#       publish() gibt die Rückgaben der Abonnenten zurück - so kann ein Feature auch
-#       antworten (siehe STREAM_END, das die Kennzahlen des Streams zurückliefert).
-#   announce(announcement)     "postet das, wo ihr könnt" - geht an alle Plattformen mit
-#       der Fähigkeit ANNOUNCE. Jede entscheidet selbst, ob und wie sie die `kind`
-#       darstellt. Publiziert zusätzlich unter dem Topic announcement.kind.
-#   feature(...)/command(...)  das Pull-Verzeichnis: wo eine Plattform eine *Antwort*
-#       braucht (Moderations-Urteil) oder die Befehle der Features einsammelt.
+# Three routes:
+#   publish(topic, **payload)  "this happened" - subscribers update their own state or
+#       record it. All recording runs through this: a platform only reports that a message
+#       arrived, and does not know whether a feature is listening. publish() returns the
+#       subscribers' return values - so a feature can answer too (see STREAM_END, which
+#       returns the stream's figures).
+#   announce(announcement)     "post this wherever you can" - goes to every platform with
+#       the ANNOUNCE capability. Each decides for itself whether and how it presents the
+#       `kind`. Additionally publishes under the topic announcement.kind.
+#   feature(...)/command(...)  the pull directory: where a platform needs an *answer*
+#       (moderation verdict) or collects the features' commands.
 
 import asyncio
 from collections import defaultdict
@@ -23,61 +23,61 @@ from . import platform as platform_api
 
 
 # --- Topics ------------------------------------------------------------------------
-# Das gemeinsame Vokabular zwischen Plattformen (die publizieren) und Features (die
-# abonnieren). Bewusst plattformneutral formuliert - "ein Ereignis mit Typ und Betrag"
-# statt "ein Twitch-Cheer".
+# The shared vocabulary between platforms (which publish) and features (which subscribe).
+# Deliberately phrased platform-neutrally - "an event with a type and an amount" rather
+# than "a Twitch cheer".
 
-# Jede eingehende Nachricht, VOR der Moderation. Für den vollen Mitschnitt: gerade die
-# später gelöschten Nachrichten will man im Nachhinein noch nachlesen können.
+# Every incoming message, BEFORE moderation. For the complete record: the messages deleted
+# later are precisely the ones you want to be able to read back afterwards.
 #   payload: message (feature.Message)
 MESSAGE = "message.received"
 
-# Nachricht hat die Moderation passiert. Alles, was einen Verstoß nicht mitzählen soll
-# (Nachrichtenzähler, XP), hängt hier statt an MESSAGE.
+# Message has passed moderation. Everything that should not count an offence (message
+# counters, XP) hangs here rather than on MESSAGE.
 #   payload: message (feature.Message)
 MESSAGE_ACCEPTED = "message.accepted"
 
-# Ein Befehl wurde ausgeführt.  payload: platform, command, user_name
+# A command was executed.  payload: platform, command, user_name
 COMMAND = "command.used"
 
-# Eine Moderationsaktion wurde ausgeführt (durch den Bot oder einen Menschen).
+# A moderation action was carried out (by the bot or by a human).
 #   payload: platform, user_name, reason, action ("delete"/"timeout"/"ban"/"warn"/"unban")
 MOD_ACTION = "moderation.action"
 
-# Ein typisiertes Live-Ereignis: Follow, Sub, Gift-Sub, Cheer, Raid, Hype-Train, ...
-#   payload: platform, event_type, user_name, amount (Bits/Anzahl/Level/0)
+# A typed live event: follow, sub, gift sub, cheer, raid, hype train, ...
+#   payload: platform, event_type, user_name, amount (bits/count/level/0)
 PLATFORM_EVENT = "platform.event"
 
-# Rohprotokoll: eine Benachrichtigung der Plattform im Originalzustand, auch wenn es
-# dafür (noch) keinen Handler gibt.  payload: platform, event_type, payload
+# Raw log: a platform notification in its original state, even when there is no handler for
+# it (yet).  payload: platform, event_type, payload
 RAW_EVENT = "platform.raw"
 
-# Stream-Zustand. STREAM_END gibt über die Abonnenten-Rückgabe die Abschluss-Kennzahlen
-# zurück (als Tupel von platform.Field), aus denen die Plattform ihren Bericht baut.
+# Stream state. STREAM_END returns the closing figures through the subscribers' return
+# values (as a tuple of platform.Field), from which the platform builds its report.
 #   STREAM_START payload: platform, title, category
 #   STREAM_END   payload: platform
 STREAM_START = "stream.start"
 STREAM_END = "stream.end"
 
-# Die Session ist geschlossen, ihre id steht fest. Getrennt von STREAM_END, weil die
-# Reihenfolge sonst Glückssache wäre: wer den gerade beendeten Stream auswertet (Highscores,
-# Abschlussbericht), braucht die id *nach* dem Schließen. Das Feature mit der Fähigkeit
-# SESSIONS publiziert das, sobald es die Session zugemacht hat, und reicht die Rückgaben der
-# Abonnenten an seinen eigenen STREAM_END-Aufrufer weiter - so bekommt die Plattform ihre
-# Abschlussfelder weiterhin als Rückgabe von publish(STREAM_END).
+# The session is closed, its id is settled. Separate from STREAM_END, because the order
+# would otherwise be a matter of luck: whoever evaluates the stream that just ended
+# (highscores, closing report) needs the id *after* it was closed. The feature with the
+# SESSIONS capability publishes this as soon as it has closed the session, and passes the
+# subscribers' return values on to its own STREAM_END caller - so the platform still gets
+# its closing fields as the return value of publish(STREAM_END).
 #   payload: session_id
 SESSION_ENDED = "session.ended"
 
-# Titel-/Kategoriewechsel innerhalb eines Streams.  payload: platform, title, category
+# Title/category change within a stream.  payload: platform, title, category
 STREAM_SEGMENT = "stream.segment"
 
-# Zuschauer-Stichprobe.  payload: platform, count
+# Viewer sample.  payload: platform, count
 VIEWERS = "stream.viewers"
 
-# Werbepause.  payload: platform, duration_seconds
+# Ad break.  payload: platform, duration_seconds
 AD_BREAK = "stream.ad_break"
 
-# Ein User ist im Level aufgestiegen.  payload: message (die auslösende Message), level
+# A user levelled up.  payload: message (the triggering Message), level
 LEVEL_UP = "level.up"
 
 
@@ -89,11 +89,11 @@ class EventBus:
         self._commands_version = None
         self._handlers = defaultdict(list)
 
-    # --- Plattform-Registry ---------------------------------------------------------
+    # --- Platform registry ----------------------------------------------------------
 
     def register(self, platform):
         if platform.name in self._platforms:
-            raise ValueError(f"Plattform '{platform.name}' ist bereits registriert")
+            raise ValueError(f"platform '{platform.name}' is already registered")
         self._platforms[platform.name] = platform
 
     @property
@@ -107,14 +107,14 @@ class EventBus:
         return tuple(p for p in self._platforms.values() if p.supports(capability))
 
     def resolve_platforms(self, tokens):
-        """Aus einer Liste von Fähigkeiten und/oder Plattformnamen die gemeinte Menge von
-        Namen. Leere Liste -> None, also "alle".
+        """The intended set of names from a list of capabilities and/or platform names.
+        Empty list -> None, i.e. "all".
 
-        Damit lässt sich eine Einschränkung auch in einer Konfigurationsdatei ausdrücken,
-        ohne einen Dienst zu nennen: ["stream"] heißt "die Plattformen, die einen Stream
-        melden" und stimmt auch dann noch, wenn das morgen eine andere ist. Ein Name geht
-        weiterhin, wird aber gemeldet, wenn ihn gerade keine geladene Plattform trägt -
-        genau der Fall, der sonst still zu "trifft nie zu" wird."""
+        This lets a restriction be expressed in a configuration file too, without naming a
+        service: ["stream"] means "the platforms that report a stream" and is still right
+        when that is a different one tomorrow. A name still works, but is reported when no
+        loaded platform currently bears it - exactly the case that otherwise turns quietly
+        into "never matches"."""
         if not tokens:
             return None
         known = {p.name for p in self._platforms.values()}
@@ -129,17 +129,17 @@ class EventBus:
             elif token in known:
                 resolved.add(token)
             elif token in platform_api.CAPABILITIES:
-                # Eine gültige Fähigkeit, die hier gerade niemand hat - kein Fehler, nur
-                # im Moment leer.
+                # A valid capability that nobody here currently has - not an error, just
+                # empty at the moment.
                 continue
             else:
-                print(f"⚠️ '{token}' ist weder eine geladene Plattform noch eine Fähigkeit "
-                      f"({', '.join(sorted(platform_api.CAPABILITIES))}) - wird ignoriert.")
+                print(f"⚠️ '{token}' is neither a loaded platform nor a capability "
+                      f"({', '.join(sorted(platform_api.CAPABILITIES))}) - ignoring it.")
         return resolved
 
     async def wait_ready(self, timeout=None):
-        """Wartet, bis alle registrierten Plattformen bereit sind. False bei Timeout -
-        der Aufrufer entscheidet dann selbst, ob er trotzdem weitermacht."""
+        """Waits until all registered platforms are ready. False on timeout - the caller
+        then decides for itself whether to carry on regardless."""
         if not self._platforms:
             return True
         try:
@@ -148,19 +148,19 @@ class EventBus:
             )
             return True
         except asyncio.TimeoutError:
-            print(f"⚠️ Nicht alle Plattformen waren nach {timeout}s bereit.")
+            print(f"⚠️ Not all platforms were ready after {timeout}s.")
             return False
 
-    # --- Feature-Registry -----------------------------------------------------------
+    # --- Feature registry -----------------------------------------------------------
 
     def register_feature(self, feature):
         if feature.name in self._features:
-            raise ValueError(f"Feature '{feature.name}' ist bereits registriert")
+            raise ValueError(f"feature '{feature.name}' is already registered")
         self._features[feature.name] = feature
-        # Ein Feature soll auch dann an das Verzeichnis der Plattformen kommen, wenn es
-        # nicht über core/registry.py aufgebaut wurde (Tests, ein Bot, der seine Features
-        # selbst zusammenstellt). Die Registry setzt es zusätzlich schon vor setup() -
-        # hier ist der späteste Moment, in dem es sicher stimmt.
+        # A feature should reach the directory of platforms even when it was not built via
+        # core/registry.py (tests, a bot assembling its features itself). The registry sets
+        # it before setup() as well - here is the latest moment at which it is certainly
+        # right.
         if feature.bus is None:
             feature.bus = self
         self._commands = None
@@ -176,28 +176,28 @@ class EventBus:
         return tuple(f for f in self._features.values() if f.supports(capability))
 
     def feature_with(self, capability):
-        """Das erste Feature mit dieser Fähigkeit, oder None. Für den Normalfall, in dem
-        genau eines sie anbietet (Ablage, Level) - wer mehrere durchlaufen will (etwa
-        mehrere Moderationsfilter hintereinander), nimmt features_with."""
+        """The first feature with this capability, or None. For the normal case where
+        exactly one offers it (storage, levels) - anyone wanting to walk several (say,
+        several moderation filters in a row) takes features_with."""
         found = self.features_with(capability)
         return found[0] if found else None
 
     def commands(self):
-        """{Befehlsname: Command} aller Features zusammen. Die Plattformen hängen das in
-        ihre eigene Befehlsauflösung ein, ohne die Features zu kennen. Bei einer Kollision
-        gewinnt das zuerst registrierte Feature - der Konflikt wird gemeldet, statt still
-        eines der beiden verschwinden zu lassen.
+        """{command name: Command} of all features together. The platforms wire this into
+        their own command resolution without knowing the features. On a collision the
+        feature registered first wins - the conflict is reported rather than letting one of
+        the two quietly disappear.
 
-        Die Namen sind nicht zwingend die, die im Code stehen: bringt ein Feature eine
-        eigene Konfiguration mit, darf deren Abschnitt "command_names" jeden Befehl
-        umbenennen, ihm Aliase geben oder ihn abschalten (siehe core/runtime_config.py).
-        Das passiert hier und nicht in den Features, damit keines dafür etwas tun muss -
-        und der zurückgegebene Command trägt den *tatsächlichen* Namen, damit
-        Befehlslisten wie !commands nicht die Namen aus dem Code anzeigen.
+        The names are not necessarily the ones in the code: if a feature brings its own
+        configuration, that file's "command_names" section may rename every command, give
+        it aliases or switch it off (see core/runtime_config.py). This happens here and not
+        in the features, so that none of them has to do anything for it - and the returned
+        Command carries the *actual* name, so that command listings such as !commands do
+        not show the names from the code.
 
-        Ergebnis wird gecacht: das hier läuft pro Chat-Nachricht. Der Cache verfällt,
-        sobald eine der beteiligten Konfigurationen neu geladen wurde - sonst wäre
-        ausgerechnet die Umbenennung das eine, was einen Neustart bräuchte."""
+        The result is cached: this runs per chat message. The cache expires as soon as one
+        of the configurations involved has been reloaded - otherwise renaming, of all
+        things, would be the one thing needing a restart."""
         version = self._command_config_version()
         if self._commands is not None and version == self._commands_version:
             return self._commands
@@ -209,7 +209,7 @@ class EventBus:
             resolved = config.resolve_commands(declared) if config is not None else declared
             for name, command in resolved.items():
                 if name in merged:
-                    print(f"⚠️ Befehl {name} doppelt angeboten - '{feature.name}' wird ignoriert.")
+                    print(f"⚠️ command {name} offered twice - '{feature.name}' is ignored.")
                     continue
                 merged[name] = command if command.name == name else replace(command, name=name)
         self._commands = merged
@@ -217,14 +217,14 @@ class EventBus:
         return merged
 
     def _command_config_version(self):
-        """Fingerabdruck über die Konfigurationsstände aller Features. Der Aufruf kostet
-        je Feature ein stat() (siehe LiveConfig.reload) - dieselbe Größenordnung wie die
-        Hot-Reload-Prüfung, die ohnehin pro Nachricht läuft.
+        """Fingerprint across the configuration states of all features. The call costs one
+        stat() per feature (see LiveConfig.reload) - the same order of magnitude as the
+        hot-reload check that runs per message anyway.
 
-        Die Identität der Konfiguration gehört mit hinein, nicht nur ihr Zählerstand:
-        wird einem Feature eine andere LiveConfig untergeschoben (Tests, ein Feature das
-        seine Konfiguration wechselt), fängt deren Zähler wieder bei eins an - der
-        Zählerstand allein sähe dann aus wie "nichts passiert"."""
+        The identity of the configuration belongs in it, not just its counter: if a feature
+        is handed a different LiveConfig (tests, a feature swapping its configuration), that
+        one's counter starts at one again - the counter alone would then look like "nothing
+        happened"."""
         return tuple(
             (feature.name, id(feature.config), feature.config.version if feature.config is not None else 0)
             for feature in self._features.values()
@@ -233,18 +233,18 @@ class EventBus:
     def command(self, name):
         return self.commands().get(name)
 
-    # --- Pub/Sub --------------------------------------------------------------------
+    # --- Pub/sub --------------------------------------------------------------------
 
     def subscribe(self, topic, handler):
-        """Meldet einen async-Handler für ein Topic an. Der Handler bekommt das payload
-        von publish() als Keyword-Argumente."""
+        """Registers an async handler for a topic. The handler receives the payload from
+        publish() as keyword arguments."""
         self._handlers[topic].append(handler)
         return handler
 
     async def publish(self, topic, **payload):
-        """Ruft alle Abonnenten des Topics nacheinander auf und gibt deren Rückgabewerte
-        zurück. Ein fehlerhafter Abonnent reißt weder den Publisher noch die übrigen
-        Abonnenten mit - dieselbe Regel wie bei den EventSub-Handlern in
+        """Calls all subscribers of the topic one after another and returns their return
+        values. A failing subscriber takes down neither the publisher nor the remaining
+        subscribers - the same rule as for the EventSub handlers in
         platforms/twitch/bot.py."""
         results = []
         for handler in list(self._handlers.get(topic, ())):
@@ -253,16 +253,16 @@ class EventBus:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                print(f"⚠️ Fehler im Event-Handler für '{topic}': {e}")
+                print(f"⚠️ Error in the event handler for '{topic}': {e}")
         return results
 
     async def announce(self, announcement):
-        """Verteilt eine Ankündigung an alle Plattformen mit der Fähigkeit ANNOUNCE und
-        gibt zurück, wie viele sie tatsächlich gepostet haben.
+        """Distributes an announcement to all platforms with the ANNOUNCE capability and
+        returns how many actually posted it.
 
-        Die Quelle wird nicht ausgenommen: ein !bug aus dem Discord-Chat soll ja gerade
-        im Discord-Bug-Kanal landen. Ob eine Plattform ihre eigenen Ankündigungen
-        wiederholt, entscheidet sie in ihrem announce()."""
+        The source is not excluded: a !bug from the Discord chat is meant to land in the
+        Discord bug channel. Whether a platform repeats its own announcements is decided in
+        its announce()."""
         await self.publish(announcement.kind, announcement=announcement)
 
         delivered = 0
@@ -273,12 +273,12 @@ class EventBus:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                print(f"⚠️ {target.name} konnte '{announcement.kind}' nicht ankündigen: {e}")
+                print(f"⚠️ {target.name} could not announce '{announcement.kind}': {e}")
         return delivered
 
 
-# Gemeinsame Instanz für den laufenden Bot. Modul-Global wie core/stats.py, statt sie
-# durch jede Funktion durchzureichen - die Plattform-Module bestehen ohnehin
-# überwiegend aus Modulfunktionen. Die Klasse bleibt trotzdem eigenständig
-# instanziierbar (Tests, mehrere Bots in einem Prozess).
+# Shared instance for the running bot. Module-global like core/stats.py, rather than
+# passing it through every function - the platform modules consist predominantly of module
+# functions anyway. The class nevertheless remains independently instantiable (tests,
+# several bots in one process).
 bus = EventBus()

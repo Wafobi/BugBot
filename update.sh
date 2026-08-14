@@ -18,16 +18,16 @@ fi
 # bugbot.db is bind-mounted (see bugbot.container). If it's missing - e.g. it was
 # deleted, or this is a fresh checkout - Podman would create an empty directory
 # there instead of a file, which breaks sqlite3.connect() inside the container.
-touch bugbot.db
+touch features/sql_db/bugbot.db
 
 echo "🏗️  Building updated image..."
 podman build -t bugbot .
 
-# Die Unit gleich mit erneuern statt nur neu zu starten: in bugbot.container steht für
-# jede JSON-Konfiguration ein eigener Bind-Mount mit vollem Pfad. Zieht eine davon um,
-# zeigt die *installierte* Unit weiter auf die alte Datei, und der Container startet gar
-# nicht mehr ("statfs ...: no such file or directory") - obwohl das Repo längst stimmt.
-# Das hier ist derselbe Schritt wie in setup-systemd.sh und genauso wiederholbar.
+# Renew the unit along with it rather than only restarting: bugbot.container holds a bind mount
+# with a full path for every JSON configuration. If one of them moves, the *installed* unit
+# keeps pointing at the old file and the container stops starting at all ("statfs ...: no such
+# file or directory") - even though the repo has long been correct. This is the same step as in
+# setup-systemd.sh and just as repeatable.
 echo "📄 Refreshing Quadlet unit..."
 sed "s#/path/to/bugbot#$(pwd)#g" bugbot.container > "$HOME/.config/containers/systemd/bugbot.container"
 systemctl --user daemon-reload

@@ -1,33 +1,31 @@
 # store.py
-# Das SQL des Level-Features. Eine Tabelle: discord_levels.
+# The SQL of the levels feature. One table: discord_levels.
 #
-# Der Name ist historisch - dort liegen die gesammelten XP seit jeher, und dort bleiben sie.
-# Es gab zwischenzeitlich eine zweite, "richtiger" benannte Tabelle `levels`, in die beim
-# Start einmalig kopiert wurde; das hieß: zwei Tabellen mit denselben Daten, eine
-# Kopierroutine, die für immer stehenbleiben musste, und ein Umschaltmoment, in dem beide
-# auseinanderlaufen konnten. Dieselbe Abwägung wie beim eventsub_log: ein Rename ist eine
-# Migration ohne Gegenwert.
+# The name is historical - the collected XP have always lived there, and there they stay. For
+# a while there was a second, more "correctly" named table `levels`, copied into once at
+# startup; that meant two tables with the same data, a copy routine that had to stay forever,
+# and a switchover moment in which the two could drift apart. The same trade-off as with
+# eventsub_log: a rename is a migration without a return.
 #
-# Stattdessen wächst die alte Tabelle an Ort und Stelle mit - die fehlenden Spalten kommen
-# über den Schema-Helfer des sql_db-Features dazu (SQLite kennt kein
-# "ADD COLUMN IF NOT EXISTS"). Der Inhalt bleibt dabei durchgehend derselbe, es wird nichts
-# umgezogen.
+# Instead the old table grows in place - the missing columns are added through the sql_db
+# feature's schema helper (SQLite has no "ADD COLUMN IF NOT EXISTS"). The content stays the
+# same throughout; nothing is moved.
 #
-# Alles hier ist blockierendes sqlite3 und muss von async Code aus per
-# loop.run_in_executor(None, ...) aufgerufen werden.
+# Everything here is blocking sqlite3 and has to be called from async code via
+# loop.run_in_executor(None, ...).
 
 import random
 import time
 
 TABLE = "discord_levels"
 
-# Der Wert der platform-Spalte kommt vom Feature (Feature.owner, siehe feature.py) und
-# steht deshalb nicht mehr hier. Die Spalte selbst bleibt: sie steht so in der bestehenden
-# Datenbank, der eindeutige Index hängt an ihr, und sie hält fest, zu welchem Dienst die
-# user_ids gehören.
+# The value of the platform column comes from the feature (Feature.owner, see feature.py)
+# and therefore no longer stands here. The column itself stays: that is how it is in the
+# existing database, the unique index hangs on it, and it records which service the user_ids
+# belong to.
 
-# Frische Datenbanken bekommen gleich die vollständige Form. Bestehende hatten nur
-# (user_id, xp, level, last_xp_ts) und werden unten nachgezogen.
+# Fresh databases get the complete shape right away. Existing ones had only
+# (user_id, xp, level, last_xp_ts) and are brought up to date below.
 SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS {TABLE} (
     platform TEXT NOT NULL,
@@ -40,10 +38,9 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
 );
 """
 
-# Der eindeutige Index ist nicht bloß Beschleunigung: er ist das Ziel der ON-CONFLICT-Klausel
-# in add_message_xp. In einer bestehenden Datenbank ist der Primärschlüssel noch user_id
-# allein, dort gäbe es sonst keinen Index über (platform, user_id), auf den das Upsert
-# zeigen könnte.
+# The unique index is not merely acceleration: it is the target of the ON CONFLICT clause in
+# add_message_xp. In an existing database the primary key is still user_id alone, so there
+# would otherwise be no index over (platform, user_id) for the upsert to point at.
 INDEXES = f"""
 CREATE UNIQUE INDEX IF NOT EXISTS idx_{TABLE}_ident ON {TABLE} (platform, user_id);
 CREATE INDEX IF NOT EXISTS idx_{TABLE}_xp ON {TABLE} (xp DESC);
@@ -51,8 +48,8 @@ CREATE INDEX IF NOT EXISTS idx_{TABLE}_xp ON {TABLE} (xp DESC);
 
 
 def xp_needed_for_next_level(level):
-    """MEE6-übliche Formel: wie viel zusätzliche XP für den Sprung von `level` auf
-    `level + 1` nötig ist."""
+    """The formula MEE6 made common: how much additional XP is needed for the jump from
+    `level` to `level + 1`."""
     return 5 * level * level + 50 * level + 100
 
 
@@ -66,9 +63,9 @@ def level_for_xp(xp):
 
 
 class LevelsStore:
-    """`db` ist das Feature mit der Fähigkeit STORAGE (siehe features/sql_db), `platform`
-    der Wert der gleichnamigen Spalte - er kommt vom Feature (Feature.owner) und damit aus
-    dem Ordner, in dem es liegt, statt hier als Zeichenkette zu stehen."""
+    """`db` is the feature with the STORAGE capability (see features/sql_db), `platform` the
+    value of the column of the same name - it comes from the feature (Feature.owner) and thus
+    from the folder it lives in, rather than standing here as a string."""
 
     def __init__(self, db, platform):
         self._db = db
@@ -77,37 +74,35 @@ class LevelsStore:
     def init_schema(self):
         with self._db.connect() as conn:
             conn.executescript(SCHEMA)
-            # Die beiden Spalten, die der alten Tabelle fehlen: ohne sie wäre das XP-System
-            # weiterhin auf eine Plattform festgenagelt, und !top müsste den Anzeigenamen
-            # über die Plattform-API nachschlagen (was für längst ausgetretene User nicht
-            # mehr geht).
+            # The two columns the old table lacks: without them the XP system would still
+            # be nailed to one platform, and !top would have to look the display name up
+            # through the platform API (which no longer works for users who left long ago).
             self._db.add_column_if_missing(conn, TABLE, "platform", "TEXT")
             self._db.add_column_if_missing(conn, TABLE, "user_name", "TEXT")
-            # Alles, was vor der Spalte da war, stammt aus der Discord-only-Zeit.
+            # Everything that predates the column comes from the Discord-only era.
             conn.execute(f"UPDATE {TABLE} SET platform = 'discord' WHERE platform IS NULL")
             conn.executescript(INDEXES)
             self._fold_in_levels_table(conn)
 
     def _fold_in_levels_table(self, conn):
-        """Holt die Bestände aus der zwischenzeitlichen `levels`-Tabelle zurück und löscht
-        sie danach. Anders als die frühere Kopierroutine ist das hier selbstbeendend: nach
-        einem Durchlauf gibt es die Tabelle nicht mehr, und der Zweig ist für immer ein
-        billiges 'existiert nicht'.
+        """Fetches the holdings back out of the interim `levels` table and deletes it
+        afterwards. Unlike the earlier copy routine this one is self-terminating: after one
+        pass the table no longer exists, and the branch is a cheap 'does not exist' forever.
 
-        Der höhere XP-Stand gewinnt. Damit ist die Richtung egal - ob zwischendurch in die
-        eine oder die andere Tabelle geschrieben wurde, es geht nichts verloren.
+        The higher XP value wins. That makes the direction irrelevant - whichever of the two
+        tables was written to in the meantime, nothing is lost.
 
-        Übernommen wird alles, auch Zeilen anderer Plattformen aus der Zeit, in der das
-        XP-System umschaltbar war: gelesen wird davon nichts mehr, aber wegwerfen ist keine
-        Entscheidung, die eine Aufräum-Routine treffen sollte."""
+        Everything is taken over, including rows of other platforms from the time when the XP
+        system was switchable: nothing of that is read any more, but throwing it away is not a
+        decision a cleanup routine should make."""
         if not self._db.table_exists(conn, "levels"):
             return
         cur = conn.execute(
             f"""
             INSERT INTO {TABLE} (platform, user_id, user_name, xp, level, last_xp_ts)
             SELECT platform, user_id, user_name, xp, level, last_xp_ts FROM levels
-            -- Das WHERE muss sein: ohne es kann SQLite das folgende ON CONFLICT nicht vom
-            -- ON eines Joins unterscheiden und bricht mit einem Syntaxfehler ab.
+            -- The WHERE is mandatory: without it SQLite cannot tell the following ON
+            -- CONFLICT from the ON of a join and aborts with a syntax error.
             WHERE true
             ON CONFLICT(platform, user_id) DO UPDATE SET
                 user_name = COALESCE(excluded.user_name, {TABLE}.user_name),
@@ -118,13 +113,12 @@ class LevelsStore:
             """
         )
         conn.execute("DROP TABLE levels")
-        print(f"🔁 {cur.rowcount} Level-Eintrag/-Einträge aus der levels-Tabelle übernommen, Tabelle entfernt.")
+        print(f"🔁 {cur.rowcount} level entry/entries taken over from the levels table, table removed.")
 
     def add_message_xp(self, user_id, user_name, cooldown_seconds, xp_min, xp_max):
-        """Vergibt (falls die Cooldown-Zeit seit der letzten Vergabe an diesen User
-        abgelaufen ist) zufällig xp_min..xp_max XP für eine Chat-Nachricht. Gibt
-        (level, leveled_up) zurück - level ist das aktuelle (ggf. neue) Level,
-        leveled_up True falls es dabei gerade gestiegen ist."""
+        """Awards (if the cooldown since the last award to this user has expired) a random
+        xp_min..xp_max XP for a chat message. Returns (level, leveled_up) - level is the
+        current (possibly new) level, leveled_up True if it just went up."""
         now = int(time.time())
         with self._db.connect() as conn:
             row = conn.execute(
@@ -133,8 +127,8 @@ class LevelsStore:
             ).fetchone()
             xp, level, last_ts = row if row is not None else (0, 0, None)
             if last_ts is not None and now - int(last_ts) < cooldown_seconds:
-                # Auch im Cooldown den Anzeigenamen nachziehen: sonst behielte ein
-                # umbenannter User in !top für immer seinen alten Namen.
+                # Update the display name during the cooldown too: otherwise a renamed user
+                # would keep their old name in !top forever.
                 conn.execute(
                     f"UPDATE {TABLE} SET user_name = ? WHERE platform = ? AND user_id = ?",
                     (user_name, self._platform, user_id),
@@ -155,7 +149,7 @@ class LevelsStore:
             return new_level, new_level > level
 
     def get_level(self, user_id):
-        """(xp, level) für einen einzelnen User, (0, 0) falls noch nie XP erhalten."""
+        """(xp, level) for a single user, (0, 0) if they never received XP."""
         with self._db.connect() as conn:
             row = conn.execute(
                 f"SELECT xp, level FROM {TABLE} WHERE platform = ? AND user_id = ?", (self._platform, user_id)
@@ -163,8 +157,8 @@ class LevelsStore:
         return tuple(row) if row is not None else (0, 0)
 
     def find_by_name(self, user_name):
-        """(user_id, xp, level) für einen Anzeigenamen, oder None. Für !rank <name> -
-        ohne das müsste der Aufrufer die ID kennen, die im Chat aber niemand tippt."""
+        """(user_id, xp, level) for a display name, or None. For !rank <name> - without it
+        the caller would have to know the id, which nobody types in chat."""
         with self._db.connect() as conn:
             row = conn.execute(
                 f"SELECT user_id, xp, level FROM {TABLE} WHERE platform = ? AND lower(user_name) = ?",
@@ -173,7 +167,7 @@ class LevelsStore:
         return tuple(row) if row is not None else None
 
     def get_top(self, limit=10):
-        """[(user_name, user_id, xp, level), ...] absteigend nach xp."""
+        """[(user_name, user_id, xp, level), ...] descending by xp."""
         with self._db.connect() as conn:
             rows = conn.execute(
                 f"SELECT user_name, user_id, xp, level FROM {TABLE} WHERE platform = ? ORDER BY xp DESC LIMIT ?",

@@ -1,24 +1,23 @@
-"""OBS-Konfiguration aus der Umgebung/.env.
+"""OBS configuration from the environment/.env.
 
-Gegenstück zu platforms/twitch/config.py und platforms/discord/config.py: core bleibt
-plattformneutral, jede Plattform bringt ihre eigenen Zugangsdaten mit.
+Counterpart to platforms/twitch/config.py and platforms/discord/config.py: core stays
+platform-neutral, and every platform brings its own credentials.
 
-Der Unterschied zu den beiden anderen steckt in der Richtung: Discord und Twitch sind
-Dienste im Netz, die der Bot anruft. OBS läuft auf dem Rechner des Streamers, der Bot auf
-einem Server - und obs-websocket ist selbst ein Server, der dort *lokal* lauscht. Der Bot
-käme also nur an ihn heran, wenn zu Hause ein Port aus dem Internet erreichbar wäre. Statt
-dessen dreht ein Relais auf dem OBS-PC die Richtung um (platforms/obs/obs_bridge.py) und
-wählt sich beim Bot ein; hier stehen deshalb keine Adressdaten von OBS, sondern die des
-eigenen Lauschers.
+The difference from the other two is in the direction: Discord and Twitch are services on
+the network that the bot dials. OBS runs on the streamer's machine, the bot on a server -
+and obs-websocket is itself a server listening *locally* there. So the bot could only reach
+it if a port at home were reachable from the internet. Instead a relay on the OBS machine
+reverses the direction (platforms/obs/client/obs_bridge.py) and dials in to the bot; which
+is why there are no OBS addresses here, but those of our own listener.
 
-Zwei Geheimnisse, zwei Strecken:
-  OBS_BRIDGE_TOKEN  Bot <-> Relais. Wer sich beim Bot einwählt, muss es kennen.
-  OBS_PASSWORD      Bot <-> obs-websocket. Wandert durch das Relais hindurch bis zu OBS
-                    und ist genau das Passwort aus den WebSocket-Servereinstellungen.
+Two secrets, two legs:
+  OBS_BRIDGE_TOKEN  bot <-> relay. Whoever dials in to the bot has to know it.
+  OBS_PASSWORD      bot <-> obs-websocket. Travels through the relay all the way to OBS and
+                    is exactly the password from the WebSocket server settings.
 
-Ohne OBS_BRIDGE_TOKEN gibt es keine OBS-Plattform: core/registry.py überspringt sie dann
-mit einer Warnung. Das ist der Weg, den Bot ohne OBS zu betreiben - und zugleich die
-Zusicherung, dass der Port nie ohne Geheimnis offensteht.
+Without OBS_BRIDGE_TOKEN there is no OBS platform: core/registry.py then skips it with a
+warning. That is how you run the bot without OBS - and at the same time the guarantee that
+the port never stands open without a secret.
 """
 
 import os
@@ -26,26 +25,26 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Idempotent und unabhängig von der Import-Reihenfolge - die anderen Plattformen laden
-# dieselbe Datei, load_dotenv überschreibt bereits gesetzte Variablen aber nicht.
+# Idempotent and independent of import order - the other platforms load the same file, but
+# load_dotenv does not overwrite variables that are already set.
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
-# Gemeinsames Geheimnis mit dem Relais auf dem OBS-PC. Pflicht: siehe oben.
+# Shared secret with the relay on the OBS machine. Mandatory: see above.
 OBS_BRIDGE_TOKEN = os.environ["OBS_BRIDGE_TOKEN"]
 
-# Port, auf dem der Bot auf das Relais wartet.
+# Port on which the bot waits for the relay.
 OBS_BRIDGE_PORT = int(os.environ.get("OBS_BRIDGE_PORT") or 4456)
 
-# Bind-Adresse. Der Port gehört nicht ins offene Netz: vom OBS-Rechner führt ein SSH-Tunnel
-# hierher (siehe README, Setup-Schritt 4), das Relais verbindet sich also mit seinem eigenen
-# Loopback. Wo diese Beschränkung sitzt, hängt vom Betrieb ab:
-#   im Container    0.0.0.0 (Default) - der Container hat einen eigenen Netzwerk-Namensraum,
-#                   und Podmans Portweiterleitung erreicht dessen Loopback nicht. Beschränkt
-#                   wird deshalb auf der Host-Seite: PublishPort=127.0.0.1:4456:4456.
-#   ohne Container  127.0.0.1 - dann ist der Port von außen gar nicht erst zu sehen.
+# Bind address. The port does not belong in the open network: an SSH tunnel leads here from
+# the OBS machine (see docs/tunnel.md), so the relay connects to its own loopback. Where that
+# restriction sits depends on how it is run:
+#   in a container   0.0.0.0 (default) - the container has its own network namespace, and
+#                    Podman's port forwarding does not reach its loopback. The restriction
+#                    therefore happens on the host side: PublishPort=127.0.0.1:4456:4456.
+#   without one      127.0.0.1 - the port is then not visible from outside in the first place.
 OBS_BRIDGE_BIND = os.environ.get("OBS_BRIDGE_BIND") or "0.0.0.0"
 
-# Das Passwort aus den WebSocket-Servereinstellungen von OBS. Leer nur dann, wenn dort die
-# Authentifizierung ausgeschaltet ist - was vertretbar ist, weil obs-websocket auf dem
-# OBS-PC nur auf 127.0.0.1 lauschen muss: nach draußen geht ausschließlich das Relais.
+# The password from the WebSocket server settings in OBS. Empty only when authentication is
+# switched off there - which is defensible, because obs-websocket on the OBS machine only
+# has to listen on 127.0.0.1: the only thing going outwards is the relay.
 OBS_PASSWORD = os.environ.get("OBS_PASSWORD", "")

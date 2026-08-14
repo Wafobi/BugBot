@@ -2,15 +2,15 @@ FROM python:3.14-slim
 
 WORKDIR /app
 
-# Das Image bringt nur C und C.utf8 mit. Ohne ein echtes Locale liefert strftime("%A")
-# "Sunday" statt "Sonntag" - und zwar lautlos, mit richtig gerechnetem Datum und nur
-# falschem Wort. Betroffen ist alles, was Wochentage oder Monate ausschreibt, allen voran
-# die Variablen aus features/variables/variables.json.
+# The image only brings C and C.utf8. Without a real locale, strftime("%A") returns "Sunday"
+# instead of the operator's language - silently, with a correctly computed date and only the
+# wrong word. Everything that spells out weekdays or months is affected, above all the variables
+# from features/variables/variables.json.
 #
-# Erzeugt wird genau eines, nicht der ganze Satz: locales-all wären ~200 MB für eine
-# Sprache, die niemand liest. Wer eine andere will, baut mit
-# `podman build --build-arg LOCALE=fr_FR.UTF-8 -t bugbot .` und trägt denselben Namen in
-# variables.json unter "locale" ein - erzeugen und benutzen sind zwei Schritte.
+# Exactly one is generated, not the whole set: locales-all would be ~200 MB for languages
+# nobody reads. Anyone wanting a different one builds with
+# `podman build --build-arg LOCALE=fr_FR.UTF-8 -t bugbot .` and enters the same name in
+# variables.json under "locale" - generating and using are two separate steps.
 ARG LOCALE=de_DE.UTF-8
 RUN apt-get update \
     && apt-get install -y --no-install-recommends locales \

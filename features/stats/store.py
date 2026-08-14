@@ -1,21 +1,21 @@
 # store.py
-# Das SQL des Statistik-Features: Zähler und Kennzahlen, sonst nichts.
+# The SQL of the statistics feature: counters and figures, nothing else.
 #
-# Was hier früher noch mit drinsteckte, liegt inzwischen bei den Features, denen es gehört:
-# die Stream-Sessions und ihre Abschnitte bei platforms/twitch/features/stream_sessions, der
-# Nachrichtentext bei features/chat_log, das Rohprotokoll bei
-# platforms/twitch/features/raw_log. Übrig bleibt der Teil, der tatsächlich zählt und
-# rechnet - und der weiß nicht mehr selbst, welcher Stream gerade läuft: die
-# stream_session_id kommt bei jedem Aufruf von außen herein (siehe feature.py).
+# What used to sit in here as well now lives with the features that own it: the stream
+# sessions and their segments in platforms/twitch/features/stream_sessions, the message text
+# in features/chat_log, the raw log in platforms/twitch/features/raw_log. What remains is
+# the part that actually counts and calculates - and it no longer knows for itself which
+# stream is running: the stream_session_id comes in from outside on every call (see
+# feature.py).
 #
-# Alles hier ist blockierendes sqlite3 und muss von async Code aus per
-# loop.run_in_executor(None, ...) aufgerufen werden.
+# Everything here is blocking sqlite3 and has to be called from async code via
+# loop.run_in_executor(None, ...).
 
-# Tabellen, deren Zeilen zusätzlich der laufenden Stream-Session zugeordnet werden
-# (NULL = außerhalb eines Streams passiert, oder es ist gar kein SESSIONS-Feature geladen).
-# Dadurch sind "alles seit Beginn" und "nur dieser Stream" dieselbe Abfrage mit/ohne
-# WHERE stream_session_id - es gibt keine zweite, parallel gepflegte Buchführung, die
-# auseinanderlaufen könnte.
+# Tables whose rows are additionally assigned to the running stream session (NULL =
+# happened outside a stream, or no SESSIONS feature is loaded at all). This makes
+# "everything since the beginning" and "only this stream" the same query with/without
+# WHERE stream_session_id - there is no second set of books kept in parallel that could
+# drift apart.
 SESSION_SCOPED_TABLES = ("messages", "command_usage", "moderation_actions", "events", "ad_breaks")
 
 SCHEMA = """
@@ -77,9 +77,10 @@ CREATE INDEX IF NOT EXISTS idx_events_type ON events (event_type);
 CREATE INDEX IF NOT EXISTS idx_ad_breaks_session ON ad_breaks (stream_session_id);
 """
 
-# event_type -> Schlüssel in den Kennzahl-Dicts. Cheers/Gift-Subs von anonymen Spendern
-# laufen bewusst unter eigenen Typen: sie zählen in die Summen mit rein, tauchen aber nicht
-# in den Bestenlisten auf (get_top_users), wo "Anonym" sonst dauerhaft oben stünde.
+# event_type -> key in the metric dicts. Cheers/gift subs from anonymous donors
+# deliberately run under their own types: they count towards the sums but do not appear in
+# the leaderboards (get_top_users), where "Anonymous" would otherwise sit permanently at
+# the top.
 _EVENT_COUNT_METRICS = {
     "follow": "follows_gained",
     "sub": "subs_gained",
@@ -94,12 +95,12 @@ _EVENT_SUM_METRICS = {
     "raid": "raid_viewers_in",
 }
 
-# Rekord-Name in der highscores-Tabelle -> Schlüssel aus den Stream-Kennzahlen.
+# Record name in the highscores table -> key from the stream metrics.
 #
-# Der Chat-Rekord zählt alles, was gemeldet wurde. Vorher zählte er nur Twitch - eine
-# Plattform, die dieses Feature gar nicht kennen dürfte, und auf einer Installation ohne
-# Twitch ein Rekord, der sich nie bewegt. Wer nur einen Teil zählen will, schränkt statt
-# dessen den Mitschnitt ein (features/chat_log) oder liest messages_by_platform aus.
+# The chat record counts everything that was reported. Previously it counted only Twitch - a
+# platform this feature should not know at all, and on an installation without Twitch a
+# record that never moves. Anyone wanting to count only part of it restricts the recording
+# instead (features/chat_log) or reads messages_by_platform.
 HIGHSCORE_METRICS = {
     "peak_viewers": "peak_viewers",
     "subs_gained": "subs_gained",
@@ -111,9 +112,9 @@ HIGHSCORE_METRICS = {
 
 
 class StatsStore:
-    """Zähler und Kennzahlen. `db` ist das Feature mit der Fähigkeit STORAGE (siehe
-    features/sql_db); `session_id` reicht der Aufrufer durch (None = keine laufende
-    Session)."""
+    """Counters and figures. `db` is the feature with the STORAGE capability (see
+    features/sql_db); `session_id` is passed through by the caller (None = no running
+    session)."""
 
     def __init__(self, db):
         self._db = db
@@ -123,8 +124,8 @@ class StatsStore:
     def init_schema(self):
         with self._db.connect() as conn:
             conn.executescript(SCHEMA)
-            # Erst die Spalten nachziehen, dann die Indizes darauf - in dieser Reihenfolge,
-            # weil eine bestehende bugbot.db die Spalten noch nicht hat.
+            # Add the columns first, then the indexes on them - in that order, because an
+            # existing bugbot.db does not have the columns yet.
             for table in SESSION_SCOPED_TABLES:
                 self._db.add_column_if_missing(conn, table, "stream_session_id", "INTEGER")
             conn.executescript(INDEXES)
@@ -155,9 +156,9 @@ class StatsStore:
             )
 
     def record_event(self, session_id, platform, event_type, user_name, amount=0):
-        """Ein einzelnes Live-Event (Follow/Sub/Gift-Sub/Cheer/Raid, ...). `amount` ist der
-        jeweilige Zahlenwert (Bits, Anzahl Gift-Subs, Zuschauerzahl beim Raid,
-        Hype-Train-Level, ...) oder 0."""
+        """A single live event (follow/sub/gift sub/cheer/raid, ...). `amount` is the
+        respective number (bits, count of gift subs, viewer count on a raid, hype train
+        level, ...) or 0."""
         with self._db.connect() as conn:
             conn.execute(
                 "INSERT INTO events (platform, event_type, user_name, amount, stream_session_id) "
@@ -173,8 +174,8 @@ class StatsStore:
             )
 
     def record_viewer_sample(self, session_id, viewer_count):
-        """Eine Zuschauerzahl-Stichprobe. Nur innerhalb einer Session - daraus ergeben sich
-        Peak, Durchschnitt und der Verlauf; ohne Stream gibt es nichts abzutasten."""
+        """A viewer-count sample. Only within a session - peak, average and the curve come
+        out of these; without a stream there is nothing to sample."""
         if session_id is None:
             return False
         with self._db.connect() as conn:
@@ -187,9 +188,8 @@ class StatsStore:
     # --- Highscores -----------------------------------------------------------------
 
     def update_highscore(self, metric, value, session_id=None):
-        """Aktualisiert den All-Time-Highscore für `metric`, aber nur falls `value` den
-        bisherigen Bestwert übertrifft (oder es noch keinen gibt). Gibt True zurück, wenn es
-        ein neuer Rekord war."""
+        """Updates the all-time highscore for `metric`, but only if `value` beats the
+        previous best (or there is none yet). Returns True when it was a new record."""
         with self._db.connect() as conn:
             row = conn.execute("SELECT value FROM highscores WHERE metric = ?", (metric,)).fetchone()
             if row is not None and row[0] >= value:
@@ -208,7 +208,7 @@ class StatsStore:
             return True
 
     def get_highscores(self):
-        """{metric: {'value':..., 'achieved_at':...}} für alle bisher erreichten Highscores."""
+        """{metric: {'value':..., 'achieved_at':...}} for every highscore reached so far."""
         with self._db.connect() as conn:
             rows = conn.execute("SELECT metric, value, achieved_at FROM highscores").fetchall()
         return {metric: {"value": value, "achieved_at": achieved_at} for metric, value, achieved_at in rows}
@@ -216,7 +216,7 @@ class StatsStore:
     # --- Abfragen -------------------------------------------------------------------
 
     def get_viewer_samples(self, session_id):
-        """[(ts, viewer_count), ...] chronologisch - der Zuschauerverlauf eines Streams."""
+        """[(ts, viewer_count), ...] chronologically - a stream's viewer curve."""
         if session_id is None:
             return []
         with self._db.connect() as conn:
@@ -227,10 +227,10 @@ class StatsStore:
         return [tuple(row) for row in rows]
 
     def get_top_users(self, event_type, limit=3, session_id=None):
-        """[(user_name, summierter_amount), ...] absteigend sortiert, für Leaderboards
-        (z.B. Top-Cheerer, Top-Gifter). Mit session_id nur für diesen einen Stream, sonst
-        über alle. Anonyme Spender liegen unter eigenen event_types (cheer_anon /
-        gift_sub_anon) und tauchen hier deshalb nie auf."""
+        """[(user_name, summed amount), ...] sorted descending, for leaderboards (e.g. top
+        cheerer, top gifter). With session_id only for that one stream, otherwise across all
+        of them. Anonymous donors live under their own event_types (cheer_anon /
+        gift_sub_anon) and therefore never show up here."""
         where_sql = "WHERE event_type = ?"
         params = [event_type]
         if session_id is not None:
@@ -251,9 +251,9 @@ class StatsStore:
         return [(user_name, total) for user_name, total in rows]
 
     def _event_metrics(self, conn, session_id=None):
-        """Rechnet die Event-Kennzahlen (Follows, Subs, Bits, Raids, Hype Train) aus - mit
-        session_id für genau einen Stream, ohne für alles seit Beginn. Eine Abfrage, ein
-        GROUP BY: Zählungen und Summen fallen dabei gemeinsam an."""
+        """Computes the event figures (follows, subs, bits, raids, hype train) - with
+        session_id for exactly one stream, without it for everything since the beginning.
+        One query, one GROUP BY: counts and sums fall out together."""
         where_sql, params = ("WHERE stream_session_id = ?", (session_id,)) if session_id is not None else ("", ())
         rows = conn.execute(
             f"SELECT event_type, COUNT(*), COALESCE(SUM(amount), 0), COALESCE(MAX(amount), 0) "
@@ -268,18 +268,18 @@ class StatsStore:
                 metrics[_EVENT_COUNT_METRICS[event_type]] += count
             if event_type in _EVENT_SUM_METRICS:
                 metrics[_EVENT_SUM_METRICS[event_type]] += total
-            # Hype Train: jede progress-Meldung ist eine eigene Zeile, interessant ist das
-            # erreichte Maximum, nicht die Summe der Zwischenstände.
+            # Hype train: every progress notification is its own row; what matters is the
+            # maximum reached, not the sum of the intermediate states.
             if event_type == "hypetrain":
                 metrics["hypetrain_level"] = highest
         return metrics
 
     def session_metrics(self, session_id):
-        """Die Kennzahlen *dieses* Features für einen Stream, berechnet aus den Rohdaten - es
-        gibt keine vorberechneten Werte, die veralten könnten.
+        """*This* feature's figures for a stream, computed from the raw data - there are no
+        precomputed values that could go stale.
 
-        Stammdaten (Titel, Dauer), Chatter-Zahl und Rohprotokoll-Umfang stehen bewusst nicht
-        drin: die gehören anderen Features und werden in feature.py dazugemischt."""
+        Master data (title, duration), chatter count and raw-log volume are deliberately not
+        in here: those belong to other features and are mixed in by feature.py."""
         if session_id is None:
             return {}
         sid = (session_id,)
@@ -318,8 +318,8 @@ class StatsStore:
 
         metrics.update(
             {
-                # Aufschlüsselung *und* Summe: die Schlüssel kommen aus den Zeilen, nicht
-                # aus einer Liste im Code - dieses Feature nennt keine Plattform beim Namen.
+                # Breakdown *and* sum: the keys come from the rows, not from a list in the
+                # code - this feature names no platform.
                 "messages_by_platform": messages_by_platform,
                 "chat_messages": sum(messages_by_platform.values()),
                 "commands_used": commands_total,
@@ -336,8 +336,8 @@ class StatsStore:
         return metrics
 
     def get_summary(self):
-        """Aggregierte All-Time-Zahlen für die !stats-Ausgabe. Die Stream-Summen (wie viele
-        Sessions, wie viele Stunden) kommen vom SESSIONS-Feature dazu."""
+        """Aggregated all-time numbers for the !stats output. The stream totals (how many
+        sessions, how many hours) are added by the SESSIONS feature."""
         with self._db.connect() as conn:
             total_messages = conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
             total_commands = conn.execute("SELECT COUNT(*) FROM command_usage").fetchone()[0]

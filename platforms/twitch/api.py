@@ -1,7 +1,7 @@
 # twitch_api.py
-# Helix-API-Aufrufe für Moderationsaktionen. Twitch hat Moderationsbefehle über
-# IRC (PRIVMSG "/timeout", "/delete", ...) im Februar 2023 abgeschaltet - Delete/
-# Timeout laufen seitdem ausschließlich über die Helix-Endpunkte.
+# Helix API calls for moderation actions. Twitch switched off moderation commands over IRC
+# (PRIVMSG "/timeout", "/delete", ...) in February 2023 - delete and timeout have run
+# exclusively through the Helix endpoints ever since.
 # https://dev.twitch.tv/docs/chat/irc-migration/
 
 import requests
@@ -15,24 +15,23 @@ _refresh_unavailable_logged = False
 
 
 def refresh_chat_token():
-    """Holt per Refresh-Token einen neuen Twitch-Chat-Access-Token und persistiert ihn in .env,
-    da Twitch bei jedem Refresh auch einen neuen Refresh-Token ausgibt. Lebt hier (statt in
-    twitch_bot.py), damit auch die Helix-Aufrufe unten bei einem 401 selbst refreshen können,
-    ohne von den IRC-spezifischen Teilen von twitch_bot.py abzuhängen.
+    """Fetches a new Twitch chat access token via the refresh token and persists it in .env,
+    because Twitch issues a new refresh token on every refresh too. Lives here (instead of in
+    twitch_bot.py) so that the Helix calls below can refresh by themselves on a 401, without
+    depending on the IRC-specific parts of twitch_bot.py.
 
-    Twitch verlangt beim Refresh-Grant das client_secret der ausstellenden App - ohne das
-    antwortet der Endpunkt mit 400 "missing client secret". Fehlt es (Token stammt aus einer
-    fremden App, deren Secret wir nicht haben), sparen wir uns den Request und sagen es
-    einmal deutlich, statt es bei jedem Aufruf des Token-Wächters erneut zu loggen."""
+    On the refresh grant Twitch demands the client_secret of the issuing app - without it the
+    endpoint answers 400 "missing client secret". If it is missing (the token comes from a
+    foreign app whose secret we do not have), we save ourselves the request and say so clearly
+    once, rather than logging it again on every call of the token watchdog."""
     global _refresh_unavailable_logged
     if not config.TWITCH_CHAT_CLIENT_SECRET:
         if not _refresh_unavailable_logged:
             _refresh_unavailable_logged = True
             print(
-                f"⚠️ Twitch-Chat-Token kann nicht erneuert werden: kein Client-Secret zur "
-                f"Client-ID {config.TWITCH_CHAT_CLIENT_ID} bekannt. Entweder "
-                f"TWITCH_CHAT_CLIENT_SECRET in .env setzen oder den Token mit der eigenen App "
-                f"(TWITCH_CLIENT_ID) neu erzeugen."
+                f"⚠️ Twitch chat token cannot be renewed: no client secret known for client "
+                f"id {config.TWITCH_CHAT_CLIENT_ID}. Either set TWITCH_CHAT_CLIENT_SECRET in "
+                f".env, or create the token afresh with your own app (TWITCH_CLIENT_ID)."
             )
         return None
 
@@ -69,9 +68,9 @@ def refresh_chat_token():
 
 
 def _helix_request(method, url, chat_access_token, params=None, json_body=None):
-    """Gemeinsamer Helix-Request mit automatischem Refresh+Retry bei 401 - Basis für
-    alle Aufrufe unten, damit dieses Verhalten nicht in jeder Funktion dupliziert wird.
-    Gibt bei Netzwerkfehlern None zurück (Aufrufer müssen das prüfen)."""
+    """Shared Helix request with automatic refresh+retry on a 401 - the basis for every call
+    below, so this behaviour is not duplicated in each function. Returns None on network
+    errors (callers have to check for it)."""
     def attempt(token):
         headers = {"Client-Id": config.TWITCH_CHAT_CLIENT_ID, "Authorization": f"Bearer {token}"}
         if json_body is not None:
@@ -105,7 +104,7 @@ def get_app_access_token():
 
 
 def get_broadcaster_id(channel_login):
-    """Löst die numerische User-ID des Kanals über einen App-Access-Token auf."""
+    """Resolves the channel's numeric user id using an app access token."""
     token = get_app_access_token()
     if not token:
         return None
@@ -118,14 +117,14 @@ def get_broadcaster_id(channel_login):
         data = response.json().get("data", [])
         return data[0]["id"] if data else None
     except Exception as e:
-        print(f"⚠️ Konnte Broadcaster-ID nicht auflösen: {e}")
+        print(f"⚠️ Could not resolve the broadcaster id: {e}")
         return None
 
 
 def validate_token_info(chat_access_token):
-    """Rohe Antwort von https://id.twitch.tv/oauth2/validate - u.a. "scopes" und
-    "expires_in" (Restlaufzeit in Sekunden, Basis für den Token-Wächter in
-    twitch_bot.py). None bei Fehler/abgelaufenem Token."""
+    """Raw response from https://id.twitch.tv/oauth2/validate - among others "scopes" and
+    "expires_in" (remaining lifetime in seconds, the basis for the token watchdog in
+    twitch_bot.py). None on error/expired token."""
     headers = {"Authorization": f"OAuth {chat_access_token}"}
     try:
         response = requests.get("https://id.twitch.tv/oauth2/validate", headers=headers, timeout=10)
@@ -139,15 +138,15 @@ def validate_token_info(chat_access_token):
 
 
 def validate_token(chat_access_token):
-    """Fragt Twitch, welche Scopes der aktuelle Chat-Token tatsächlich hat
-    (für die Startup-Diagnose in twitch_bot.py). None bei Fehler/abgelaufenem Token."""
+    """Asks Twitch which scopes the current chat token actually has (for the startup
+    diagnostics in twitch_bot.py). None on error/expired token."""
     info = validate_token_info(chat_access_token)
     return info.get("scopes", []) if info is not None else None
 
 
 def get_users(logins, chat_access_token):
-    """Löst bis zu 100 Logins gleichzeitig zu User-Objekten (id, login, display_name) auf.
-    `logins=None` liefert stattdessen den Owner des Tokens selbst zurück."""
+    """Resolves up to 100 logins at once into user objects (id, login, display_name).
+    `logins=None` returns the token's own owner instead."""
     params = [("login", login.lstrip("@").lower()) for login in logins] if logins else None
     response = _helix_request("GET", "https://api.twitch.tv/helix/users", chat_access_token, params=params)
     if response is not None and response.status_code == 200:
@@ -158,13 +157,13 @@ def get_users(logins, chat_access_token):
 
 
 def get_moderator_id(chat_access_token):
-    """Löst die User-ID des Bot-/Mod-Accounts über dessen eigenen Chat-Token auf."""
+    """Resolves the user id of the bot/mod account via its own chat token."""
     users = get_users(None, chat_access_token)
     return users[0]["id"] if users else None
 
 
 def delete_chat_message(broadcaster_id, moderator_id, message_id, chat_access_token):
-    """Löscht eine einzelne Chat-Nachricht. Erfordert Scope moderator:manage:chat_messages."""
+    """Deletes a single chat message. Requires scope moderator:manage:chat_messages."""
     params = {"broadcaster_id": broadcaster_id, "moderator_id": moderator_id, "message_id": message_id}
     response = _helix_request("DELETE", "https://api.twitch.tv/helix/moderation/chat", chat_access_token, params=params)
     if response is not None and response.status_code == 204:
@@ -175,7 +174,7 @@ def delete_chat_message(broadcaster_id, moderator_id, message_id, chat_access_to
 
 
 def timeout_user(broadcaster_id, moderator_id, user_id, duration, reason, chat_access_token):
-    """Timeoutet einen User für `duration` Sekunden. Erfordert Scope moderator:manage:banned_users."""
+    """Times a user out for `duration` seconds. Requires scope moderator:manage:banned_users."""
     params = {"broadcaster_id": broadcaster_id, "moderator_id": moderator_id}
     body = {"data": {"user_id": user_id, "duration": duration, "reason": reason[:500]}}
     response = _helix_request("POST", "https://api.twitch.tv/helix/moderation/bans", chat_access_token, params=params, json_body=body)
@@ -187,8 +186,8 @@ def timeout_user(broadcaster_id, moderator_id, user_id, duration, reason, chat_a
 
 
 def ban_user(broadcaster_id, moderator_id, user_id, reason, chat_access_token):
-    """Bannt einen User dauerhaft (kein duration-Feld = permanent statt Timeout).
-    Erfordert Scope moderator:manage:banned_users."""
+    """Bans a user permanently (no duration field = permanent rather than a timeout).
+    Requires scope moderator:manage:banned_users."""
     params = {"broadcaster_id": broadcaster_id, "moderator_id": moderator_id}
     body = {"data": {"user_id": user_id, "reason": reason[:500]}}
     response = _helix_request("POST", "https://api.twitch.tv/helix/moderation/bans", chat_access_token, params=params, json_body=body)
@@ -200,7 +199,7 @@ def ban_user(broadcaster_id, moderator_id, user_id, reason, chat_access_token):
 
 
 def unban_user(broadcaster_id, moderator_id, user_id, chat_access_token):
-    """Hebt einen Ban oder Timeout auf. Erfordert Scope moderator:manage:banned_users."""
+    """Lifts a ban or timeout. Requires scope moderator:manage:banned_users."""
     params = {"broadcaster_id": broadcaster_id, "moderator_id": moderator_id, "user_id": user_id}
     response = _helix_request("DELETE", "https://api.twitch.tv/helix/moderation/bans", chat_access_token, params=params)
     if response is not None and response.status_code == 204:
@@ -211,8 +210,8 @@ def unban_user(broadcaster_id, moderator_id, user_id, chat_access_token):
 
 
 def warn_user(broadcaster_id, moderator_id, user_id, reason, chat_access_token):
-    """Spricht eine Twitch-seitige Verwarnung aus (User sieht ein Warnbanner beim
-    nächsten Chat-Versuch). Erfordert Scope moderator:manage:warnings."""
+    """Issues a Twitch-side warning (the user sees a warning banner on their next attempt to
+    chat). Requires scope moderator:manage:warnings."""
     params = {"broadcaster_id": broadcaster_id, "moderator_id": moderator_id}
     body = {"data": {"user_id": user_id, "reason": reason[:500]}}
     response = _helix_request("POST", "https://api.twitch.tv/helix/moderation/warnings", chat_access_token, params=params, json_body=body)
@@ -224,8 +223,8 @@ def warn_user(broadcaster_id, moderator_id, user_id, reason, chat_access_token):
 
 
 def get_chatters_count(broadcaster_id, moderator_id, chat_access_token):
-    """Liefert die Anzahl aktuell im Chat anwesender User (Helix-Feld "total"),
-    oder None bei Fehler. Erfordert Scope moderator:read:chatters."""
+    """Returns the number of users currently present in chat (Helix field "total"), or None
+    on error. Requires scope moderator:read:chatters."""
     params = {"broadcaster_id": broadcaster_id, "moderator_id": moderator_id, "first": 1}
     response = _helix_request("GET", "https://api.twitch.tv/helix/chat/chatters", chat_access_token, params=params)
     if response is not None and response.status_code == 200:
@@ -236,8 +235,8 @@ def get_chatters_count(broadcaster_id, moderator_id, chat_access_token):
 
 
 def get_stream_info(broadcaster_id, chat_access_token):
-    """Liefert die aktuellen Stream-Daten (u.a. started_at, title, game_name) oder
-    None, wenn der Kanal offline ist. Basis für !uptime."""
+    """Returns the current stream data (among others started_at, title, game_name), or None
+    when the channel is offline. The basis for !uptime."""
     response = _helix_request(
         "GET", "https://api.twitch.tv/helix/streams", chat_access_token, params={"user_id": broadcaster_id}
     )
@@ -250,7 +249,7 @@ def get_stream_info(broadcaster_id, chat_access_token):
 
 
 def get_game_id(name, chat_access_token):
-    """Löst einen Kategorie-/Spielnamen zur Twitch-internen Game-ID auf, für !game."""
+    """Resolves a category/game name to Twitch's internal game id, for !game."""
     response = _helix_request(
         "GET", "https://api.twitch.tv/helix/games", chat_access_token, params={"name": name}
     )
@@ -263,7 +262,7 @@ def get_game_id(name, chat_access_token):
 
 
 def modify_channel(broadcaster_id, chat_access_token, title=None, game_id=None):
-    """Ändert Titel und/oder Kategorie. Erfordert Scope channel:manage:broadcast."""
+    """Changes title and/or category. Requires scope channel:manage:broadcast."""
     body = {}
     if title is not None:
         body["title"] = title
@@ -283,8 +282,8 @@ def modify_channel(broadcaster_id, chat_access_token, title=None, game_id=None):
 
 
 def create_clip(broadcaster_id, chat_access_token):
-    """Erstellt einen Clip der letzten ~30s und gibt die öffentliche URL zurück
-    (oder None, z.B. wenn der Kanal offline ist). Erfordert Scope clips:edit."""
+    """Creates a clip of the last ~30s and returns the public URL (or None, e.g. when the
+    channel is offline). Requires scope clips:edit."""
     response = _helix_request(
         "POST", "https://api.twitch.tv/helix/clips", chat_access_token, params={"broadcaster_id": broadcaster_id}
     )
@@ -313,9 +312,8 @@ def get_subscriber_count(broadcaster_id, chat_access_token):
 
 
 def get_bits_leaderboard(chat_access_token):
-    """Liefert den Top-Bits-Cheerer (all-time) als {'user_name', 'score'} oder None.
-    Nutzt implizit die Broadcaster-ID des Tokens - kein broadcaster_id-Parameter.
-    Erfordert Scope bits:read."""
+    """Returns the top bits cheerer (all-time) as {'user_name', 'score'} or None. Implicitly
+    uses the token's broadcaster id - no broadcaster_id parameter. Requires scope bits:read."""
     response = _helix_request(
         "GET", "https://api.twitch.tv/helix/bits/leaderboard", chat_access_token,
         params={"count": 1, "period": "all"},
@@ -329,8 +327,8 @@ def get_bits_leaderboard(chat_access_token):
 
 
 def get_hype_train_status(broadcaster_id, chat_access_token):
-    """Liefert das aktuellste Hype-Train-Event oder None (auch, wenn keins aktiv ist).
-    Erfordert Scope channel:read:hype_train."""
+    """Returns the most recent hype train event, or None (including when none is active).
+    Requires scope channel:read:hype_train."""
     response = _helix_request(
         "GET", "https://api.twitch.tv/helix/hypetrain/events", chat_access_token,
         params={"broadcaster_id": broadcaster_id, "first": 1},
@@ -344,8 +342,8 @@ def get_hype_train_status(broadcaster_id, chat_access_token):
 
 
 def get_followage(broadcaster_id, user_id, chat_access_token):
-    """Gibt den ISO-Zeitstempel zurück, seit dem `user_id` dem Kanal folgt, oder
-    None, wenn der User nicht folgt. Erfordert Scope moderator:read:followers."""
+    """Returns the ISO timestamp since which `user_id` has followed the channel, or None when
+    the user does not follow. Requires scope moderator:read:followers."""
     response = _helix_request(
         "GET", "https://api.twitch.tv/helix/channels/followers", chat_access_token,
         params={"broadcaster_id": broadcaster_id, "user_id": user_id},
@@ -375,7 +373,7 @@ def send_shoutout(broadcaster_id, moderator_id, to_broadcaster_id, chat_access_t
 
 
 def start_raid(broadcaster_id, to_broadcaster_id, chat_access_token):
-    """Startet einen Raid zu einem anderen Kanal. Erfordert Scope channel:manage:raids."""
+    """Starts a raid to another channel. Requires scope channel:manage:raids."""
     params = {"from_broadcaster_id": broadcaster_id, "to_broadcaster_id": to_broadcaster_id}
     response = _helix_request("POST", "https://api.twitch.tv/helix/raids", chat_access_token, params=params)
     if response is not None and response.status_code == 200:
@@ -386,11 +384,11 @@ def start_raid(broadcaster_id, to_broadcaster_id, chat_access_token):
 
 
 def create_eventsub_subscription(sub_type, version, condition, session_id, chat_access_token):
-    """Registriert ein beliebiges EventSub-Abo für eine WebSocket-Session. Generischer
-    Ersatz für die frühere Handvoll type-spezifischer subscribe_*_events-Funktionen -
-    inzwischen folgen sechs Abo-Typen (Ad-Break, AutoMod-Hold, Sub, Cheer, Follow,
-    Hype-Train-Progress) demselben Muster. Manche Typen (z.B. channel.ad_break.begin)
-    erfordern, dass der Token dem Broadcaster selbst gehört, nicht nur einem Mod-Account."""
+    """Registers an arbitrary EventSub subscription for a WebSocket session. The generic
+    replacement for the former handful of type-specific subscribe_*_events functions - six
+    subscription types (ad break, AutoMod hold, sub, cheer, follow, hype train progress) now
+    follow the same pattern. Some types (e.g. channel.ad_break.begin) require the token to
+    belong to the broadcaster themselves, not merely to a mod account."""
     body = {
         "type": sub_type,
         "version": version,
@@ -408,7 +406,7 @@ def create_eventsub_subscription(sub_type, version, condition, session_id, chat_
 
 
 def create_poll(broadcaster_id, title, choices, duration_seconds, chat_access_token):
-    """Startet eine Chat-Umfrage. Erfordert Scope channel:manage:polls."""
+    """Starts a chat poll. Requires scope channel:manage:polls."""
     body = {
         "broadcaster_id": broadcaster_id,
         "title": title[:60],
@@ -424,7 +422,7 @@ def create_poll(broadcaster_id, title, choices, duration_seconds, chat_access_to
 
 
 def create_prediction(broadcaster_id, title, outcomes, prediction_window_seconds, chat_access_token):
-    """Startet eine Prediction. Erfordert Scope channel:manage:predictions."""
+    """Starts a prediction. Requires scope channel:manage:predictions."""
     body = {
         "broadcaster_id": broadcaster_id,
         "title": title[:45],
@@ -446,7 +444,7 @@ def add_channel_vip(broadcaster_id, user_id, chat_access_token):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-VIP-Hinzufügen fehlgeschlagen ({response.status_code}): {response.text}")
+        print(f"⚠️ Adding a Twitch VIP failed ({response.status_code}): {response.text}")
     return False
 
 
@@ -468,7 +466,7 @@ def add_channel_moderator(broadcaster_id, user_id, chat_access_token):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Mod-Hinzufügen fehlgeschlagen ({response.status_code}): {response.text}")
+        print(f"⚠️ Adding a Twitch mod failed ({response.status_code}): {response.text}")
     return False
 
 
@@ -484,8 +482,8 @@ def remove_channel_moderator(broadcaster_id, user_id, chat_access_token):
 
 
 def resolve_automod_message(moderator_id, msg_id, action, chat_access_token):
-    """Gibt eine von AutoMod zurückgehaltene Nachricht frei (action="ALLOW") oder
-    lehnt sie ab (action="DENY"). Erfordert Scope moderator:manage:automod."""
+    """Releases a message held back by AutoMod (action="ALLOW") or rejects it
+    (action="DENY"). Requires scope moderator:manage:automod."""
     body = {"user_id": moderator_id, "msg_id": msg_id, "action": action}
     response = _helix_request("POST", "https://api.twitch.tv/helix/moderation/automod/message", chat_access_token, json_body=body)
     if response is not None and response.status_code == 204:
@@ -496,8 +494,8 @@ def resolve_automod_message(moderator_id, msg_id, action, chat_access_token):
 
 
 def update_chat_settings(broadcaster_id, moderator_id, chat_access_token, settings):
-    """Ändert Chat-Einstellungen (z.B. {'slow_mode': True, 'slow_mode_wait_time': 30}).
-    Erfordert Scope moderator:manage:chat_settings."""
+    """Changes chat settings (e.g. {'slow_mode': True, 'slow_mode_wait_time': 30}).
+    Requires scope moderator:manage:chat_settings."""
     response = _helix_request(
         "PATCH", "https://api.twitch.tv/helix/chat/settings", chat_access_token,
         params={"broadcaster_id": broadcaster_id, "moderator_id": moderator_id}, json_body=settings,
@@ -510,10 +508,9 @@ def update_chat_settings(broadcaster_id, moderator_id, chat_access_token, settin
 
 
 def create_custom_reward(broadcaster_id, title, cost, chat_access_token):
-    """Legt einen Channel-Points-Reward an (für !giveaway) und gibt das Reward-Objekt
-    (u.a. 'id') zurück, oder None bei Fehler. Auf ein Redemption/Stream begrenzt, damit
-    niemand mehrfach an derselben Verlosung teilnehmen kann. Erfordert Scope
-    channel:manage:redemptions."""
+    """Creates a channel points reward (for !giveaway) and returns the reward object (among
+    others 'id'), or None on error. Limited to one redemption per stream so that nobody can
+    enter the same giveaway several times. Requires scope channel:manage:redemptions."""
     body = {
         "title": title[:45],
         "cost": cost,
@@ -533,9 +530,8 @@ def create_custom_reward(broadcaster_id, title, cost, chat_access_token):
 
 
 def delete_custom_reward(broadcaster_id, reward_id, chat_access_token):
-    """Löscht einen zuvor per create_custom_reward angelegten Reward wieder (nur
-    Rewards, die die eigene App erstellt hat, lassen sich so entfernen). Erfordert
-    Scope channel:manage:redemptions."""
+    """Deletes a reward previously created via create_custom_reward (only rewards created by
+    your own app can be removed this way). Requires scope channel:manage:redemptions."""
     response = _helix_request(
         "DELETE", "https://api.twitch.tv/helix/channel_points/custom_rewards", chat_access_token,
         params={"broadcaster_id": broadcaster_id, "id": reward_id},
@@ -543,14 +539,13 @@ def delete_custom_reward(broadcaster_id, reward_id, chat_access_token):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Reward-Löschung fehlgeschlagen ({response.status_code}): {response.text}")
+        print(f"⚠️ Deleting a Twitch reward failed ({response.status_code}): {response.text}")
     return False
 
 
 def update_redemption_status(broadcaster_id, reward_id, redemption_id, status, chat_access_token):
-    """Setzt eine Redemption auf FULFILLED (Gewinner) oder CANCELED (Punkte werden
-    dabei automatisch an den Teilnehmer zurückerstattet). Erfordert Scope
-    channel:manage:redemptions."""
+    """Sets a redemption to FULFILLED (winner) or CANCELED (the points are automatically
+    refunded to the participant in the process). Requires scope channel:manage:redemptions."""
     response = _helix_request(
         "PATCH", "https://api.twitch.tv/helix/channel_points/custom_rewards/redemptions", chat_access_token,
         params={"broadcaster_id": broadcaster_id, "reward_id": reward_id, "id": redemption_id},
