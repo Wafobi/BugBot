@@ -43,6 +43,8 @@ CONFIG_FOR = [
     ("features/moderation", "features/moderation/moderation.json"),
     ("features/variables", "features/variables/variables.json"),
     ("features/chat_log", "features/chat_log/chat_log.json"),
+    ("features/overlay", "features/overlay/overlay.json"),
+    ("features/chat_panel", "features/chat_panel/chat_panel.json"),
     ("features/sql_db", "features/sql_db/sql_db.json"),
 ]
 

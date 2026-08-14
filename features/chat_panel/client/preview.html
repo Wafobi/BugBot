@@ -1,0 +1,99 @@
+<meta charset="utf-8">
+<title>BugBot Chat Panel — Vorschau</title>
+
+<!--
+  Zum Anschauen im normalen Browser, ohne Bot und ohne OBS. Einfach öffnen:
+
+    file:///pfad/zu/bugbot/features/chat_panel/client/preview.html
+
+  chat.html füllt, anders als bars.html, die Größe seiner Quelle statt eines festen
+  2560x1440-Canvas - die Vorschau lässt deshalb Breite und Höhe selbst wählen, statt zu
+  skalieren, und legt ein Spielbild-Ersatzbild dahinter, damit sich die Lesbarkeit über
+  bewegtem Bild beurteilen lässt.
+
+  Alle Parameter von chat.html funktionieren auch hier und werden durchgereicht.
+-->
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0e0f14; color: #cfd6e0; overflow: hidden; height: 100vh;
+    font: 14px/1.5 system-ui, sans-serif;
+  }
+
+  #bar {
+    position: fixed; inset: 0 0 auto 0; z-index: 10; height: 46px;
+    display: flex; align-items: center; gap: 18px; padding: 0 16px;
+    background: #16181f; border-bottom: 1px solid #262a34;
+  }
+  #bar label { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  #bar select, #bar input[type=text], #bar input[type=number] {
+    background: #0e0f14; color: #cfd6e0; border: 1px solid #333846;
+    border-radius: 5px; padding: 4px 7px; font: inherit;
+  }
+  #bar input[type=number] { width: 70px; }
+  #bar input[type=text] { width: 220px; }
+  #bar .hint { margin-left: auto; opacity: .5; font-size: 12px; }
+
+  #wrap {
+    position: absolute; inset: 46px 0 0 0;
+    display: flex; align-items: center; justify-content: center;
+    overflow: auto;
+  }
+  #stage {
+    position: relative; flex: none;
+    background:
+      radial-gradient(circle at 30% 30%, #6b4b2a 0%, transparent 42%),
+      radial-gradient(circle at 72% 68%, #2b4a63 0%, transparent 48%),
+      linear-gradient(155deg, #3a3227 0%, #1b232b 55%, #241d29 100%);
+    box-shadow: 0 0 0 1px #262a34, 0 18px 60px rgba(0, 0, 0, .6);
+  }
+  #frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+</style>
+
+<div id="bar">
+  <label>Breite <input type="number" id="w" value="420" step="10"></label>
+  <label>Höhe <input type="number" id="h" value="900" step="10"></label>
+  <label>Zeilen <input type="number" id="max" value="12" step="1"></label>
+  <label>Quelle <input type="text" id="source" placeholder="alle, oder z.B. twitch"></label>
+  <label><input type="checkbox" id="badge" checked> Plattform-Marke</label>
+  <label>weitere Parameter <input type="text" id="extra" placeholder="t.msg-size=30px"></label>
+  <span class="hint">chat.html?demo=1 &middot; alle Parameter werden durchgereicht</span>
+</div>
+
+<div id="wrap"><div id="stage"><iframe id="frame"></iframe></div></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const incoming = new URLSearchParams(location.search);
+
+if (incoming.has("max")) $("max").value = incoming.get("max");
+if (incoming.has("source")) $("source").value = incoming.get("source");
+if (incoming.get("badge") === "0") $("badge").checked = false;
+{
+  const rest = new URLSearchParams(incoming);
+  ["max", "source", "badge", "demo"].forEach((k) => rest.delete(k));
+  $("extra").value = decodeURIComponent(rest.toString().replace(/&/g, "&"));
+}
+
+function build() {
+  const params = new URLSearchParams("demo=1");
+  params.set("max", $("max").value || "12");
+  if ($("source").value.trim()) params.set("source", $("source").value.trim());
+  if (!$("badge").checked) params.set("badge", "0");
+
+  let query = params.toString();
+  const extra = $("extra").value.trim().replace(/^[?&]+/, "");
+  if (extra) query += "&" + extra;
+
+  $("frame").src = "chat.html?" + query;
+  $("stage").style.width = ($("w").value || 420) + "px";
+  $("stage").style.height = ($("h").value || 900) + "px";
+}
+
+for (const id of ["w", "h", "max", "source", "badge", "extra"]) {
+  $(id).addEventListener(id === "extra" || id === "badge" ? "change" : "input", build);
+}
+build();
+</script>

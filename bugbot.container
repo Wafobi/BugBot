@@ -46,6 +46,7 @@ Volume=/path/to/bugbot/features/stats/stats.json:/app/features/stats/stats.json:
 Volume=/path/to/bugbot/features/chat_log/chat_log.json:/app/features/chat_log/chat_log.json:Z
 Volume=/path/to/bugbot/features/sql_db/sql_db.json:/app/features/sql_db/sql_db.json:Z
 Volume=/path/to/bugbot/features/overlay/overlay.json:/app/features/overlay/overlay.json:Z
+Volume=/path/to/bugbot/features/chat_panel/chat_panel.json:/app/features/chat_panel/chat_panel.json:Z
 Volume=/path/to/bugbot/features/sql_db/bugbot.db:/app/features/sql_db/bugbot.db:Z
 # The first incoming port: this is where the OBS relay from the streamer's machine dials in
 # (see platforms/obs/). Has to match OBS_BRIDGE_PORT from the .env. Anyone not connecting OBS
@@ -72,6 +73,14 @@ PublishPort=127.0.0.1:4456:4456
 # `127.0.0.1:` in this line is the first lock, and it is exactly one forgotten prefix away from
 # no longer being one.
 PublishPort=127.0.0.1:4457:4457
+
+# The third: this is where the chat panel hangs (see features/chat_panel). Has to match
+# CHAT_PANEL_PORT from the .env. Anyone not embedding that browser source leaves the line out.
+#
+# Same arrangement and the same loopback restriction as the two above. What goes out here is
+# already-moderated chat text rather than numbers, but the principle is unchanged: read-only,
+# and the listener accepts nothing from the far side.
+PublishPort=127.0.0.1:4458:4458
 
 [Service]
 # always rather than on-failure: the bot should come back up even when the process ends cleanly

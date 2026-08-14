@@ -24,6 +24,8 @@ rebuild, no reload command.
 | `features/stats/stats.json` | `stats` feature | every label, field and line the statistics print |
 | `features/variables/variables.json` | `variables` feature | the `{placeholders}` usable in static commands, on every platform |
 | `features/chat_log/chat_log.json` | `chat_log` feature | which platforms get logged |
+| `features/overlay/overlay.json` | `overlay` feature | which event fills which field on screen, death-counter texts |
+| `features/chat_panel/chat_panel.json` | `chat_panel` feature | which platforms, whether `!` lines are hidden, how much history a reconnect gets |
 | `features/sql_db/sql_db.json` | `sql_db` feature | where the database file lives |
 
 Keys beginning with `_` are comments for the human editing the file — JSON has none of its own.

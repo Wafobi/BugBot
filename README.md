@@ -59,6 +59,7 @@ The [`docs/`](docs/) folder is the long version.
 | [Moderation](docs/moderation.md) | the filters, the thresholds, the escalation |
 | [Database](docs/database.md) | every table and column, and how the stream session stamps them |
 | [Overlay](docs/overlay.md) | the browser sources in the picture: what the bot pushes, and how to wire one up |
+| [Chat panel](docs/chat_panel.md) | chat mirrored into OBS as its own browser source |
 | [Twitch](docs/twitch.md) · [Discord](docs/discord.md) · [OBS](docs/obs.md) | per-platform specifics |
 | [Deployment](docs/deployment.md) | Podman, systemd, logs, and what to run after changing what |
 
@@ -159,8 +160,8 @@ Two machines are involved, and which is which decides what you install where:
 
 | | **Server** — where the bot runs | **OBS machine** — where you stream from |
 |---|---|---|
-| Runs | the container, all platforms and features | the OBS relay, the overlay page, the tunnel |
-| Files | everything except the `client/` folders | `platforms/obs/client/`, `features/overlay/client/` |
+| Runs | the container, all platforms and features | the OBS relay, the overlay page, the chat panel page, the tunnel |
+| Files | everything except the `client/` folders | `platforms/obs/client/`, `features/overlay/client/`, `features/chat_panel/client/` |
 | Scripts | `./setup-systemd.sh` (once), `./start.sh`, `./update.sh` (day-to-day), `./disable-systemd.sh` | `platforms/obs/client/setup-tunnel.sh`, `disable-tunnel.sh` |
 | Needs | Podman, `.env`, the JSON configs | Python + `websockets`, an ssh key to the server |
 
@@ -168,8 +169,8 @@ The rule of thumb: anything inside a **`client/`** folder is the streaming PC's,
 the server's. Nothing in a `client/` folder is ever imported by the bot, so a server that never
 copies them is complete.
 
-The tunnel exists because the bot's two listeners (`4456`, `4457`) are published to the server's
-loopback only, so the OBS machine dials in rather than the other way round. Both tunnel scripts are
+The tunnel exists because the bot's three listeners (`4456`, `4457`, `4458`) are published to the
+server's loopback only, so the OBS machine dials in rather than the other way round. Both tunnel scripts are
 safe to re-run, and both cope with a machine that already tunnels to that server for something
 else. → [The SSH tunnel](docs/tunnel.md)
 
