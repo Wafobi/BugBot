@@ -33,6 +33,7 @@ the reference material you need when changing something.
 | Page | What's in it |
 |---|---|
 | [Deployment](deployment.md) | Podman, systemd Quadlet, the update scripts, logs, and what to run after changing what |
+| [The SSH tunnel](tunnel.md) | How the OBS machine reaches the bot's two loopback listeners, and the systemd user service that keeps it up |
 
 ---
 

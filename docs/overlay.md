@@ -25,9 +25,11 @@ features/overlay/
   store.py        overlay_counters, so the death count survives a restart
   config.py       token/port/bind from .env
   overlay.json    which event fills which field, and every line the bot says
-  bars.html       the page itself — belongs on the OBS machine, like obs_bridge.py
-  preview.html    the same page in a scaled frame, for looking at it in a browser
   README.md       every parameter and every design token, as a lookup table
+
+  client/         ── runs on the OBS machine, not the server ──
+    bars.html     the page itself, opened as the browser source
+    preview.html  the same page in a scaled frame, for looking at it in a browser
 ```
 
 ---
@@ -88,22 +90,24 @@ that prefix is ever forgotten.
 **3. The tunnel**, on the OBS machine — the same one that already carries the OBS relay:
 
 ```bash
-./setup-tunnel.sh user@your-server
+platforms/obs/client/setup-tunnel.sh user@your-server
 ```
 
 That writes an `~/.ssh/config` entry with both forwards, installs a systemd user service so
 the tunnel survives a dropped link and a reboot, and checks that the far end answers before
-it calls itself done. Re-running updates the entry rather than adding a second one, and it
-refuses to touch a `Host` block someone wrote by hand. `./disable-tunnel.sh` takes it back
-out.
+it calls itself done. `disable-tunnel.sh` next to it takes it back out.
 
 By hand it would be `ssh -N -L 4456:127.0.0.1:4456 -L 4457:127.0.0.1:4457 user@your-server`
 — worth knowing for a one-off, but not something to retype before every stream.
 
+Already tunnelling to that machine for something else? Then read
+[The SSH tunnel](tunnel.md#two-shapes) first: two ssh connections cannot both forward 4457,
+and the script has a way of dealing with that. → [The SSH tunnel](tunnel.md)
+
 **4. The browser source.** Width `2560`, height `1440`, position `(0,0)`, and as URL:
 
 ```
-file:///path/to/bugbot/features/overlay/bars.html?token=YOUR_OVERLAY_TOKEN
+file:///path/to/bugbot/features/overlay/client/bars.html?token=YOUR_OVERLAY_TOKEN
 ```
 
 Put it *above* the camera source, so the ring frames the camera rather than the camera covering

@@ -198,8 +198,8 @@ Subscribes to `MESSAGE`, **not** `MESSAGE_ACCEPTED` — the messages that got de
 the ones worth being able to read afterwards. Live-only, because the session column is
 `NOT NULL`; recording off-stream would need a schema change, not a setting.
 
-The feature only records; reading the archive back is `chatlog.py` at the repo root —
-`python3 chatlog.py` lists the recorded streams, `chatlog.py 7` prints one, `--html` writes
+The feature only records; reading the archive back is `chatlog.py`, next to the feature —
+`python3 features/chat_log/chatlog.py` lists the recorded streams, `… 7` prints one, `--html` writes
 browsable pages. It opens the database read-only, so it is safe to run mid-stream, and it
 converts the stored UTC into the timezone from `variables.json` — a stream that began at
 `11:03` in the table began at 13:03 for everyone who was there.

@@ -33,9 +33,9 @@ complete? bot a moderator? intents on?), `check_config.py` tests the JSON agains
 Afterwards, `chatlog.py` is the way back into what was said:
 
 ```bash
-python3 chatlog.py                        # which streams were recorded
-python3 chatlog.py 7                      # read the chat of stream #7
-python3 chatlog.py --alle --html          # the whole archive as pages to browse
+python3 features/chat_log/chatlog.py                # which streams were recorded
+python3 features/chat_log/chatlog.py 7              # read the chat of stream #7
+python3 features/chat_log/chatlog.py --all --html   # the whole archive as pages to browse
 ```
 
 Full walkthroughs: [Twitch](docs/twitch.md#tokens) · [Discord](docs/discord.md#setting-up-the-app)
@@ -155,12 +155,27 @@ Where a feature lives says what it depends on: `features/` is neutral and works 
 
 ## Running it
 
-The bot runs in a container via Podman, with systemd managing it through Quadlet. Four scripts:
-`./setup-systemd.sh` (once), `./start.sh`, `./update.sh` (day-to-day), `./disable-systemd.sh`.
+Two machines are involved, and which is which decides what you install where:
 
-Two more run **on the OBS machine** rather than on the server, because that is the end the tunnel
-to the bot's listeners is dialled from: `./setup-tunnel.sh user@server` installs it as a systemd
-user service, `./disable-tunnel.sh` takes it back out. → [Overlay](docs/overlay.md#setup)
+| | **Server** — where the bot runs | **OBS machine** — where you stream from |
+|---|---|---|
+| Runs | the container, all platforms and features | the OBS relay, the overlay page, the tunnel |
+| Files | everything except the `client/` folders | `platforms/obs/client/`, `features/overlay/client/` |
+| Scripts | `./setup-systemd.sh` (once), `./start.sh`, `./update.sh` (day-to-day), `./disable-systemd.sh` | `platforms/obs/client/setup-tunnel.sh`, `disable-tunnel.sh` |
+| Needs | Podman, `.env`, the JSON configs | Python + `websockets`, an ssh key to the server |
+
+The rule of thumb: anything inside a **`client/`** folder is the streaming PC's, everything else is
+the server's. Nothing in a `client/` folder is ever imported by the bot, so a server that never
+copies them is complete.
+
+The tunnel exists because the bot's two listeners (`4456`, `4457`) are published to the server's
+loopback only, so the OBS machine dials in rather than the other way round. Both tunnel scripts are
+safe to re-run, and both cope with a machine that already tunnels to that server for something
+else. → [The SSH tunnel](docs/tunnel.md)
+
+**Both on one machine?** Then there is no tunnel and no copying — skip `setup-tunnel.sh`, point the
+relay and the browser source at `127.0.0.1` as usual, and everything else stays the same. The
+tokens are still required. → [When both ends are the same machine](docs/tunnel.md#when-both-ends-are-the-same-machine)
 
 The `Dockerfile` does `COPY . .`, so **the code is baked into the image** while configs and the
 DB are mounted over it from your clone:

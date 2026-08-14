@@ -4,7 +4,7 @@ Every knob on `bars.html`, in one place. What the feature *is* and how to wire i
 [docs/overlay.md](../../docs/overlay.md); this file is the lookup table.
 
 ```
-file:///path/to/bugbot/features/overlay/bars.html?token=…&bar=110
+file:///path/to/bugbot/features/overlay/client/bars.html?token=…&bar=110
 ```
 
 ---

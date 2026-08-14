@@ -30,10 +30,19 @@ platforms/obs/
   bot.py                  events onto the bus, ad panel, announcements, command helpers
   config.py               listener port and shared secret from .env
   obs.json                sources, announcement kinds, timings, texts
-  obs_bridge.py           the relay — belongs on the OBS machine, never imported by the bot
-  obs_bridge_script.py    the same relay packaged as an OBS script
   features/obs_control/   !obs, !scene, !rec, !replay, !obssource
+
+  client/                 ── everything below runs on the OBS machine, not the server ──
+    obs_bridge.py         the relay, never imported by the bot
+    obs_bridge_script.py  the same relay packaged as an OBS script
+    setup-tunnel.sh       installs the tunnel as a systemd user service
+    disable-tunnel.sh     takes it back out
 ```
+
+The `client/` split is the file layout answering a question that otherwise gets asked once per
+setup: *which of these do I copy to the streaming PC?* Everything in it, nothing else. The bot
+never imports from there, and `core/registry.py` skips the directory on its own — it only
+descends into directories containing a `platform.py` or `feature.py`.
 
 ---
 
@@ -101,10 +110,12 @@ warning line at startup, and its commands don't exist.
    ssh -N -L 4456:127.0.0.1:4456 you@your-server.example
    ```
 
-   For permanent use, `autossh` — or `ssh -o ServerAliveInterval=30 -o ExitOnForwardFailure=yes`
-   in a restart loop — so it comes back after a reboot or a dropped line.
+   That is the one-off version. For permanent use run `client/setup-tunnel.sh you@your-server`
+   instead: same forward, but as a systemd user service that comes back after a dropped line
+   and a reboot, with the keepalive that makes a *dead* link get noticed in the first place.
+   → [The SSH tunnel](tunnel.md)
 
-3. Copy **both** `obs_bridge.py` and `obs_bridge_script.py` into one folder there and
+3. Copy the whole of `platforms/obs/client/` to that machine and
    `pip install websockets`. Then in OBS: *Tools → Scripts → +*, pick `obs_bridge_script.py`, and
    fill in the BugBot address (`ws://127.0.0.1:4456` — your end of the tunnel) and the token.
 
