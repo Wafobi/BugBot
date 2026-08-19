@@ -113,6 +113,7 @@ To see it without a bot running, open **`preview.html`** next to it, or append `
 | `max=` | how many lines stay visible before the oldest scrolls off (default `12`) |
 | `badge=0` | hide the small platform tag in front of the name |
 | `accent=` | accent colour for mods/broadcaster, URL-encoded: `%23FFE100` |
+| `opacity=` | opacity of the panel's background, `0`–`1` (default `.55`). Only the fill — text and the frame stay fully readable regardless |
 | `t.NAME=` | override any single design token, e.g. `t.msg-size=30px` |
 | `link=1` | show the connection lamp, top right — off by default |
 | `demo=1` | sample messages, no connection |

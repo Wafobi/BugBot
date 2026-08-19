@@ -56,6 +56,7 @@
   <label>Höhe <input type="number" id="h" value="900" step="10"></label>
   <label>Zeilen <input type="number" id="max" value="12" step="1"></label>
   <label>Quelle <input type="text" id="source" placeholder="alle, oder z.B. twitch"></label>
+  <label>Deckkraft <input type="number" id="opacity" value=".55" min="0" max="1" step=".05"></label>
   <label><input type="checkbox" id="badge" checked> Plattform-Marke</label>
   <label>weitere Parameter <input type="text" id="extra" placeholder="t.msg-size=30px"></label>
   <span class="hint">chat.html?demo=1 &middot; alle Parameter werden durchgereicht</span>
@@ -70,10 +71,11 @@ const incoming = new URLSearchParams(location.search);
 
 if (incoming.has("max")) $("max").value = incoming.get("max");
 if (incoming.has("source")) $("source").value = incoming.get("source");
+if (incoming.has("opacity")) $("opacity").value = incoming.get("opacity");
 if (incoming.get("badge") === "0") $("badge").checked = false;
 {
   const rest = new URLSearchParams(incoming);
-  ["max", "source", "badge", "demo"].forEach((k) => rest.delete(k));
+  ["max", "source", "opacity", "badge", "demo"].forEach((k) => rest.delete(k));
   $("extra").value = decodeURIComponent(rest.toString().replace(/&/g, "&"));
 }
 
@@ -81,6 +83,7 @@ function build() {
   const params = new URLSearchParams("demo=1");
   params.set("max", $("max").value || "12");
   if ($("source").value.trim()) params.set("source", $("source").value.trim());
+  if ($("opacity").value.trim()) params.set("opacity", $("opacity").value.trim());
   if (!$("badge").checked) params.set("badge", "0");
 
   let query = params.toString();
@@ -92,7 +95,7 @@ function build() {
   $("stage").style.height = ($("h").value || 900) + "px";
 }
 
-for (const id of ["w", "h", "max", "source", "badge", "extra"]) {
+for (const id of ["w", "h", "max", "source", "opacity", "badge", "extra"]) {
   $(id).addEventListener(id === "extra" || id === "badge" ? "change" : "input", build);
 }
 build();

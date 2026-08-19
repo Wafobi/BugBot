@@ -27,6 +27,8 @@
     max=     wie viele Zeilen sichtbar bleiben, ältere rutschen raus (Default 12)
     badge=0  die Plattform-Marke vor dem Namen ausblenden
     accent=  Akzentfarbe, URL-kodiert: %23FFE100 für #FFE100
+    opacity= Deckkraft des Kastenhintergrunds, 0 bis 1 (Default .55). Betrifft nur die Fläche,
+             nicht Text oder Rahmen - die bleiben immer voll lesbar.
     t.NAME=  jedes einzelne Gestaltungs-Token überschreiben, z.B. t.msg-size=30px
     link=1   Verbindungsampel oben rechts einblenden (Standard: aus)
     demo=1   Beispielnachrichten ohne Verbindung - zum Anschauen im normalen Browser
@@ -48,9 +50,19 @@
     --sub: #F22A80;       /* Abonnent*in */
     --ink: #EAF7FF;       /* normale Zuschauer*innen */
     --dim: rgba(234, 247, 255, .55);
-    --bubble-bg: rgba(9, 10, 26, .55);
     --dot-off: #2A2C50;
     --dot-ok: #34C759;
+
+    /* Der Kasten: Rahmen als Verlauf Cyan -> Magenta, dieselben zwei Farben wie im
+       Kanalbild ("Cyan füllt, Magenta umreißt", siehe features/overlay/client/bars.html).
+       --bg-alpha ist eigens von den Farben getrennt, damit opacity= nur die Fläche trifft
+       und Text/Rahmen immer voll lesbar bleiben. */
+    --margin: 10px;
+    --radius: 12px;
+    --border-w: 2px;
+    --border: linear-gradient(165deg, var(--accent), var(--sub));
+    --bg-alpha: .55;
+    --panel-bg: rgba(9, 10, 26, var(--bg-alpha));
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -65,9 +77,21 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Neue Zeilen unten, alte rutschen oben raus - wie ein normales Chatfenster. */
+  /* Der Verlaufsrahmen kommt über den klassischen background-clip-Trick: ein
+     transparenter border reserviert den Rand, zwei gestapelte Hintergründe füllen ihn
+     verschieden - der obere (die Füllfarbe) nur bis zur padding-box, der untere (der
+     Verlauf) bis zur border-box, also nur im schmalen Streifen sichtbar, den der obere
+     freilässt. Braucht kein zweites, verschachteltes Element und damit keine
+     Prozent-Höhe, die von irgendeiner Elternbox erst richtig berechnet werden müsste. */
   #feed {
-    position: absolute; inset: 0;
+    position: absolute;
+    top: var(--margin); right: var(--margin); bottom: var(--margin); left: var(--margin);
+    border: var(--border-w) solid transparent;
+    border-radius: var(--radius);
+    background:
+      linear-gradient(var(--panel-bg), var(--panel-bg)) padding-box,
+      var(--border) border-box;
+    box-shadow: 0 0 24px rgba(95, 234, 245, .18), 0 12px 40px rgba(0, 0, 0, .45);
     display: flex; flex-direction: column; justify-content: flex-end;
     gap: var(--gap);
     padding: var(--pad);
@@ -78,11 +102,6 @@
     display: flex; align-items: baseline; gap: 8px;
     font-size: var(--msg-size);
     line-height: 1.3;
-    background: var(--bubble-bg);
-    border-radius: 10px;
-    padding: 6px 12px;
-    width: fit-content;
-    max-width: 100%;
     animation: rise .25s ease-out;
   }
   @keyframes rise {
@@ -131,6 +150,7 @@ const root = document.documentElement.style;
 // --- Gestaltung: wie in bars.html - Kurzname für den häufigsten Fall, sonst der
 // allgemeine Weg über jedes Token aus :root. ---------------------------------------------
 if (params.has("accent")) root.setProperty("--accent", params.get("accent"));
+if (params.has("opacity")) root.setProperty("--bg-alpha", params.get("opacity"));
 for (const [name, value] of params) {
   if (name.startsWith("t.") && name.length > 2) root.setProperty("--" + name.slice(2), value);
 }
