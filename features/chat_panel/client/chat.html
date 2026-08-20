@@ -29,6 +29,8 @@
     accent=  Akzentfarbe, URL-kodiert: %23FFE100 für #FFE100
     t.NAME=  jedes einzelne Gestaltungs-Token überschreiben, z.B. t.msg-size=30px
     link=1   Verbindungsampel oben rechts einblenden (Standard: aus)
+    idle=    Sekunden Ruhe im Chat, bis der Feed ausblendet (Default 8, 0 = nie ausblenden)
+    fade=    Sekunden für die Ein-/Ausblend-Animation (Default 2.5)
     demo=1   Beispielnachrichten ohne Verbindung - zum Anschauen im normalen Browser
 
   Nur was die Moderation durchlässt, kommt überhaupt hier an (siehe feature.py) - dieses
@@ -52,6 +54,7 @@
     --dot-ok: #34C759;
 
     --margin: 10px;
+    --fade: 2.5s;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -73,7 +76,10 @@
     gap: var(--gap);
     padding: var(--pad);
     overflow: hidden;
+    opacity: 1;
+    transition: opacity var(--fade) ease;
   }
+  #feed.idle { opacity: 0; }
 
   .msg {
     display: flex; align-items: baseline; gap: 8px;
@@ -137,6 +143,17 @@ const feed = document.getElementById("feed");
 const MAX_VISIBLE = Math.max(1, parseInt(params.get("max"), 10) || 12);
 const SHOW_BADGE = params.get("badge") !== "0";
 
+// Ausblenden bei Ruhe im Chat - 0 schaltet es ab, wer den Feed dauerhaft sichtbar will.
+const IDLE_MS = params.has("idle") ? Math.max(0, parseFloat(params.get("idle")) * 1000) : 8000;
+if (params.has("fade")) root.setProperty("--fade", Math.max(0.1, parseFloat(params.get("fade"))) + "s");
+
+let idleTimer = null;
+function scheduleIdle() {
+  feed.classList.remove("idle");
+  if (idleTimer) clearTimeout(idleTimer);
+  if (IDLE_MS > 0) idleTimer = setTimeout(() => feed.classList.add("idle"), IDLE_MS);
+}
+
 // Welche Plattform(en) diese Instanz zeigt - leer heißt alle. Das Filtern passiert hier und
 // nicht beim Bot: der schickt jeder verbundenen Quelle dasselbe, source= entscheidet erst
 // hinterher, was aus dem Strom tatsächlich im Bild landet.
@@ -175,6 +192,7 @@ function addMessage(entry) {
 
   feed.appendChild(div);
   while (feed.children.length > MAX_VISIBLE) feed.removeChild(feed.firstElementChild);
+  scheduleIdle();
 }
 
 // --- Verbindung ----------------------------------------------------------------------
