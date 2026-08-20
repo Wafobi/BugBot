@@ -16,7 +16,7 @@ OBS machine                                     server
 
 ```
 features/chat_panel/
-  feature.py      the history, the MESSAGE_ACCEPTED subscription
+  feature.py      the history, the MESSAGE_ACCEPTED and CHAT_CLEARED subscriptions
   server.py       the listener — token check, connections, broadcast
   config.py       token/port/bind from .env
   chat_panel.json which platforms, whether "!" lines are hidden, how much history
@@ -30,22 +30,31 @@ features/chat_panel/
 
 ## What it sends
 
-Two frame types, both JSON:
+Three frame types, all JSON:
 
 | `type` | when | `data` |
 |---|---|---|
 | `history` | once, on connect | the recent messages, oldest first |
 | `message` | for every accepted message | one message |
+| `clear` | a mod/broadcaster cleared the whole chat on the platform itself | `null` |
 
 A message: `platform`, `user_name`, `text`, `is_privileged` (mod/broadcaster),
 `is_subscriber`.
 
 **Deliberately `MESSAGE_ACCEPTED`, not `MESSAGE`.** A line moderation deletes never reaches this
 feature, so it can never flash on screen for the second it takes the bot to remove it — there is
-no "take this back" frame to the panel, because there is nothing to take back. That is also why
-the history lives only in RAM: it exists to catch up a browser source that reloads mid-stream, not
-to be queried afterwards — [`features/chat_log`](database.md) is already the record, and it keeps
-the opposite half on purpose (everything, so a deleted message can still be read back by a mod).
+no per-message "take this back" frame to the panel, because there is nothing to take back. That is
+also why the history lives only in RAM: it exists to catch up a browser source that reloads
+mid-stream, not to be queried afterwards — [`features/chat_log`](database.md) is already the
+record, and it keeps the opposite half on purpose (everything, so a deleted message can still be
+read back by a mod).
+
+**`clear` is the one exception**, because it is not about any one message. On Twitch, a moderator
+or the broadcaster hitting "Clear chat" in Twitch's own UI sends `CLEARCHAT` over IRC with no
+target user (a per-user purge/timeout is a different `CLEARCHAT`, and does *not* trigger this —
+that already surfaces through `MOD_ACTION` when the bot is the one acting). The bot forwards it as
+`events.CHAT_CLEARED`, the feature empties its in-memory history, and every connected panel wipes
+its feed the moment the frame arrives — Twitch does not say who cleared it, so neither does this.
 
 Lines starting with `!` are left out by default (`hide_commands` in `chat_panel.json`) — they are
 addressed to the bot, not to whoever is reading the panel.
@@ -113,7 +122,6 @@ To see it without a bot running, open **`preview.html`** next to it, or append `
 | `max=` | how many lines stay visible before the oldest scrolls off (default `12`) |
 | `badge=0` | hide the small platform tag in front of the name |
 | `accent=` | accent colour for mods/broadcaster, URL-encoded: `%23FFE100` |
-| `opacity=` | opacity of the panel's background, `0`–`1` (default `.55`). Only the fill — text and the frame stay fully readable regardless |
 | `t.NAME=` | override any single design token, e.g. `t.msg-size=30px` |
 | `link=1` | show the connection lamp, top right — off by default |
 | `demo=1` | sample messages, no connection |

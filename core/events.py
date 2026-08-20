@@ -44,6 +44,13 @@ COMMAND = "command.used"
 #   payload: platform, user_name, reason, action ("delete"/"timeout"/"ban"/"warn"/"unban")
 MOD_ACTION = "moderation.action"
 
+# A moderator/broadcaster cleared the whole chat through the platform's own UI - distinct
+# from MOD_ACTION, which is about one user. Nothing else about MESSAGE_ACCEPTED changes: the
+# messages already recorded stay recorded, this only tells presentation-only listeners (the
+# chat panel) that the platform itself just wiped the slate.
+#   payload: platform
+CHAT_CLEARED = "chat.cleared"
+
 # A typed live event: follow, sub, gift sub, cheer, raid, hype train, ...
 #   payload: platform, event_type, user_name, amount (bits/count/level/0)
 PLATFORM_EVENT = "platform.event"

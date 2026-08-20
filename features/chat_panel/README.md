@@ -20,7 +20,6 @@ file:///path/to/bugbot/features/chat_panel/client/chat.html?token=…&source=twi
 | `max=` | `12` | how many lines stay visible; the oldest scrolls off as new ones arrive |
 | `badge=0` | shown | hide the platform tag in front of the name |
 | `accent=` | `#5FEAF5` | colour for mod/broadcaster names, URL-encoded: `%23FFE100` for `#FFE100` |
-| `opacity=` | `.55` | opacity of the panel's background fill, `0`–`1`. Text and the frame stay fully readable regardless — only the fill fades |
 | `t.NAME=` | — | override any single design token, e.g. `t.msg-size=30px` |
 | `link=1` | off | show the connection lamp, top right. Off by default so a bot restart mid-stream does not put a red dot on screen |
 | `demo=1` | off | sample messages without a connection, for previewing |
@@ -51,25 +50,19 @@ All of these are settable as `?t.<name>=<value>`. The defaults below are what `:
 
 | Token | Default | |
 |---|---|---|
-| `--accent` | `#5FEAF5` | mod/broadcaster names, and one end of the border gradient; `accent=` writes this |
-| `--sub` | `#F22A80` | subscriber names, and the border gradient's other end |
+| `--accent` | `#5FEAF5` | mod/broadcaster names; `accent=` writes this |
+| `--sub` | `#F22A80` | subscriber names |
 | `--ink` | `#EAF7FF` | everyone else |
 | `--dim` | `rgba(234,247,255,.55)` | the platform badge |
 | `--dot-off` / `--dot-ok` | `#2A2C50` / `#34C759` | connection lamp, see `link=1` |
 
-### The box
+### Layout
 
-One framed panel holds every line — the whole page fills the OBS source, and the box sits inset
-from its edges so the frame is visible on all sides.
+No box, no border — just the lines themselves over whatever OBS composites behind this source.
 
 | Token | Default | |
 |---|---|---|
-| `--margin` | `10px` | gap between the box and the source's edges |
-| `--radius` | `12px` | corner radius, box and border alike |
-| `--border-w` | `2px` | |
-| `--border` | `linear-gradient(165deg, var(--accent), var(--sub))` | the frame — a gradient, not a flat colour, so it takes two stops rather than one to change |
-| `--bg-alpha` | `.55` | the panel fill's opacity, `0`–`1`; `opacity=` writes this |
-| `--panel-bg` | `rgba(9,10,26,var(--bg-alpha))` | the fill itself — override `--bg-alpha` rather than this directly, unless the colour should change too |
+| `--margin` | `10px` | gap between the text and the source's edges |
 
 ---
 

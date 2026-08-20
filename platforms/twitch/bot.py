@@ -1170,6 +1170,15 @@ async def _handle_irc_line(line):
         except Exception as e:
             # An error in message processing must not cost us the connection.
             print(f"⚠️ Error while processing a Twitch message: {e}")
+        return
+
+    if "CLEARCHAT" in line:
+        try:
+            await _handle_clearchat(line)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"⚠️ Error while processing a Twitch CLEARCHAT: {e}")
 
 
 async def _send_command_reply(reply):
@@ -1187,6 +1196,21 @@ async def _send_command_reply(reply):
 
 async def _record_command(name, user_name):
     await events.bus.publish(events.COMMAND, platform=NAME, command=name, user_name=user_name)
+
+
+async def _handle_clearchat(line):
+    """CLEARCHAT with a target-user-id is a purge/timeout of one person - already covered by
+    the bot's own MOD_ACTION reporting when the bot itself is the one acting, and otherwise
+    not something presentation should react to. Without a target it means a moderator or the
+    broadcaster hit "clear chat" in Twitch's own UI, which Twitch does not attribute to
+    anyone by name - only that whole case is forwarded onto the bus."""
+    tags = {}
+    if line.startswith("@"):
+        raw_tags, _ = line.split(" ", 1)
+        tags = parse_irc_tags(raw_tags)
+    if "target-user-id" in tags:
+        return
+    await events.bus.publish(events.CHAT_CLEARED, platform=NAME)
 
 
 async def _handle_privmsg(line):

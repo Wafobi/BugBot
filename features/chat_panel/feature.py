@@ -5,11 +5,12 @@ browser sources hanging on the listener (features/chat_panel/server.py) - the re
 history on connect, one frame per message afterwards.
 
 Deliberately MESSAGE_ACCEPTED and not MESSAGE: a message that moderation deletes never
-reaches this feature, so it never reaches the screen either. There is no separate "remove
-this again" frame to the panel, because there is nothing to take back - the same reasoning
-as features/chat_log recording MESSAGE and not MESSAGE_ACCEPTED, only pointed the other way:
-that one wants everything for the record, this one wants only what a viewer was ever
-allowed to read.
+reaches this feature, so it never reaches the screen either. There is still no per-message
+"remove this again" frame - the same reasoning as features/chat_log recording MESSAGE and not
+MESSAGE_ACCEPTED, only pointed the other way: that one wants everything for the record, this
+one wants only what a viewer was ever allowed to read. The one thing that does wipe the panel
+after the fact is CHAT_CLEARED (see on_chat_cleared below): a platform-wide "clear chat" is not
+about any one message, so it earns the exception.
 
 The history lives in RAM and not in STORAGE: it exists to catch up a browser source that
 reloads mid-stream, not to be queried afterwards - features/chat_log already is the record.
@@ -59,6 +60,7 @@ class ChatPanelFeature(feature_api.Feature):
     async def setup(self, bus):
         self._bus = bus
         bus.subscribe(events.MESSAGE_ACCEPTED, self.on_message)
+        bus.subscribe(events.CHAT_CLEARED, self.on_chat_cleared)
 
         if not env.CHAT_PANEL_TOKEN:
             print("ℹ️  No CHAT_PANEL_TOKEN set - no chat panel listener.")
@@ -108,6 +110,13 @@ class ChatPanelFeature(feature_api.Feature):
         self._history.append(entry)
         if self._server is not None:
             await self._server.broadcast("message", entry)
+
+    async def on_chat_cleared(self, platform):
+        if not self._in_scope(platform):
+            return
+        self._history.clear()
+        if self._server is not None:
+            await self._server.broadcast("clear", None)
 
 
 def create_feature():
