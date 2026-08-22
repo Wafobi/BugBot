@@ -10,14 +10,14 @@
     "_comment": "Rename commands, give them aliases, or switch them off: \"!stats\": \"!zahlen\" | \"!stats\": [\"!zahlen\", \"!stat\"] | \"!stats\": false"
   },
   "texts": {
-    "help.companion": "Twitch-Abo (oder Mod) = automatisch ein Companion im Stream - lass ihn reden ({need} Bits pro Nachricht) oder gib ihm mit \"set <hash>\" ein neues Aussehen ({set_need} Bits pro Wechsel)",
-    "subs_only": "Companions gibt es aktuell nur für Twitch-Abos (oder Mods) - abonnier den Kanal, um einen zu bekommen!",
-    "blocked": "Das kann dein Companion nicht sagen ({label}).",
-    "needs_bits": "Dein Companion flüstert nur für alle hörbar für {need} Bits pro Nachricht (dein Guthaben: {have} Bits).",
-    "set_usage": "Nutzung: !companion set <hash> - <hash> ist ein beliebiger Text als neuer Look für deinen Companion.",
-    "set_needs_bits": "Ein neues Aussehen für deinen Companion kostet {need} Bits pro Wechsel (dein Guthaben: {have} Bits).",
-    "set_done": "🌱 Neuer Look gesetzt: \"{seed}\" - der bleibt so, bis du wieder !companion set benutzt (auch über einen Neustart des Bots hinweg).",
-    "help.vtubbi": "vtubbi ist mein VTuber-Avatar - hol dir deinen eigenen: https://github.com/Wafobi/vtubbi",
-    "vtubbi.link": "🌱 vtubbi ist mein VTuber-Avatar - hol dir deinen eigenen: https://github.com/Wafobi/vtubbi"
+    "help.companion": "Als Abonnent*in (oder Mod) erhältst du automatisch einen Companion im Stream. Lass ihn mit einem Text sprechen ({need} Bits pro Nachricht) oder gib ihm mit \"set <hash>\" dauerhaft ein neues Aussehen ({set_need} Bits pro Wechsel). Details in den Info-Boxen unter dem Stream.",
+    "subs_only": "Companions sind derzeit Abonnent*innen und Mods vorbehalten. Mit einem Abo erhältst du automatisch einen - Details in den Info-Boxen unter dem Stream.",
+    "blocked": "Diese Nachricht wurde nicht angezeigt ({label}).",
+    "needs_bits": "Für eine sichtbare Nachricht werden {need} Bits benötigt (aktuelles Guthaben: {have}).",
+    "set_usage": "Nutzung: !companion set <hash> - <hash> ist ein beliebiger Text, der dauerhaft als neuer Look für deinen Companion dient.",
+    "set_needs_bits": "Für ein neues Aussehen werden {need} Bits benötigt (aktuelles Guthaben: {have}).",
+    "set_done": "🌱 Neuer Look gesetzt: \"{seed}\". Dieser bleibt bestehen, bis du erneut !companion set verwendest - auch über einen Neustart des Bots hinweg.",
+    "help.vtubbi": "vtubbi ist mein selbst entwickelter VTuber-Avatar, quelloffen auf GitHub verfügbar: https://github.com/Wafobi/vtubbi",
+    "vtubbi.link": "🌱 vtubbi ist mein selbst entwickelter VTuber-Avatar, quelloffen auf GitHub verfügbar: https://github.com/Wafobi/vtubbi"
   }
 }
