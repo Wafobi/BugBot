@@ -132,6 +132,13 @@ class StatsFeature(feature_api.Feature):
         summary["total_chat_logged"] = await self._chat_log.total_logged() if self._chat_log is not None else 0
         return summary
 
+    async def user_event_total(self, event_type, user_name):
+        """One user's summed amount for one event type, all-time - e.g. bits cheered. Public
+        so other features can gate something on it (features/companion: only show a
+        chatter's text once they have cheered enough bits) without reaching past this
+        feature's STATS capability into the store themselves."""
+        return await self._run(self.store.get_user_total, event_type, user_name)
+
     async def stream_stats(self, session_id=None):
         """All figures of a single stream (default: the running one), assembled from the
         contributions of every feature involved. None if the session does not exist - or if

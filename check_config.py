@@ -45,6 +45,7 @@ CONFIG_FOR = [
     ("features/chat_log", "features/chat_log/chat_log.json"),
     ("features/overlay", "features/overlay/overlay.json"),
     ("features/chat_panel", "features/chat_panel/chat_panel.json"),
+    ("features/companion", "features/companion/companion.json"),
     ("features/sql_db", "features/sql_db/sql_db.json"),
 ]
 

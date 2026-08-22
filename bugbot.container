@@ -47,6 +47,7 @@ Volume=/path/to/bugbot/features/chat_log/chat_log.json:/app/features/chat_log/ch
 Volume=/path/to/bugbot/features/sql_db/sql_db.json:/app/features/sql_db/sql_db.json:Z
 Volume=/path/to/bugbot/features/overlay/overlay.json:/app/features/overlay/overlay.json:Z
 Volume=/path/to/bugbot/features/chat_panel/chat_panel.json:/app/features/chat_panel/chat_panel.json:Z
+Volume=/path/to/bugbot/features/companion/companion.json:/app/features/companion/companion.json:Z
 Volume=/path/to/bugbot/features/sql_db/bugbot.db:/app/features/sql_db/bugbot.db:Z
 # The first incoming port: this is where the OBS relay from the streamer's machine dials in
 # (see platforms/obs/). Has to match OBS_BRIDGE_PORT from the .env. Anyone not connecting OBS
@@ -81,6 +82,13 @@ PublishPort=127.0.0.1:4457:4457
 # already-moderated chat text rather than numbers, but the principle is unchanged: read-only,
 # and the listener accepts nothing from the far side.
 PublishPort=127.0.0.1:4458:4458
+
+# The fourth: this is where the companion page hangs (see features/companion). Has to match
+# COMPANION_PORT from the .env. Anyone not embedding that browser source leaves the line out.
+#
+# Same arrangement and the same loopback restriction as the three above: read-only, and the
+# listener accepts nothing from the far side.
+PublishPort=127.0.0.1:4459:4459
 
 [Service]
 # always rather than on-failure: the bot should come back up even when the process ends cleanly

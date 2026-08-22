@@ -178,6 +178,33 @@ The chat record counts everything that was reported. It used to count only Twitc
 that this feature should not know about, and a number that would have been wrong on any
 installation with a different mix.
 
+### `companion_seeds` — owned by `companion`
+
+One row per person who has ever paid for a custom look with `!companion set <hash>` — everyone
+else's companion is seeded from their name and never appears here at all. Persisted, unlike
+presence (who currently has a companion on screen is a RAM list, like `features/chat_panel`'s
+history), because losing a look someone paid bits for on a restart would mean paying again.
+
+| Column | Type |
+|---|---|
+| `user_key` | TEXT **primary key** — `platform:user_id` (see [Companion](companion.md)) |
+| `seed` | TEXT not null — the DiceBear seed, capped to 64 characters |
+| `set_at` | TEXT default `datetime('now')` — overwritten on every re-`!companion set` |
+
+### `companion_spend` — owned by `companion`
+
+One row per person who has ever spent bits through `!companion` — showing a message
+(`min_bits_to_speak`) and changing the look (`min_bits_to_set_seed`) both charge against the
+*same* balance, what they've cheered all-time (`events`, `event_type = 'cheer'`) minus this
+column, rather than each having its own pot. Persisted for the same reason as `companion_seeds`:
+losing it on a restart would let the same bits be spent again.
+
+| Column | Type |
+|---|---|
+| `user_key` | TEXT **primary key** — same shape as `companion_seeds.user_key` |
+| `spent` | INTEGER not null default `0` — cumulative bits spent, all-time |
+| `spent_at` | TEXT default `datetime('now')` — updated on every spend |
+
 ### `chat_log` — owned by `chat_log`
 
 The only place that stores what was actually said.

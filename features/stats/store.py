@@ -226,6 +226,18 @@ class StatsStore:
             ).fetchall()
         return [tuple(row) for row in rows]
 
+    def get_user_total(self, event_type, user_name):
+        """Summed amount of one user's events of one type, all-time - e.g. "how many bits
+        has this person cheered". Counterpart to get_top_users, for the single-row case
+        (features/companion checks one chatter's total against a threshold, where a top-N
+        query would be the wrong shape)."""
+        with self._db.connect() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) FROM events WHERE event_type = ? AND user_name = ?",
+                (event_type, user_name),
+            ).fetchone()
+        return int(row[0]) if row else 0
+
     def get_top_users(self, event_type, limit=3, session_id=None):
         """[(user_name, summed amount), ...] sorted descending, for leaderboards (e.g. top
         cheerer, top gifter). With session_id only for that one stream, otherwise across all

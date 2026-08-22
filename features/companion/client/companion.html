@@ -1,0 +1,431 @@
+<meta charset="utf-8">
+<title>BugBot Companion</title>
+
+<!--
+  The browser source for the companion pond in the picture. Belongs on the OBS machine, not
+  the server - like features/chat_panel/client/chat.html it sits here because it belongs to
+  its counterpart (features/companion/server.py), and runs elsewhere.
+
+  Every person who writes in chat gets a small DiceBear "sprouts" creature, seeded from
+  their name - the same approach as the standalone vtubbi avatar (vtubbi/src/companion.ts),
+  just without pixi.js: this page draws directly with inline SVG and CSS transforms, because
+  a browser source brings no bundler along and needs none.
+
+  Setup: add a "Browser" source, width/height to taste (fills the source, like chat.html -
+  no fixed canvas), and as URL the file with a token:
+
+    file:///path/to/bugbot/features/companion/client/companion.html?token=YOUR_COMPANION_TOKEN
+
+  To see it without OBS: open preview.html next to it, or append ?demo=1 to this file.
+
+  Parameters (all optional):
+    token=   the COMPANION_TOKEN from the bot's .env. Without it, no data.
+    host=    default 127.0.0.1 - the tunnel ends here, not at the server
+    port=    port of the tunnel on this machine (default 4459)
+    size=    height of one companion in pixels (default 96)
+    max=     how many companions are visible at once, oldest makes room first (default 24)
+    floor=   ground line from the bottom, in % of the height (default 10)
+    t.NAME=  override any single design token, e.g. t.name-size=20px
+    link=1   show the connection lamp, top right (default off)
+    demo=1   sample companions without a connection - for looking at it in a normal browser
+
+  Who may speak and what is shown is decided by the bot (features/companion/feature.py):
+  !companion <text> arrives already filtered, and the text itself only once the person has
+  cheered enough bits (mods/broadcaster exempt) - this page only displays what arrives and
+  filters nothing itself. !vtubbi is a separate, argument-less command that just links the
+  project.
+-->
+
+<style>
+  :root {
+    --font: "Roboto", "DejaVu Sans", system-ui, sans-serif;
+    --size: 96px;
+    --name-size: 15px;
+    --name-weight: 700;
+    --ink: #EAF7FF;
+    --dim: rgba(234, 247, 255, .6);
+    --text-shadow: 0 1px 3px rgba(0, 0, 0, .9), 0 0 12px rgba(0, 0, 0, .5);
+
+    --bubble-bg: rgba(14, 15, 20, .88);
+    --bubble-ink: #EAF7FF;
+    --bubble-accent: #5FEAF5;
+
+    --floor: 10%;
+    --dot-ok: #34C759;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 100vw; height: 100vh;
+    background: transparent;
+    overflow: hidden;
+    font-family: var(--font);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #pond { position: absolute; inset: 0; }
+
+  .pet {
+    position: absolute;
+    bottom: var(--floor);
+    left: 0;
+    width: var(--size);
+    height: var(--size);
+    transform: translate(-50%, 0);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+  }
+  .pet.entering { animation: pop .3s ease-out; }
+  .pet.leaving { animation: pop .3s ease-in reverse; opacity: 0; }
+  @keyframes pop {
+    from { opacity: 0; transform: translate(-50%, 0) scale(.4); }
+    to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  }
+
+  .pet .art { width: 100%; height: 100%; position: relative; }
+  .pet .art svg { width: 100%; height: 100%; display: block; }
+  /* Only one of the three variants (base/blink/talk) is visible per frame - the same three
+     sprites as in vtubbi/src/companion.ts, just as CSS layers instead of pixi ones. */
+  .pet .art .variant { position: absolute; inset: 0; opacity: 0; }
+  .pet .art .variant.shown { opacity: 1; }
+
+  /* Name above the creature, not below it - the same order vtubbi/src/companion.ts uses
+     for its own name label. This also means the floor line (.pet's bottom edge, see
+     --floor above) lands under the *art*, i.e. the creature's feet, not under the name. */
+  .pet .name {
+    order: -1;
+    margin-bottom: 2px;
+    font-size: var(--name-size);
+    font-weight: var(--name-weight);
+    text-shadow: var(--text-shadow);
+    white-space: nowrap;
+    transform: scaleX(var(--unflip, 1));
+  }
+
+  .pet .bubble {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    max-width: 260px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: var(--bubble-bg);
+    color: var(--bubble-ink);
+    border: 1px solid var(--bubble-accent);
+    font-size: 16px;
+    line-height: 1.3;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  .pet .bubble.shown { opacity: 1; transform: translateY(0); }
+
+  /* Connection lamp, only interesting while setting up - same as in bars.html/chat.html. */
+  #link { display: none; }
+  #link.shown {
+    display: block;
+    position: absolute; right: 6px; top: 6px; z-index: 4;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #FF3B30; opacity: .5;
+  }
+  #link.ok { background: var(--dot-ok); }
+</style>
+
+<div id="pond"></div>
+<div id="link"></div>
+
+<script>
+"use strict";
+
+const params = new URLSearchParams(location.search);
+const root = document.documentElement.style;
+
+if (params.has("size")) root.setProperty("--size", params.get("size") + "px");
+if (params.has("floor")) root.setProperty("--floor", params.get("floor") + "%");
+for (const [name, value] of params) {
+  if (name.startsWith("t.") && name.length > 2) root.setProperty("--" + name.slice(2), value);
+}
+if (params.get("link") === "1") document.getElementById("link").classList.add("shown");
+
+const MAX_PETS = Math.max(1, parseInt(params.get("max"), 10) || 24);
+
+const pond = document.getElementById("pond");
+
+// --- The creatures themselves -------------------------------------------------------------
+// Same seed as the standalone vtubbi avatar (vtubbi/src/companion.ts): DiceBear's
+// "sprouts", face randomised per seed. Inline SVG here instead of <img>, so the eyes/mouth
+// group can be swapped out for blinking/talking - exactly the technique from
+// companion.ts, just without pixi.js.
+const SPROUTS_URL = "https://api.dicebear.com/10.x/sprouts/svg";
+const INK_COLOR = "#1e293b";
+const CLOSED_EYES_PATH = "M3 9q6 5 12 0m10 0q6 5 12 0";
+
+function withGroupSwap(svgText, groupPrefix, replacementInner) {
+  const pattern = new RegExp(`(<g id="${groupPrefix}-[a-zA-Z]+-[a-f0-9]+">)[\\s\\S]*?(<\\/g>)`);
+  return svgText.replace(pattern, (_m, open, close) => `${open}${replacementInner}${close}`);
+}
+function withClosedEyes(svgText) {
+  return withGroupSwap(svgText, "eyes",
+    `<path d="${CLOSED_EYES_PATH}" stroke="${INK_COLOR}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`);
+}
+function withOpenMouth(svgText) {
+  return withGroupSwap(svgText, "mouth", `<circle cx="10" cy="5.5" r="3.4" fill="${INK_COLOR}"/>`);
+}
+
+async function fetchVariants(seed) {
+  const res = await fetch(`${SPROUTS_URL}?seed=${encodeURIComponent(seed)}&backgroundColor=00000000`);
+  const base = await res.text();
+  return { base, closedEyes: withClosedEyes(base), openMouth: withOpenMouth(base) };
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// --- The pond: only the *spawn* position uses slots, so several companions arriving at
+// once don't all pop in on top of each other - afterwards each roams the full width freely
+// (see tick() below), not tied back to where it started. A slot frees up again when its
+// companion leaves, and a new one takes the lowest free slot. --------------------------
+const slotWidth = () => Math.max(80, parseFloat(getComputedStyle(document.documentElement)
+  .getPropertyValue("--size")) * 1.4);
+function slotCount() { return Math.max(1, Math.floor(window.innerWidth / slotWidth())); }
+function slotX(i) {
+  const n = slotCount();
+  return ((i % n) + 0.5) / n * 100; // vw-percent; slots beyond MAX_PETS wrap the row
+}
+
+const pets = new Map(); // key -> { el, art, bubble, homeX, x, targetX, facing, ...timers }
+const freeSlots = [];
+let nextSlot = 0;
+
+function claimSlot() {
+  return freeSlots.length ? freeSlots.shift() : nextSlot++;
+}
+function releaseSlot(slot) { freeSlots.push(slot); }
+
+// Fetches the three sprite variants for a seed and applies them to an existing pet's .art -
+// shared by a brand-new companion and a restyle (!companion set), so the two draw exactly
+// the same way instead of a second copy of this logic living in restylePet.
+function loadArt(pet, seed) {
+  fetchVariants(seed || "").then((variants) => {
+    pet.variants = variants;
+    pet.art.innerHTML =
+      `<div class="variant base shown">${variants.base}</div>` +
+      `<div class="variant eyes">${variants.closedEyes}</div>` +
+      `<div class="variant mouth">${variants.openMouth}</div>`;
+  }).catch(() => {});
+}
+
+function addPet(entry) {
+  const existing = pets.get(entry.key);
+  if (existing) {
+    // The bot re-announces a companion as "join" after !companion set changes its seed
+    // (see features/companion/feature.py:_cmd_companion_set) rather than inventing a
+    // separate frame type - so a join for a key already in the pond is a restyle, and the
+    // companion keeps its position/behavior instead of popping out and back in.
+    if (existing.seed !== entry.seed) {
+      existing.seed = entry.seed;
+      loadArt(existing, entry.seed || entry.user_name);
+    }
+    return;
+  }
+  if (pets.size >= MAX_PETS) {
+    // Full: the one that has stood longest makes room for the new face - better a full,
+    // lively row than one that only ever grows over a few hours of stream.
+    const oldest = pets.keys().next().value;
+    if (oldest !== undefined) removePet(oldest);
+  }
+
+  const slot = claimSlot();
+  const el = document.createElement("div");
+  el.className = "pet entering";
+  el.innerHTML = `
+    <div class="bubble"></div>
+    <div class="art"></div>
+    <div class="name">${escapeHtml(entry.user_name || entry.seed || "")}</div>
+  `;
+  pond.appendChild(el);
+
+  const pet = {
+    el, art: el.querySelector(".art"), bubble: el.querySelector(".bubble"),
+    nameEl: el.querySelector(".name"), seed: entry.seed,
+    slot, x: slotX(slot), targetX: slotX(slot), facing: 1,
+    behavior: "graze", speed: BEHAVIOR_PARAMS.graze.speed,
+    nextWanderAt: 0, nextBlinkAt: performance.now() + 1000 + Math.random() * 3000, blinkUntil: 0,
+    speakUntil: 0, variants: null,
+    // Each companion wiggles out of sync with the others - a shared phase would have the
+    // whole pond swaying in unison, which reads as one animation playing N times rather
+    // than N creatures each doing their own thing.
+    wigglePhase: Math.random() * Math.PI * 2,
+  };
+  pets.set(entry.key, pet);
+  el.addEventListener("animationend", () => el.classList.remove("entering"), { once: true });
+
+  loadArt(pet, entry.seed || entry.user_name);
+}
+
+function removePet(key) {
+  const pet = pets.get(key);
+  if (!pet) return;
+  pets.delete(key);
+  releaseSlot(pet.slot);
+  pet.el.classList.add("leaving");
+  setTimeout(() => pet.el.remove(), 320);
+}
+
+function speak(entry) {
+  const pet = pets.get(entry.key);
+  if (!pet) { addPet(entry); }
+  const target = pets.get(entry.key);
+  if (!target || !entry.text) return;
+  target.bubble.textContent = entry.text;
+  target.bubble.classList.add("shown");
+  target.speakUntil = performance.now() + Math.max(500, (entry.ttl || 8) * 1000);
+  clearTimeout(target._bubbleTimer);
+  target._bubbleTimer = setTimeout(() => target.bubble.classList.remove("shown"),
+    Math.max(500, (entry.ttl || 8) * 1000));
+}
+
+function setState(list) {
+  pond.innerHTML = "";
+  pets.clear();
+  freeSlots.length = 0;
+  nextSlot = 0;
+  for (const entry of list || []) addPet(entry);
+}
+
+// --- Movement patterns: which one a companion is doing is picked afresh whenever its
+// current one runs out (see startBehavior), so the pond reads as several different
+// creatures with different moods rather than one wander loop repeated N times. Each entry
+// is (probability weight, target-x picker, per-behavior feel). ------------------------
+const PET_MARGIN = 4; // vw kept clear on each edge, so nobody wanders half off-screen
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+const BEHAVIOR_PARAMS = {
+  // Long walk to a fresh spot anywhere in the pond - the default, most common pattern.
+  roam:  { weight: 4, speed: 0.02, hopPeriod: 240, hopHeight: 9,
+           next: () => 3000 + Math.random() * 4000,
+           pickX: (pet) => PET_MARGIN + Math.random() * (100 - 2 * PET_MARGIN) },
+  // Stays put and just fidgets - the pause between other behaviors, so not everyone is
+  // mid-stride at once.
+  graze: { weight: 3, speed: 0.03, hopPeriod: 900, hopHeight: 3,
+           next: () => 2500 + Math.random() * 3500,
+           pickX: (pet) => clamp(pet.x + (Math.random() * 2 - 1) * 3, PET_MARGIN, 100 - PET_MARGIN) },
+  // Ambles towards whoever else is in the pond right now - reads as companions noticing
+  // each other instead of everyone wandering independently.
+  chase: { weight: 2, speed: 0.045, hopPeriod: 190, hopHeight: 10,
+           next: () => 1800 + Math.random() * 2200,
+           pickX: (pet) => {
+             const others = [...pets.values()].filter((p) => p !== pet);
+             if (!others.length) return BEHAVIOR_PARAMS.roam.pickX(pet);
+             const target = others[Math.floor(Math.random() * others.length)];
+             return clamp(target.x + (Math.random() * 2 - 1) * 4, PET_MARGIN, 100 - PET_MARGIN);
+           } },
+  // A quick short dash and stop - a startle/hop, over much faster than a roam.
+  dash:  { weight: 2, speed: 0.11, hopPeriod: 140, hopHeight: 12,
+           next: () => 700 + Math.random() * 900,
+           pickX: (pet) => clamp(pet.x + (Math.random() * 2 - 1) * 18, PET_MARGIN, 100 - PET_MARGIN) },
+};
+const BEHAVIOR_TABLE = Object.entries(BEHAVIOR_PARAMS)
+  .flatMap(([name, def]) => Array(def.weight).fill(name));
+
+function startBehavior(pet, now) {
+  const name = BEHAVIOR_TABLE[Math.floor(Math.random() * BEHAVIOR_TABLE.length)];
+  const def = BEHAVIOR_PARAMS[name];
+  pet.behavior = name;
+  pet.speed = def.speed;
+  pet.targetX = def.pickX(pet);
+  pet.nextWanderAt = now + def.next();
+}
+
+// --- The animation: one pass per frame over every companion, the same idea as
+// Companion.update() in vtubbi/src/companion.ts, just via DOM transforms instead of pixi.
+function tick(now) {
+  for (const pet of pets.values()) {
+    if (now > pet.nextWanderAt) startBehavior(pet, now);
+
+    const dx = pet.targetX - pet.x;
+    pet.x += dx * pet.speed;
+    const moving = Math.abs(dx) > 0.2;
+    if (moving) pet.facing = dx < 0 ? -1 : 1;
+
+    const params = BEHAVIOR_PARAMS[pet.behavior];
+    const hopPeriod = moving ? params.hopPeriod : 900;
+    const hopHeight = moving ? params.hopHeight : 3;
+    const bobY = Math.abs(Math.sin(now / hopPeriod)) * hopHeight;
+    // A DiceBear sprout has nothing separately animatable beyond eyes/mouth (no ears, no
+    // tail) - so "wiggle what they can wiggle" becomes a whole-body sway instead: a small
+    // rotation, faster and wider while moving than while standing still, each companion out
+    // of phase with the rest (wigglePhase, set once in addPet).
+    const wiggleDeg = (moving ? 7 : 2.5) * Math.sin(now / 240 + pet.wigglePhase);
+    pet.el.style.left = pet.x + "vw";
+    pet.el.style.transform =
+      `translate(-50%, 0) translateY(${-bobY}px) rotate(${wiggleDeg}deg) scaleX(${pet.facing})`;
+    // The whole pet flips via scaleX(facing) above so a companion actually turns to face
+    // its wander direction - which would also mirror the name label. Counter-scale just
+    // the label here (set directly, not via a MutationObserver watching style: that
+    // observer would itself be triggered by the transform write two lines up, and by its
+    // own write below, turning into a self-sustaining loop that starves rAF and freezes
+    // the whole page - which is exactly what an earlier version of this file did).
+    pet.nameEl.style.setProperty("--unflip", pet.facing);
+
+    if (now > pet.nextBlinkAt) {
+      pet.blinkUntil = now + 140;
+      pet.nextBlinkAt = now + 2500 + Math.random() * 4500;
+    }
+    const blinking = now < pet.blinkUntil;
+    const talking = now < pet.speakUntil;
+    if (pet.art.children.length) {
+      pet.art.children[0].classList.toggle("shown", !blinking && !talking);
+      pet.art.children[1].classList.toggle("shown", blinking);
+      pet.art.children[2].classList.toggle("shown", !blinking && talking);
+    }
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// --- Connection ------------------------------------------------------------------------
+function connect() {
+  const token = params.get("token") || "";
+  const host = params.get("host") || "127.0.0.1";
+  const port = params.get("port") || "4459";
+  if (!token) { console.warn("No ?token= in the URL - not connecting."); return; }
+
+  const socket = new WebSocket(`ws://${host}:${port}/?token=${encodeURIComponent(token)}`);
+
+  socket.onopen = () => document.getElementById("link").classList.add("ok");
+  socket.onclose = () => {
+    document.getElementById("link").classList.remove("ok");
+    setTimeout(connect, 3000);
+  };
+  socket.onerror = () => socket.close();
+  socket.onmessage = (message) => {
+    let frame;
+    try { frame = JSON.parse(message.data); } catch { return; }
+    if (frame.type === "state") setState(frame.data);
+    else if (frame.type === "join") addPet(frame.data);
+    else if (frame.type === "leave") removePet(frame.data.key);
+    else if (frame.type === "speak") speak(frame.data);
+  };
+}
+
+// --- Start -----------------------------------------------------------------------------
+if (params.get("demo") === "1") {
+  setState([
+    { key: "twitch:1", seed: "Kevin", platform: "twitch", user_name: "Kevin" },
+    { key: "twitch:2", seed: "Lenaa", platform: "twitch", user_name: "Lenaa" },
+    { key: "twitch:3", seed: "xX_Gamer_Xx", platform: "twitch", user_name: "xX_Gamer_Xx" },
+  ]);
+  setTimeout(() => speak({ key: "twitch:1", text: "moin moin! 👋", ttl: 20 }), 1000);
+} else {
+  connect();
+}
+</script>

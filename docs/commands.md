@@ -32,6 +32,9 @@ suggested, because trying one would just get the message deleted.
 | `!streamstats` | metrics of the running stream, or the last finished one if currently offline |
 | `!highscores` | all-time per-stream records |
 | `!leaderboard` | top cheerers and top gifters, all-time |
+| `!companion <text>` | make your [companion](companion.md) say something on the OBS companion page — costs `min_bits_to_speak` bits per shown message (default 100) from your cheered-minus-spent balance (mods/broadcaster exempt), filtered by moderation either way. Subscribers (and mods/the broadcaster) only — everyone else's chat still works, they just have no companion to speak through |
+| `!companion set <hash>` | give your [companion](companion.md) a custom look instead of one based on your name — costs `min_bits_to_set_seed` bits per change (default 300; mods/broadcaster exempt), from the same balance as `!companion <text>` |
+| `!vtubbi` | link to the [companion](companion.md) project |
 
 The level scores are always the Discord ones — there is no other set. Anonymous cheers and gift
 subs count towards the totals but are kept out of the leaderboards, where "Anonymous" would

@@ -60,6 +60,7 @@ The [`docs/`](docs/) folder is the long version.
 | [Database](docs/database.md) | every table and column, and how the stream session stamps them |
 | [Overlay](docs/overlay.md) | the browser sources in the picture: what the bot pushes, and how to wire one up |
 | [Chat panel](docs/chat_panel.md) | chat mirrored into OBS as its own browser source |
+| [Companion](docs/companion.md) | one small pet per chatter, seeded from their name; `!companion`/`!vtubbi` |
 | [Twitch](docs/twitch.md) · [Discord](docs/discord.md) · [OBS](docs/obs.md) | per-platform specifics |
 | [Deployment](docs/deployment.md) | Podman, systemd, logs, and what to run after changing what |
 
@@ -74,8 +75,8 @@ window. Subscribers are exempt from the pure spam heuristics, nobody is exempt f
 
 **Answers commands** in three flavours: static text from JSON, live Helix calls (`!uptime`,
 `!title`, `!raid`), and feature commands that work on every platform at once (`!rank`, `!top`,
-`!streamstats`, `!highscores`, `!leaderboard`). OBS gets remote-controlled from either chat with
-`!obs`, `!scene`, `!rec`, `!replay`, `!obssource`.
+`!streamstats`, `!highscores`, `!leaderboard`, `!companion`). OBS gets remote-controlled from
+either chat with `!obs`, `!scene`, `!rec`, `!replay`, `!obssource`.
 → [Commands](docs/commands.md)
 
 **Records** messages, commands, moderation actions, live events, viewer samples and ad breaks
@@ -194,3 +195,6 @@ DB are mounted over it from your clone:
 Logs: `journalctl --user-unit=bugbot.service -f` (the `--user-unit=` form matters —
 [why](docs/deployment.md#logs)).
 → [Deployment](docs/deployment.md)
+
+claude --resume a491b8df-fc61-4329-a0ac-accced1d599b
+
