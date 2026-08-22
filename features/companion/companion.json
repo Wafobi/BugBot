@@ -5,19 +5,19 @@
   "min_bits_to_set_seed": 300,
   "speech_ttl_seconds": 8,
   "idle_minutes": 20,
+  "exclude_users": ["wafobitv"],
   "command_names": {
     "_comment": "Rename commands, give them aliases, or switch them off: \"!stats\": \"!zahlen\" | \"!stats\": [\"!zahlen\", \"!stat\"] | \"!stats\": false"
   },
   "texts": {
-    "help.companion": "lass deinen Companion etwas sagen ({need} Bits pro sichtbarer Nachricht) oder gib ihm mit \"set <hash>\" ein neues Aussehen ({set_need} Bits pro Wechsel) - Mods/Streamer kostenlos",
-    "usage": "Nutzung: !companion <text> - oder !companion set <hash> für ein neues Aussehen",
-    "subs_only": "Companions gibt es aktuell nur für Twitch-Abos (oder Mods/den Streamer) - abonnier den Kanal, um einen zu bekommen!",
+    "help.companion": "Twitch-Abo (oder Mod) = automatisch ein Companion im Stream - lass ihn reden ({need} Bits pro Nachricht) oder gib ihm mit \"set <hash>\" ein neues Aussehen ({set_need} Bits pro Wechsel)",
+    "subs_only": "Companions gibt es aktuell nur für Twitch-Abos (oder Mods) - abonnier den Kanal, um einen zu bekommen!",
     "blocked": "Das kann dein Companion nicht sagen ({label}).",
     "needs_bits": "Dein Companion flüstert nur für alle hörbar für {need} Bits pro Nachricht (dein Guthaben: {have} Bits).",
     "set_usage": "Nutzung: !companion set <hash> - <hash> ist ein beliebiger Text als neuer Look für deinen Companion.",
     "set_needs_bits": "Ein neues Aussehen für deinen Companion kostet {need} Bits pro Wechsel (dein Guthaben: {have} Bits).",
     "set_done": "🌱 Neuer Look gesetzt: \"{seed}\" - der bleibt so, bis du wieder !companion set benutzt (auch über einen Neustart des Bots hinweg).",
-    "help.vtubbi": "der Code hinter den Companions, auf GitHub",
-    "vtubbi.link": "🌱 Der Code hinter deinem Companion: https://github.com/Wafobi/vtubbi"
+    "help.vtubbi": "vtubbi ist mein VTuber-Avatar - hol dir deinen eigenen: https://github.com/Wafobi/vtubbi",
+    "vtubbi.link": "🌱 vtubbi ist mein VTuber-Avatar - hol dir deinen eigenen: https://github.com/Wafobi/vtubbi"
   }
 }

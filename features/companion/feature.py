@@ -15,9 +15,11 @@ take an argument - it just posts a link to the project behind the companions
 
 Three gates stand in front of what !companion actually does:
 
-  - a companion exists at all only for a subscriber, a mod or the broadcaster
-    (message.is_subscriber / is_privileged) - everyone else's chat still works, they simply
-    have nothing on screen to talk through.
+  - a companion exists at all only for a subscriber or a mod (message.is_subscriber /
+    is_privileged) - everyone else's chat still works, they simply have nothing on screen to
+    talk through. exclude_users (companion.json) additionally excludes specific names
+    regardless of that - the broadcaster by default, since they are already on screen and do
+    not need a second, smaller self standing next to the chat.
   - !companion <text> goes through the MODERATION feature first, same as any chat message -
     but checked again here, deliberately, because a mod's or the broadcaster's own message
     never reaches moderation.review() at all (see features/moderation/feature.py:review),
@@ -31,8 +33,9 @@ Three gates stand in front of what !companion actually does:
     round). Below the price of whichever one was attempted, the companion still appears (or
     keeps its current look) and the command still runs, just with nothing deducted and
     nothing legible in a bubble, so chat is not spammed with a decline every time someone
-    tries. Mods and the broadcaster are exempt from both prices (not from moderation) - they
-    already run the stream, they should not have to donate to it to use a chat feature.
+    tries. Mods are exempt from both prices (not from moderation) - they already run the
+    stream, they should not have to donate to it to use a chat feature. The broadcaster does
+    not reach this at all, being excluded a step earlier (see exclude_users above).
 
 A custom seed from !companion set, and the shared spend ledger behind both commands, are
 persisted (features/companion/store.py) precisely because they track bits actually spent -
@@ -63,6 +66,7 @@ DEFAULTS = {
     "min_bits_to_set_seed": 300,
     "speech_ttl_seconds": 8,
     "idle_minutes": 20,
+    "exclude_users": [],
 }
 
 # How often the presence sweep looks for companions nobody has heard from in a while. Short
@@ -153,6 +157,14 @@ class CompanionFeature(feature_api.Feature):
         scope = self._bus.resolve_platforms(self.config.get("platforms", ()))
         return scope is None or platform_name in scope
 
+    def _is_excluded(self, message):
+        """True for a name listed in exclude_users (companion.json), e.g. the streamer's own
+        account - they are already on screen and do not need a second, smaller self next to
+        the chat. Matched case-insensitively against the display name, independent of
+        is_privileged so it never quietly excludes mods too."""
+        excluded = {u.strip().lower() for u in self.config.get("exclude_users", []) if u.strip()}
+        return message.user_name.lower() in excluded
+
     # --- Presence -----------------------------------------------------------------------
 
     @staticmethod
@@ -205,6 +217,8 @@ class CompanionFeature(feature_api.Feature):
 
     async def on_message_accepted(self, message):
         if not self._in_scope(message.platform):
+            return
+        if self._is_excluded(message):
             return
         # A companion is a perk, not a default for every chatter - subscribers get one, and
         # so do mods/the broadcaster (same exemption as the bits gates below: they already
@@ -271,12 +285,16 @@ class CompanionFeature(feature_api.Feature):
         # Same eligibility as presence itself (on_message_accepted) - speaking through, or
         # restyling, a companion that was never granted in the first place would be a way
         # around the subscriber gate rather than a use of it.
+        if self._is_excluded(message):
+            return None
         if not (message.is_subscriber or message.is_privileged):
             return self.config.text("subs_only")
 
         text = (message.arg_text or "").strip()
         if not text:
-            return self.config.text("usage")
+            min_bits = int(self.config.get("min_bits_to_speak", 100))
+            min_bits_set = int(self.config.get("min_bits_to_set_seed", 300))
+            return self.config.text("help.companion", need=min_bits, set_need=min_bits_set)
 
         sub, _, rest = text.partition(" ")
         if sub.lower() == "set":

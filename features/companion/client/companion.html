@@ -25,6 +25,8 @@
     size=    height of one companion in pixels (default 96)
     max=     how many companions are visible at once, oldest makes room first (default 24)
     floor=   ground line from the bottom, in % of the height (default 10)
+    marginLeft=   space kept clear on the left edge, in vw (default 4)
+    marginRight=  space kept clear on the right edge, in vw (default 4)
     t.NAME=  override any single design token, e.g. t.name-size=20px
     link=1   show the connection lamp, top right (default off)
     demo=1   sample companions without a connection - for looking at it in a normal browser
@@ -305,33 +307,38 @@ function setState(list) {
 // current one runs out (see startBehavior), so the pond reads as several different
 // creatures with different moods rather than one wander loop repeated N times. Each entry
 // is (probability weight, target-x picker, per-behavior feel). ------------------------
-const PET_MARGIN = 4; // vw kept clear on each edge, so nobody wanders half off-screen
+// vw kept clear on each edge, so nobody wanders half off-screen - overridable via
+// ?marginLeft=/?marginRight= (e.g. to dodge a webcam frame sitting on one side).
+const MARGIN_LEFT = Math.max(0, parseFloat(params.get("marginLeft")) || 4);
+const MARGIN_RIGHT = Math.max(0, parseFloat(params.get("marginRight")) || 4);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 const BEHAVIOR_PARAMS = {
   // Long walk to a fresh spot anywhere in the pond - the default, most common pattern.
-  roam:  { weight: 4, speed: 0.02, hopPeriod: 240, hopHeight: 9,
-           next: () => 3000 + Math.random() * 4000,
-           pickX: (pet) => PET_MARGIN + Math.random() * (100 - 2 * PET_MARGIN) },
+  roam:  { weight: 4, speed: 0.014, hopPeriod: 260, hopHeight: 9,
+           next: () => 4000 + Math.random() * 5000,
+           pickX: (pet) => MARGIN_LEFT + Math.random() * (100 - MARGIN_LEFT - MARGIN_RIGHT) },
   // Stays put and just fidgets - the pause between other behaviors, so not everyone is
   // mid-stride at once.
-  graze: { weight: 3, speed: 0.03, hopPeriod: 900, hopHeight: 3,
-           next: () => 2500 + Math.random() * 3500,
-           pickX: (pet) => clamp(pet.x + (Math.random() * 2 - 1) * 3, PET_MARGIN, 100 - PET_MARGIN) },
+  graze: { weight: 3, speed: 0.02, hopPeriod: 900, hopHeight: 3,
+           next: () => 3000 + Math.random() * 4000,
+           pickX: (pet) => clamp(pet.x + (Math.random() * 2 - 1) * 2, MARGIN_LEFT, 100 - MARGIN_RIGHT) },
   // Ambles towards whoever else is in the pond right now - reads as companions noticing
   // each other instead of everyone wandering independently.
-  chase: { weight: 2, speed: 0.045, hopPeriod: 190, hopHeight: 10,
-           next: () => 1800 + Math.random() * 2200,
+  chase: { weight: 2, speed: 0.03, hopPeriod: 220, hopHeight: 10,
+           next: () => 2200 + Math.random() * 2600,
            pickX: (pet) => {
              const others = [...pets.values()].filter((p) => p !== pet);
              if (!others.length) return BEHAVIOR_PARAMS.roam.pickX(pet);
              const target = others[Math.floor(Math.random() * others.length)];
-             return clamp(target.x + (Math.random() * 2 - 1) * 4, PET_MARGIN, 100 - PET_MARGIN);
+             return clamp(target.x + (Math.random() * 2 - 1) * 3, MARGIN_LEFT, 100 - MARGIN_RIGHT);
            } },
-  // A quick short dash and stop - a startle/hop, over much faster than a roam.
-  dash:  { weight: 2, speed: 0.11, hopPeriod: 140, hopHeight: 12,
-           next: () => 700 + Math.random() * 900,
-           pickX: (pet) => clamp(pet.x + (Math.random() * 2 - 1) * 18, PET_MARGIN, 100 - PET_MARGIN) },
+  // A quick short dash and stop - a startle/hop, over much faster than a roam, but still
+  // eased rather than teleporting: kept rare, short-ranged and a touch slower than before so
+  // it reads as a hurried step, not a screen-wide jump cut.
+  dash:  { weight: 1, speed: 0.07, hopPeriod: 160, hopHeight: 12,
+           next: () => 1400 + Math.random() * 1800,
+           pickX: (pet) => clamp(pet.x + (Math.random() * 2 - 1) * 10, MARGIN_LEFT, 100 - MARGIN_RIGHT) },
 };
 const BEHAVIOR_TABLE = Object.entries(BEHAVIOR_PARAMS)
   .flatMap(([name, def]) => Array(def.weight).fill(name));

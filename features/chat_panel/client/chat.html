@@ -29,6 +29,17 @@
     accent=  Akzentfarbe, URL-kodiert: %23FFE100 für #FFE100
     t.NAME=  jedes einzelne Gestaltungs-Token überschreiben, z.B. t.msg-size=30px
     link=1   Verbindungsampel oben rechts einblenden (Standard: aus)
+    linewidth=  ab wie vielen Zeichen eine Nachricht in mehrere Chat-Zeilen aufgeteilt wird
+             (an Wortgrenzen, wo möglich) - jedes Stück bekommt seinen eigenen Namen/Badge,
+             liest sich wie mehrere kurze Nachrichten statt einer langen. Leer gelassen: nie
+             aufteilen, eine Nachricht bleibt eine Zeile (kann dann umbrechen/wachsen).
+    bar=     Höhe des unteren Balkens aus bars.html in Pixeln - der Chat wächst von unten
+             nur bis zu dieser Höhe und bleibt damit innerhalb des Balkens, statt darüber
+             hinaus in die Bildmitte zu laufen. Selber Wert wie das ?bar= dort (Default dort
+             184). Leer gelassen: Chat wächst unbegrenzt nach oben.
+    maxchars=  Nachricht wird vor dem Aufteilen auf so viele Zeichen gekürzt (mit "…") - harte
+             Obergrenze, damit eine einzelne Nachricht nicht beliebig viele Zeilen erzeugt und
+             alle anderen aus dem Feed verdrängt (Default 150, 0 = nie kürzen)
     idle=    Sekunden Ruhe im Chat, bis der Feed ausblendet (Default 8, 0 = nie ausblenden)
     fade=    Sekunden für die Ein-/Ausblend-Animation (Default 2.5)
     demo=1   Beispielnachrichten ohne Verbindung - zum Anschauen im normalen Browser
@@ -55,6 +66,7 @@
 
     --margin: 10px;
     --fade: 2.5s;
+    --feed-max-height: none;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -71,7 +83,11 @@
 
   #feed {
     position: absolute;
-    top: var(--margin); right: var(--margin); bottom: var(--margin); left: var(--margin);
+    right: var(--margin); bottom: var(--margin); left: var(--margin);
+    /* No top: the box sizes to its content (bottom-anchored, growing upward as messages
+       arrive) and max-height simply stops that growth once it reaches the bar - it never
+       sits above bars.html's bottom bar, it stays inside its band. */
+    max-height: var(--feed-max-height);
     display: flex; flex-direction: column; justify-content: flex-end;
     gap: var(--gap);
     padding: var(--pad);
@@ -142,10 +158,18 @@ if (params.get("link") === "1") document.getElementById("link").classList.add("s
 const feed = document.getElementById("feed");
 const MAX_VISIBLE = Math.max(1, parseInt(params.get("max"), 10) || 12);
 const SHOW_BADGE = params.get("badge") !== "0";
+// Hard safety cap on total message length, cut with "…" before splitting - so one message
+// cannot flood the feed with an unbounded number of chunks and evict everyone else's lines.
+const MAX_CHARS = params.has("maxchars") ? Math.max(0, parseInt(params.get("maxchars"), 10) || 0) : 150;
+// How many characters make up one chunk/line, before a long message is split into several -
+// each chunk becomes its own chat line, with its own name/badge, same as if that person had
+// sent several shorter messages in a row.
+const CHUNK_CHARS = params.has("linewidth") ? Math.max(10, parseInt(params.get("linewidth"), 10) || 50) : 0;
 
 // Ausblenden bei Ruhe im Chat - 0 schaltet es ab, wer den Feed dauerhaft sichtbar will.
 const IDLE_MS = params.has("idle") ? Math.max(0, parseFloat(params.get("idle")) * 1000) : 8000;
 if (params.has("fade")) root.setProperty("--fade", Math.max(0.1, parseFloat(params.get("fade"))) + "s");
+if (params.has("bar")) root.setProperty("--feed-max-height", Math.max(0, parseFloat(params.get("bar")) || 0) + "px");
 
 let idleTimer = null;
 function scheduleIdle() {
@@ -174,10 +198,30 @@ function nameColor(name) {
   return `hsl(${Math.abs(hash) % 360}, 75%, 68%)`;
 }
 
-// Ein Durchgang pro Nachricht - bei einer Chatzeile lohnt kein Diffing.
-function addMessage(entry) {
-  if (SOURCES.length && !SOURCES.includes((entry.platform || "").toLowerCase())) return;
+function truncate(text) {
+  if (!MAX_CHARS || text.length <= MAX_CHARS) return text;
+  return text.slice(0, MAX_CHARS).trimEnd() + "…";
+}
 
+// Breaks text into CHUNK_CHARS-ish pieces at word boundaries where possible (only a hard
+// cut mid-word if a single word is itself longer than a chunk) - each piece becomes its own
+// chat line in addMessage, so a long message reads as several short ones instead of one
+// tall or scrolling one.
+function splitChunks(text) {
+  if (!CHUNK_CHARS || text.length <= CHUNK_CHARS) return [text];
+  const chunks = [];
+  let rest = text;
+  while (rest.length > CHUNK_CHARS) {
+    let cut = rest.lastIndexOf(" ", CHUNK_CHARS);
+    if (cut <= 0) cut = CHUNK_CHARS;
+    chunks.push(rest.slice(0, cut).trimEnd());
+    rest = rest.slice(cut).trimStart();
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
+
+function addLine(entry, text) {
   const div = document.createElement("div");
   div.className = "msg";
   div.dataset.id = entry.id ?? "";
@@ -188,10 +232,17 @@ function addMessage(entry) {
   div.innerHTML =
     (SHOW_BADGE ? `<span class="badge">${escapeHtml(entry.platform || "")}</span>` : "") +
     `<span class="name ${nameClass}"${nameStyle}>${escapeHtml(name)}</span>` +
-    `<span class="text">${escapeHtml(entry.text || "")}</span>`;
+    `<span class="text">${escapeHtml(text)}</span>`;
 
   feed.appendChild(div);
   while (feed.children.length > MAX_VISIBLE) feed.removeChild(feed.firstElementChild);
+}
+
+// One pass per message - split into several lines first (see splitChunks), each with its
+// own name/badge so who wrote it stays visible on every one of them.
+function addMessage(entry) {
+  if (SOURCES.length && !SOURCES.includes((entry.platform || "").toLowerCase())) return;
+  for (const chunk of splitChunks(truncate(entry.text || ""))) addLine(entry, chunk);
   scheduleIdle();
 }
 

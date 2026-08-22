@@ -161,7 +161,8 @@
     "!discord": "🔗 Komm in unsere Gamedev- & Gaming-Community! Hier ist dein Einladungslink: https://discord.gg/Ey4jkMSNrP",
     "!lurk": "🍿 @{u} macht es sich im Lurk-Modus gemütlich und unterstützt den Stream im Hintergrund. Vielen Dank für deinen Support!",
     "!chef": "🍳 Chef's Adventure: Ein 2D Jump 'n' Run Plattformer von Wafobi! Begleite einen kleinen Koch auf der Suche nach entlaufenen Hühnern. 🔗 Wunschliste & Demo auf Steam: https://store.steampowered.com/app/2758910/Chefs_Adventure/?l=german",
-    "!socials": "🔗 Alle meine Links: https://linktr.ee/wafobi"
+    "!socials": "🔗 Alle meine Links: https://linktr.ee/wafobi",
+    "!bugbot": "🤖 BugBot ist mein selbst entwickelter Stream-Bot - moderiert den Chat, beantwortet Befehle und hält Statistiken fest. Quelloffen auf GitHub: https://github.com/Wafobi/BugBot"
   },
   "mod_commands": {},
   "moderation": {
