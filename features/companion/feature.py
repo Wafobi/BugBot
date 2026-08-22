@@ -17,9 +17,13 @@ Three gates stand in front of what !companion actually does:
 
   - a companion exists at all only for a subscriber or a mod (message.is_subscriber /
     is_privileged) - everyone else's chat still works, they simply have nothing on screen to
-    talk through. exclude_users (companion.json) additionally excludes specific names
+    talk through. exclude_users (companion.json) hides specific names from the pond
     regardless of that - the broadcaster by default, since they are already on screen and do
-    not need a second, smaller self standing next to the chat.
+    not need a second, smaller self standing next to the chat. This only ever hides
+    *presence*: !companion itself still replies, still spends bits, still gets moderated for
+    an excluded name exactly as for anyone else - only the visible pond/speech bubble stay
+    off (see the broadcast guards in cmd_companion/_cmd_companion_set), so the command
+    remains fully usable for someone who simply does not want to see themselves in it.
   - !companion <text> goes through the MODERATION feature first, same as any chat message -
     but checked again here, deliberately, because a mod's or the broadcaster's own message
     never reaches moderation.review() at all (see features/moderation/feature.py:review),
@@ -33,9 +37,8 @@ Three gates stand in front of what !companion actually does:
     round). Below the price of whichever one was attempted, the companion still appears (or
     keeps its current look) and the command still runs, just with nothing deducted and
     nothing legible in a bubble, so chat is not spammed with a decline every time someone
-    tries. Mods are exempt from both prices (not from moderation) - they already run the
-    stream, they should not have to donate to it to use a chat feature. The broadcaster does
-    not reach this at all, being excluded a step earlier (see exclude_users above).
+    tries. Mods and the broadcaster are exempt from both prices (not from moderation) - they
+    already run the stream, they should not have to donate to it to use a chat feature.
 
 A custom seed from !companion set, and the shared spend ledger behind both commands, are
 persisted (features/companion/store.py) precisely because they track bits actually spent -
@@ -284,9 +287,10 @@ class CompanionFeature(feature_api.Feature):
     async def cmd_companion(self, message):
         # Same eligibility as presence itself (on_message_accepted) - speaking through, or
         # restyling, a companion that was never granted in the first place would be a way
-        # around the subscriber gate rather than a use of it.
-        if self._is_excluded(message):
-            return None
+        # around the subscriber gate rather than a use of it. exclude_users is deliberately
+        # NOT checked here the same way: it hides presence (who shows up in the pond), not
+        # the command - the broadcaster still gets the same replies, moderation and bits
+        # gate as anyone else, just never a visible companion (see the broadcast guard below).
         if not (message.is_subscriber or message.is_privileged):
             return self.config.text("subs_only")
 
@@ -323,7 +327,10 @@ class CompanionFeature(feature_api.Feature):
             # server being briefly unavailable is not the speaker's problem to notice).
             await self._spend(key, min_bits)
 
-        if self._server is not None:
+        # Excluded from the pond (exclude_users) means excluded here too - the client's
+        # speak() creates a pet on the fly for a key it does not recognise yet, so without
+        # this guard the broadcaster would still make one appear just by talking through it.
+        if self._server is not None and not self._is_excluded(message):
             await self._server.broadcast("speak", {
                 "key": key,
                 "seed": await self._seed_for(key, message.user_name),
