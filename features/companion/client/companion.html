@@ -180,9 +180,33 @@ function withOpenMouth(svgText) {
   return withGroupSwap(svgText, "mouth", `<circle cx="10" cy="5.5" r="3.4" fill="${INK_COLOR}"/>`);
 }
 
+function sanitizeSvg(svgMarkup) {
+  const doc = new DOMParser().parseFromString(svgMarkup, "image/svg+xml");
+  const root = doc.documentElement;
+  if (!root || root.nodeName !== "svg" || doc.querySelector("parsererror")) {
+    throw new Error("DiceBear response was not a well-formed SVG");
+  }
+  // The response comes from a third party (api.dicebear.com) and lands straight in
+  // innerHTML below - that's this file's whole reason for inline SVG (see the comment on
+  // SPROUTS_URL above). DiceBear's sprouts templates don't emit scripts/links/handlers
+  // today, but the browser source runs in OBS next to the overlay/chat-panel tokens, so
+  // stripping them defensively costs little compared to trusting the response shape to
+  // hold forever.
+  root.querySelectorAll("script, foreignObject, a").forEach((node) => node.remove());
+  root.querySelectorAll("*").forEach((el) => {
+    for (const attr of [...el.attributes]) {
+      if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
+    }
+  });
+  return new XMLSerializer().serializeToString(root);
+}
+
 async function fetchVariants(seed) {
   const res = await fetch(`${SPROUTS_URL}?seed=${encodeURIComponent(seed)}&backgroundColor=00000000`);
-  const base = await res.text();
+  // withClosedEyes/withOpenMouth match their group-swap regex against this string - sanitizeSvg
+  // only ever removes nodes/attributes, it never touches the id attributes the regex matches
+  // on, so their position survives the parse/serialize round-trip.
+  const base = sanitizeSvg(await res.text());
   return { base, closedEyes: withClosedEyes(base), openMouth: withOpenMouth(base) };
 }
 
