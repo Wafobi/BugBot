@@ -1,4 +1,4 @@
-discord.py
-requests
-python-dotenv
-websockets
+discord.py>=2.4,<3
+requests>=2.32,<3
+python-dotenv>=1.0,<2
+websockets>=13,<17

@@ -82,7 +82,11 @@ class OverlayServer:
 
         compare_digest, so that the running time gives nothing away about the token - as in
         platforms/obs/link.py._check_token. The third route (query) does not appear there,
-        because the relay can set headers and a browser source cannot (see TOKEN_QUERY)."""
+        because the relay can set headers and a browser source cannot (see TOKEN_QUERY).
+
+        compare_digest on str only accepts ASCII and raises TypeError otherwise - encoding
+        first turns a non-ASCII token into a normal rejection instead of an unhandled
+        exception in the handshake."""
         header = request.headers.get(TOKEN_HEADER, "")
         if not header:
             bearer = request.headers.get("Authorization", "")
@@ -91,7 +95,7 @@ class OverlayServer:
             query = parse_qs(urlsplit(request.path).query)
             header = (query.get(TOKEN_QUERY) or [""])[0]
 
-        if not hmac.compare_digest(header, self._token):
+        if not hmac.compare_digest(header.encode("utf-8", "ignore"), self._token.encode("utf-8")):
             print(f"⛔ Overlay from {connection.remote_address} rejected: wrong/missing token.")
             return connection.respond(http.HTTPStatus.UNAUTHORIZED, "invalid token\n")
         return None

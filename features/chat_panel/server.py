@@ -66,7 +66,9 @@ class ChatPanelServer:
     def _check_token(self, connection, request):
         """Still runs during the HTTP handshake, before the WebSocket connection stands. A
         response rejects the setup, None lets it through. compare_digest, so that the
-        running time gives nothing away about the token."""
+        running time gives nothing away about the token; encoded first, because compare_digest
+        on str only accepts ASCII and would otherwise raise TypeError on a non-ASCII token
+        instead of just rejecting it."""
         header = request.headers.get(TOKEN_HEADER, "")
         if not header:
             bearer = request.headers.get("Authorization", "")
@@ -75,7 +77,7 @@ class ChatPanelServer:
             query = parse_qs(urlsplit(request.path).query)
             header = (query.get(TOKEN_QUERY) or [""])[0]
 
-        if not hmac.compare_digest(header, self._token):
+        if not hmac.compare_digest(header.encode("utf-8", "ignore"), self._token.encode("utf-8")):
             print(f"⛔ Chat panel from {connection.remote_address} rejected: wrong/missing token.")
             return connection.respond(http.HTTPStatus.UNAUTHORIZED, "invalid token\n")
         return None

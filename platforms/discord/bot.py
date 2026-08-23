@@ -138,9 +138,14 @@ def moderation_overrides():
 
 
 def is_discord_mod(member):
-    """Administrator, or the role named under roles.moderator in discord.json."""
+    """Administrator, or the role named under roles.moderator in discord.json. False for
+    anyone without guild_permissions (a discord.User rather than Member - a DM sender, or
+    someone who has since left the guild) instead of raising."""
+    permissions = getattr(member, "guild_permissions", None)
+    if permissions is None:
+        return False
     moderator = role_name("moderator")
-    return member.guild_permissions.administrator or (
+    return permissions.administrator or (
         bool(moderator) and discord.utils.get(member.roles, name=moderator) is not None
     )
 
@@ -573,6 +578,11 @@ async def status_report():
 @bot.event
 async def on_message(message):
     if message.author == bot.user: return
+    if message.guild is None:
+        # A DM, not a guild message. Moderation, roles and the honeypot channel all need a
+        # guild context that simply is not there, so DMs are deliberately not processed at
+        # all rather than risk half-working through them.
+        return
     guild = message.guild
 
     honeypot = channel_name("honeypot")

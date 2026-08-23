@@ -349,11 +349,25 @@ class _AuthFailed(Exception):
     makes any sense (see twitch_chat_listener)."""
 
 
+# IRC lines end at \r\n - a caller must never be able to smuggle a second line onto our
+# authenticated connection this way (a moderator-privileged one, once !bug/!report is wired to
+# announce_kinds). \0 is stripped outright since some IRC servers treat it as a line terminator
+# too.
+_IRC_LINE_BREAKS = str.maketrans({"\r": " ", "\n": " ", "\0": None})
+
+# 512 bytes is IRC's hard line limit including the trailing \r\n; PRIVMSG #channel : plus
+# Twitch's own tag overhead eats a good chunk of it, so stay well clear rather than have Twitch
+# silently drop or truncate the line.
+_MAX_CHAT_MESSAGE_LENGTH = 450
+
+
 async def _send_raw(line):
     """Sends a raw IRC line. Raises when no connection stands (any more) - the reader loop
     catches that and rebuilds the connection."""
     if _writer is None:
         raise ConnectionError("no Twitch IRC connection")
+    # A single logical line, always - see _IRC_LINE_BREAKS above.
+    line = line.translate(_IRC_LINE_BREAKS)
     _writer.write(f"{line}\r\n".encode("utf-8"))
     await _writer.drain()
 
@@ -361,6 +375,8 @@ async def _send_raw(line):
 async def send_twitch_chat(message_text):
     """True when the message went out - which at the same time fulfils
     core.platform.Platform.send_text (see platforms/twitch/platform.py)."""
+    if len(message_text) > _MAX_CHAT_MESSAGE_LENGTH:
+        message_text = message_text[:_MAX_CHAT_MESSAGE_LENGTH - 1] + "…"
     try:
         await _send_raw(f"PRIVMSG #{config.TWITCH_CHANNEL.lower()} :{message_text}")
         print(f"💬 Twitch-Chat gesendet: {message_text}")

@@ -84,7 +84,10 @@ class Announcement:
         parts = [self.title, self.text]
         parts += [f"{f.name}: {f.value}" for f in self.fields[:max_fields]]
         parts.append(self.url)
-        return " - ".join(part.strip() for part in parts if part and part.strip())
+        # " ".join(part.split()) collapses embedded newlines/tabs/CR along with normal
+        # whitespace - this rendering is for single-line, text-only platforms, so a line
+        # break in a field is always wrong here, whatever put it there.
+        return " - ".join(" ".join(part.split()) for part in parts if part and part.strip())
 
 
 class Platform(ABC):

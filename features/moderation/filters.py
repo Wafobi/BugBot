@@ -10,6 +10,7 @@
 
 import re
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 # Banned words/phrases: the original curation + a merge of the public LDNOOBW list
 # (DE+EN, https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words),
@@ -173,11 +174,28 @@ def check_banned_words(text, settings):
     return match.group(1) if match else None
 
 
+def _link_host(link):
+    """The hostname a matched link actually points at. LINK_PATTERN has no scheme for bare
+    domains ("evil.xyz"), so urlsplit needs one added or it reads the domain as the path."""
+    if "://" not in link:
+        link = f"//{link}"
+    return (urlsplit(link).hostname or "").lower().rstrip(".")
+
+
+def _is_allowed_host(host, allowed_domains):
+    # Suffix-on-a-label-boundary, not substring: "clips.twitch.tv" is allowed by "twitch.tv",
+    # but "twitch.tv.evil.com" (a lookalike subdomain of evil.com) is not.
+    return any(host == domain or host.endswith(f".{domain}")
+               for domain in (d.lower() for d in allowed_domains))
+
+
 def check_link_spam(text, settings):
-    if not LINK_PATTERN.search(text):
-        return False
-    lowered = text.lower()
-    return not any(domain in lowered for domain in settings["allowed_link_domains"])
+    # Checked per link, not against the whole message - otherwise mentioning an allowed
+    # domain anywhere in the text (even in a sentence, not as a link) would wave through
+    # every other, unrelated link in the same message.
+    allowed = settings["allowed_link_domains"]
+    return any(not _is_allowed_host(_link_host(m.group(0)), allowed)
+               for m in LINK_PATTERN.finditer(text))
 
 
 def check_excessive_caps(text, settings):

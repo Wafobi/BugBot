@@ -208,11 +208,16 @@ class VariablesFeature(feature_api.Feature):
         caller then leaves the placeholder standing rather than posting nonsense.
 
         Deliberately an *expression* and not statements: compile(..., "eval") allows no
-        import, no assignment and no writing of files through the back door. It is
-        nevertheless not a sandbox and is not meant to be one - the expression runs in the
-        bot process, with its rights, and whoever may write the file may already do
-        everything anyway. What counts here is something else: that an *accident* - a typo, a
-        division by zero, something slow - does not take the bot with it.
+        assignment and no import *statement*. That alone is not enough, though - an import as
+        an expression (__import__('os').system(...)) works fine in eval mode, which is why
+        _SAFE_NAMES below additionally supplies its own, builtins-free __builtins__: without
+        that, Python injects the full builtins into eval's globals regardless of what else is
+        in the dict. It is nevertheless not a sandbox and is not meant to be one - the
+        expression runs in the bot process, with its rights, and whoever may write the file
+        may already do everything anyway. What counts here is something else: that an
+        *accident* - a typo, a division by zero, something slow - does not take the bot with
+        it, and that this file does not become the path of least resistance for a future,
+        less trusted expression source.
 
         Hence three precautions, each against a different mishap:
           * every exception is caught and reported once,
@@ -285,9 +290,31 @@ def _positive(value, default):
     return number if number > 0 else default
 
 
+def _no_import(name, *args, **kwargs):
+    # CPython's C-implemented datetime.strftime looks up __import__ on the *calling
+    # frame's* builtins at call time (PyImport_Import respects a frame-local override,
+    # by design, for exactly this kind of sandboxing) to lazily reach the "time" module for
+    # locale-aware directives (%A, %B, ...). So __import__ must exist here and must work for
+    # "time" - but for nothing else, or `__import__('os').system(...)` becomes a one-liner
+    # again despite compile(..., "eval") allowing no import *statement*.
+    if name == "time":
+        import time
+        return time
+    raise ImportError(f"import of '{name}' is not allowed in a variables.json expression")
+
+
 # What an expression has available without importing. Kept small and aimed at what
 # variables in a chat are for: time, date, a little arithmetic, a little randomness.
 _SAFE_NAMES = {
+    # Without this key Python injects the *full* builtins (including __import__, open,
+    # eval, exec) into eval's globals, no matter what else is in the dict - see the
+    # docstring above. Only listing the handful actually useful here closes that off.
+    "__builtins__": {
+        "abs": abs, "min": min, "max": max, "round": round, "len": len,
+        "int": int, "float": float, "str": str, "bool": bool,
+        "sorted": sorted, "sum": sum, "range": range,
+        "__import__": _no_import,
+    },
     "datetime": datetime,
     "date": date_type,
     "timedelta": timedelta,

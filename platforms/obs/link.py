@@ -151,13 +151,16 @@ class OBSLink:
 
         The comparison goes through compare_digest, so the running time gives nothing away
         about the token. An open port on the internet gets scanned - here this is the only
-        hurdle in front of remote-controlling somebody else's OBS instance."""
+        hurdle in front of remote-controlling somebody else's OBS instance. Encoded first,
+        because compare_digest on str only accepts ASCII and would otherwise raise TypeError
+        on a non-ASCII token instead of just rejecting it - and this handshake is exactly
+        where an internet scanner throws arbitrary bytes at us."""
         header = request.headers.get(TOKEN_HEADER, "")
         if not header:
             bearer = request.headers.get("Authorization", "")
             header = bearer[7:] if bearer.lower().startswith("bearer ") else ""
 
-        if not hmac.compare_digest(header, self._token):
+        if not hmac.compare_digest(header.encode("utf-8", "ignore"), self._token.encode("utf-8")):
             print(f"⛔ OBS relay from {connection.remote_address} rejected: wrong/missing token.")
             return connection.respond(http.HTTPStatus.UNAUTHORIZED, "invalid token\n")
         return None
