@@ -159,7 +159,6 @@
   "rules": "Einfach nett bleiben und kein Arschloch sein: Keine Beleidigungen, sexuellen Übergriffe jeder Art, kein Rassismus, ... Sei nett. Keine Links posten! Automod entfernt das. Dies ist ein Ort jenseits des realen Wahnsinns, also lasst den realen Wahnsinn da wo er hingehört -- woanders ;) Keine Politik im Chat. Kein Backseat Gaming",
   "commands": {
     "_comment": "Statische Antworten. In geschweiften Klammern stehen Variablen: {u}/{user} ist der, der den Befehl geschrieben hat, {channel} der Kanal, {time}/{date} die Uhrzeit - alles Weitere definierst du in features/variables/variables.json und kannst es dann hier wie dort benutzen. Immer *einfache* Klammern: {time}. Doppelte ({{time}}) bedeuten in Python eine wörtliche Klammer und kämen als {time} im Chat an.",
-    "!time": "🕒 Es ist {time} Uhr.",
     "!discord": "🔗 Komm in unsere Gamedev- & Gaming-Community! Hier ist dein Einladungslink: https://discord.gg/Ey4jkMSNrP",
     "!lurk": "🍿 @{u} macht es sich im Lurk-Modus gemütlich und unterstützt den Stream im Hintergrund. Vielen Dank für deinen Support!",
     "!chef": "🍳 Chef's Adventure: Ein 2D Jump 'n' Run Plattformer von Wafobi! Begleite einen kleinen Koch auf der Suche nach entlaufenen Hühnern. 🔗 Wunschliste & Demo auf Steam: https://store.steampowered.com/app/2758910/Chefs_Adventure/?l=german",
