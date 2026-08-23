@@ -76,6 +76,11 @@ DEFAULTS = {
 # enough that "leave" arrives promptly after idle_minutes, long enough not to matter.
 SWEEP_INTERVAL_SECONDS = 30
 
+# How many keys _seed_overrides/_spend_cache each remember before the oldest is dropped -
+# see _remember_bounded. Comfortably above any realistic chat's distinct-chatters-per-stream
+# count, so eviction only ever bites during something like a follow/bot raid.
+MAX_CACHED_KEYS = 5000
+
 
 class CompanionFeature(feature_api.Feature):
     name = "companion"
@@ -188,24 +193,35 @@ class CompanionFeature(feature_api.Feature):
             "user_name": companion["user_name"],
         }
 
+    def _remember_bounded(self, cache, key, value):
+        """Sets cache[key] = value, then drops the oldest entry once the cache grows past
+        MAX_CACHED_KEYS - but only when self._store can reload whatever gets dropped. Without
+        a STORAGE feature, cache *is* the only copy of the data (see the comments on
+        _seed_overrides/_spend_cache in __init__), and evicting it mid-session would silently
+        reset a chatter's spend count to 0, letting them re-spend bits they already used - a
+        worse bug than the unbounded growth this exists to bound. Relies on plain dict
+        insertion order (Python 3.7+): key is already the most-recently-inserted entry, so
+        the first key in iteration order is always the oldest surviving one."""
+        cache[key] = value
+        if self._store is not None and len(cache) > MAX_CACHED_KEYS:
+            del cache[next(iter(cache))]
+
     async def _seed_for(self, key, default_seed):
         """The custom seed for this key if one was ever set (!companion set), otherwise
         `default_seed` (their name). Loaded from the store at most once per key per process
         - afterwards the cache in self._seed_overrides answers, so presence (which runs on
         every accepted message) never costs a query beyond the first sighting."""
         if key not in self._seed_overrides:
-            self._seed_overrides[key] = (
-                await asyncio.to_thread(self._store.get_seed, key) if self._store is not None else None
-            )
+            seed = await asyncio.to_thread(self._store.get_seed, key) if self._store is not None else None
+            self._remember_bounded(self._seed_overrides, key, seed)
         return self._seed_overrides[key] or default_seed
 
     async def _spent_for(self, key):
         """Bits this key has spent on !companion so far, all-time. Same lazy-load-once-then-
         cache shape as _seed_for."""
         if key not in self._spend_cache:
-            self._spend_cache[key] = (
-                await asyncio.to_thread(self._store.get_spent, key) if self._store is not None else 0
-            )
+            spent = await asyncio.to_thread(self._store.get_spent, key) if self._store is not None else 0
+            self._remember_bounded(self._spend_cache, key, spent)
         return self._spend_cache[key]
 
     async def _spend(self, key, amount):
@@ -216,7 +232,7 @@ class CompanionFeature(feature_api.Feature):
             total = await asyncio.to_thread(self._store.add_spent, key, amount)
         else:
             total = self._spend_cache.get(key, 0) + amount
-        self._spend_cache[key] = total
+        self._remember_bounded(self._spend_cache, key, total)
 
     async def on_message_accepted(self, message):
         if not self._in_scope(message.platform):

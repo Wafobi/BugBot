@@ -9,6 +9,7 @@
 # used to stand word for word in both platforms and is now here exactly once. The platform
 # only carries the verdict out - it alone knows how to delete and time out on itself.
 
+import asyncio
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -25,6 +26,20 @@ DEFAULTS = {
     "banned_words": {"use_builtin_list": True, "extra": [], "remove": []},
     "texts": dict(filters.VIOLATION_REASON_LABELS),
 }
+
+# How often the sweep looks for _violations entries nobody has added to in a long time (see
+# _sweep). Same order of magnitude as features/companion's presence sweep - cheap to run,
+# does not need to be prompt.
+SWEEP_INTERVAL_SECONDS = 300
+
+# _record_violation trims a user's own history to the *configured* violation_window_minutes
+# (single-digit-to-tens of minutes in practice) on every call, but a user who is never seen
+# again leaves their now-permanently-empty-of-relevance history sitting in the dict forever -
+# nothing ever calls _record_violation for that key again to trim it away. The sweep below
+# clears those out using a cutoff far past any sane violation_window_minutes (including a
+# per-platform override this feature has no visibility into at sweep time - see _sweep), so
+# it can never purge a history a concurrent, real call still needs.
+STALE_VIOLATION_HOURS = 6
 
 
 def _mask(found):
@@ -57,6 +72,19 @@ class ModerationFeature(feature_api.Feature):
         # user_key -> timestamps of the most recent offences, for the escalation.
         # Deliberately in RAM only: a restart should hold no old offence against anyone.
         self._violations = defaultdict(list)
+        self._sweep_task = None
+
+    async def setup(self, bus):
+        self._sweep_task = asyncio.create_task(self._sweep_loop())
+
+    async def close(self):
+        if self._sweep_task is not None:
+            self._sweep_task.cancel()
+            try:
+                await self._sweep_task
+            except asyncio.CancelledError:
+                pass
+            self._sweep_task = None
 
     async def review(self, message, overrides=None):
         """Checks a message and returns a Verdict - or None when nothing speaks against it.
@@ -107,6 +135,31 @@ class ModerationFeature(feature_api.Feature):
         while history and history[0] < cutoff:
             history.pop(0)
         return len(history)
+
+    async def _sweep_loop(self):
+        try:
+            while True:
+                await asyncio.sleep(SWEEP_INTERVAL_SECONDS)
+                self._sweep()
+        except asyncio.CancelledError:
+            pass
+
+    def _sweep(self):
+        """Drops _violations entries nobody has added to in a long while - see
+        STALE_VIOLATION_HOURS above for why this uses its own, deliberately generous cutoff
+        instead of the configured violation_window_minutes. A key whose history is trimmed
+        to empty is removed outright rather than left as an empty list, or a follow/bot raid
+        (many accounts, one offence each, never seen again) would otherwise keep one dict
+        entry per account for as long as the bot runs."""
+        cutoff = datetime.now() - timedelta(hours=STALE_VIOLATION_HOURS)
+        stale_keys = []
+        for key, history in self._violations.items():
+            while history and history[0] < cutoff:
+                history.pop(0)
+            if not history:
+                stale_keys.append(key)
+        for key in stale_keys:
+            del self._violations[key]
 
 
 def create_feature():
