@@ -8,9 +8,11 @@ Deliberately MESSAGE_ACCEPTED and not MESSAGE: a message that moderation deletes
 reaches this feature, so it never reaches the screen either. There is still no per-message
 "remove this again" frame - the same reasoning as features/chat_log recording MESSAGE and not
 MESSAGE_ACCEPTED, only pointed the other way: that one wants everything for the record, this
-one wants only what a viewer was ever allowed to read. The one thing that does wipe the panel
-after the fact is CHAT_CLEARED (see on_chat_cleared below): a platform-wide "clear chat" is not
-about any one message, so it earns the exception.
+one wants only what a viewer was ever allowed to read. Two things wipe the panel after the
+fact instead of a single message: CHAT_CLEARED (a platform-wide "clear chat" is not about any
+one message) and STREAM_START (a fresh stream starts with an empty panel - the mid-stream
+reload is what the history exists for, not someone tuning in to find yesterday's chat still
+sitting there).
 
 The history lives in RAM and not in STORAGE: it exists to catch up a browser source that
 reloads mid-stream, not to be queried afterwards - features/chat_log already is the record.
@@ -64,6 +66,7 @@ class ChatPanelFeature(feature_api.Feature):
         self._bus = bus
         bus.subscribe(events.MESSAGE_ACCEPTED, self.on_message)
         bus.subscribe(events.CHAT_CLEARED, self.on_chat_cleared)
+        bus.subscribe(events.STREAM_START, self.on_stream_start)
 
         if not env.CHAT_PANEL_TOKEN:
             log.info("No CHAT_PANEL_TOKEN set - no chat panel listener.")
@@ -117,6 +120,14 @@ class ChatPanelFeature(feature_api.Feature):
     async def on_chat_cleared(self, platform):
         if not self._in_scope(platform):
             return
+        await self._clear()
+
+    async def on_stream_start(self, platform, **_):
+        if not self._in_scope(platform):
+            return
+        await self._clear()
+
+    async def _clear(self):
         self._history.clear()
         if self._server is not None:
             await self._server.broadcast("clear", None)
