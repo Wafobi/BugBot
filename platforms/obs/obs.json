@@ -1,14 +1,14 @@
 {
   "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Die Quellennamen müssen genau so in OBS heißen; wo sie liegen (Szene oder Gruppe), sucht der Bot selbst.",
   "ad_break": {
-    "_comment": "Twitch meldet den Beginn einer Werbepause, OBS blendet diese Quelle für deren Dauer ein. Leerer source-Name = aus.",
-    "source": "ads_panel",
+    "_comment": "Twitch meldet den Beginn einer Werbepause, OBS blendet diese Quelle für deren Dauer ein. Leer (Default) = aus, solange keine passende Quelle existiert - Name hier erst eintragen, wenn eine Quelle mit exakt diesem Namen in einer Szene liegt.",
+    "source": "",
     "extra_seconds": 0
   },
   "announce": {
-    "_comment": "Ankündigungen (Bug-Report, Clip, Streamstart, ...) als Text im Bild. kinds ist absichtlich leer - eintragen, was im Stream erscheinen soll: stream.online, stream.offline, bug.report, clip.created, status.",
+    "_comment": "Ankündigungen (Bug-Report, Clip, Streamstart, ...) als Text im Bild. kinds ist absichtlich leer - eintragen, was im Stream erscheinen soll: stream.online, stream.offline, bug.report, clip.created, status. text_source ebenso leer (Default) = aus, solange keine passende Quelle existiert.",
     "kinds": [],
-    "text_source": "bugbot_announce",
+    "text_source": "",
     "hide_after_seconds": 20,
     "max_fields": 2
   },

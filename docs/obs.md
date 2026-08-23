@@ -142,10 +142,12 @@ warning line at startup, and its commands don't exist.
 
    and put the OBS password into `OBS_PASSWORD`. Nothing needs opening in the firewall.
 
-5. Name the sources in `obs.json`: `ad_break.source` is the item shown while Twitch runs a
-   commercial (`ads_panel` by default), `announce.text_source` the text source announcements are
-   written into (`bugbot_announce`). Both are looked up **by name across all scenes and groups**,
-   so they can live anywhere.
+5. **Optional.** Both `ad_break.source` and `announce.text_source` in `obs.json` default to
+   empty, i.e. off - the OBS platform works with zero sources configured, this step only
+   turns those two panels on. `ad_break.source` is the item shown while Twitch runs a
+   commercial, `announce.text_source` the text source announcements are written into. Create
+   a source with that exact name in any scene (or group - both are looked up **by name
+   across all scenes and groups**) first, then enter the name here.
 
 `!obs` in Twitch or Discord chat then reports whether the relay is connected and what OBS is
 doing.

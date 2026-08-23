@@ -239,10 +239,10 @@ hot-reloaded, and a name claimed twice is reported rather than silently dropping
 
 | Key | Default | Meaning |
 |---|---|---|
-| `ad_break.source` | `ads_panel` | source shown while Twitch runs a commercial |
+| `ad_break.source` | `""` | source shown while Twitch runs a commercial. Empty = off until a source with that exact name exists in a scene |
 | `ad_break.extra_seconds` | 0 | keep it up this much longer than the ad |
 | `announce.kinds` | `[]` | which announcement kinds go on stream. Empty by default |
-| `announce.text_source` | `bugbot_announce` | text source they're written into |
+| `announce.text_source` | `""` | text source they're written into. Empty = off, same as `ad_break.source` |
 | `announce.hide_after_seconds` | 20 | how long they stay up |
 | `announce.max_fields` | 2 | detail fields included |
 | `raw_events` | `true` | put every OBS event on the bus verbatim. **The fastest-growing table** — set false to keep only the meaningful ones |
