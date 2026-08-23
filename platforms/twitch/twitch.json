@@ -2,7 +2,9 @@
   "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Unter 'texts' steht jeder Satz, den der Bot in den Chat schreibt oder ankündigt; {platzhalter} werden gefüllt und müssen stehen bleiben. Ein unbekannter Platzhalter wird gemeldet, der Text bleibt dann roh stehen - der Befehl scheitert deswegen nicht.",
   "announce_kinds": [],
   "command_names": {
-    "_comment": "Befehle umbenennen, aliasen oder abschalten: \"!uptime\": \"!live\" | \"!bug\": [\"!bug\", \"!fehler\"] | \"!giveaway\": false"
+    "_comment": "Befehle umbenennen, aliasen oder abschalten: \"!uptime\": \"!live\" | \"!bug\": [\"!bug\", \"!fehler\"] | \"!giveaway\": false",
+    "!bug": false,
+    "!report": false
   },
   "timings": {
     "_comment": "Sekunden. irc_ping_interval: nach so langer Stille selbst ein PING schicken; token_check_interval/token_refresh_margin: wie oft der Token geprüft und wie lange vor Ablauf er erneuert wird; follow_batch_window: wie lange Follows für eine Sammelmeldung gesammelt werden; viewer_sample_interval: Abstand der Zuschauer-Stichproben; platform_ready_timeout: wie lange der Live-Abgleich beim Start auf die anderen Plattformen wartet.",
