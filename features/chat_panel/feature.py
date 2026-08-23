@@ -31,10 +31,11 @@ from .server import ChatPanelServer
 log = logging.getLogger(__name__)
 
 DEFAULTS = {
-    # Which platforms' chat reaches the panel. Empty = all that report a message - see
-    # EventBus.resolve_platforms. A capability ("chat") survives a change of service better
-    # than a name.
-    "platforms": [],
+    # Which platforms' chat reaches the panel. Default: Twitch only - the panel is visible
+    # in the stream itself, so a Discord conversation must not show up there unasked. Empty
+    # = all that report a message - see EventBus.resolve_platforms. A capability ("chat")
+    # survives a change of service better than a name.
+    "platforms": ["twitch"],
     # Lines starting with "!" are usually meant for the bot, not for an audience reading
     # along - on by default, same reasoning as the overlay's ticker existing separately.
     "hide_commands": True,

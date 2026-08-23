@@ -1,8 +1,8 @@
 {
   "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Adresse und Geheimnis des Lauschers stehen dagegen in der .env (CHAT_PANEL_TOKEN, CHAT_PANEL_PORT, CHAT_PANEL_BIND).",
 
-  "_comment_platforms": "Von welchen Plattformen der Chat ins Panel übernommen wird. Leer = von allen, die Nachrichten melden. Eine Fähigkeit wie \"chat\" übersteht einen Wechsel des Dienstes besser als ein Name wie \"twitch\".",
-  "platforms": [],
+  "_comment_platforms": "Von welchen Plattformen der Chat ins Panel übernommen wird. Default: nur Twitch - das Panel läuft sichtbar im Stream, Discord-Nachrichten sollen dort nicht ungefragt mit auftauchen. Leer = von allen, die Nachrichten melden. Eine Fähigkeit wie \"chat\" übersteht einen Wechsel des Dienstes besser als ein Name wie \"twitch\".",
+  "platforms": ["twitch"],
 
   "_comment_hide_commands": "Zeilen, die mit ! beginnen, landen nicht im Panel - sie sind an den Bot gerichtet, nicht ans Publikum.",
   "hide_commands": true,
