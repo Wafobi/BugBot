@@ -2,62 +2,62 @@
 <title>BugBot Overlay</title>
 
 <!--
-  Die Browser-Quelle. Gehört auf den OBS-Rechner, nicht auf den Server - wie
-  platforms/obs/obs_bridge.py liegt sie hier, weil sie zum Gegenstück gehört, und läuft
-  woanders.
+  The browser source. Belongs on the OBS machine, not the server - like
+  platforms/obs/obs_bridge.py it sits here because it belongs to its counterpart, and runs
+  elsewhere.
 
-  Einrichten: Quelle "Browser" anlegen, Breite 2560, Höhe 1440, Position (0,0), und als
-  URL die Datei mit Token:
+  Setup: add a "Browser" source, width 2560, height 1440, position (0,0), and as URL the
+  file with a token:
 
-    file:///home/jens/git/bugbot/features/overlay/bars.html?token=DEIN_OVERLAY_TOKEN
+    file:///path/to/bugbot/features/overlay/client/bars.html?token=YOUR_OVERLAY_TOKEN
 
-  Parameter (alle optional):
-    token=   das OVERLAY_TOKEN aus der .env des Bots. Ohne ihn keine Daten.
-    port=    Port des Tunnels auf diesem Rechner (Default 4457)
-    host=    Default 127.0.0.1 - der Tunnel endet hier, nicht beim Server
-    off=     Bausteine ausblenden, mit Komma: off=clock,deaths
-    only=    umgekehrt - nur diese stehen lassen: only=game,viewers
-             Bausteine: top, bottom, uptime, game, viewers, clock,
-                        deaths, ticker, last, cam
-    bar=     Höhe der Balken in Pixeln. 184 ohne Crop-Filter, 110 mit (Default 184)
-    cam=     Durchmesser des Kamerarings (Default 300). cam=0 blendet ihn aus
-    camx=    Mittelpunkt des Rings von links (Default 230)
-    accent=  Akzentfarbe, URL-kodiert: %23FFE100 für #FFE100
-    t.NAME=  jedes einzelne Gestaltungs-Token überschreiben, z.B. t.bar-line-h=4px
-    link=1   Verbindungsampel oben rechts einblenden (Standard: aus)
-    demo=1   Beispieldaten ohne Verbindung - zum Anschauen im normalen Browser
+  Parameters (all optional):
+    token=   the OVERLAY_TOKEN from the bot's .env. Without it, no data.
+    port=    port of the tunnel on this machine (default 4457)
+    host=    default 127.0.0.1 - the tunnel ends here, not at the server
+    off=     hide parts, comma-separated: off=clock,deaths
+    only=    the reverse - keep only these standing: only=game,viewers
+             parts: top, bottom, uptime, game, viewers, clock,
+                    deaths, ticker, last, cam
+    bar=     height of the bars in pixels. 184 without a crop filter, 110 with (default 184)
+    cam=     diameter of the camera ring (default 300). cam=0 hides it
+    camx=    center of the ring, from the left (default 230)
+    accent=  accent color, URL-encoded: %23FFE100 for #FFE100
+    t.NAME=  override any single design token, e.g. t.bar-line-h=4px
+    link=1   show the connection lamp, top right (default off)
+    demo=1   sample data without a connection - for looking at it in a normal browser
 
-  Die Gestaltung steht vollständig in den Tokens im :root hier unten. Von außen ändern
-  lässt sich jedes einzelne über ?t.<token>=<wert> - das landet als Inline-Stil am
-  Wurzelelement und gewinnt damit gegen jede Regel im Stylesheet.
+  The design lives entirely in the tokens in :root below. Any single one of them can be
+  changed from outside via ?t.<token>=<value> - that lands as an inline style on the root
+  element and so beats every rule in the stylesheet.
 
-  Es gibt bewusst keinen Theme-Mechanismus mehr: bei genau einem Aussehen war die Datei
-  daneben plus ein ?theme=-Parameter nur ein Umweg. Wer wieder mehrere Looks umschalten
-  will, braucht dafür ein <link>, das eine Datei mit einem :root-Block nachlädt - rund
-  zehn Zeilen.
+  There is deliberately no theme mechanism any more: with exactly one look, a separate file
+  plus a ?theme= parameter was only a detour. Whoever wants to switch between several looks
+  again needs a <link> that loads in a file with a :root block for it - about ten lines.
 
-  Der Ring ist nur ein Rahmen: die Kamera selbst ist eine OBS-Quelle, die *unter* dieser
-  hier liegt und mit Advanced Masks rund geschnitten wird. Die Konsole der Quelle
-  (Rechtsklick -> Interagieren) meldet die Mitte und den Durchmesser, damit man die
-  Kamera darauf legen kann, ohne zu raten.
+  The ring is only a frame: the camera itself is an OBS source that sits *underneath* this
+  one and gets cut round with Advanced Masks. The source's console (right-click ->
+  Interact) reports the center and the diameter, so the camera can be placed on it without
+  guessing.
 -->
 
 <style>
-  /* --- Das Aussehen ------------------------------------------------------------------
-     Nach dem Kanalbild: Nebel in Indigo und Karmin, Blitze in elektrischem Cyan, Magenta
-     als Kontur. Zwei Farben tragen alles, genau wie im Logo - Cyan füllt, Magenta umreißt.
+  /* --- The look ------------------------------------------------------------------------
+     After the channel art: fog in indigo and carmine, lightning in electric cyan, magenta
+     as the outline. Two colors carry everything, exactly like in the logo - cyan fills,
+     magenta outlines.
 
-     Jede Zeile hier ist ein Griff, an dem sich von außen drehen lässt: ?t.<name>=<wert>
-     landet als Inline-Stil am Wurzelelement und schlägt damit alles hier. Die Regeln
-     darunter bleiben davon unberührt - deshalb kann man das Aussehen ändern, aber nie
-     das Layout zerlegen. */
+     Every line here is a handle that can be turned from outside: ?t.<name>=<value> lands
+     as an inline style on the root element and so beats everything here. The rules below
+     stay unaffected by that - which is why the look can be changed, but the layout never
+     taken apart. */
   :root {
-    /* Maße */
+    /* Dimensions */
     --bar: 184px;
     --pad: 40px;
     --gap: 32px;
 
-    /* Schrift */
+    /* Type */
     --font: "Roboto", "DejaVu Sans", system-ui, sans-serif;
     --value-size: 46px;
     --value-small: 34px;
@@ -67,38 +67,38 @@
     --label-spacing: .2em;
     --label-transform: uppercase;
     --ticker-size: 32px;
-    /* Sehr schwach: das Logo leuchtet, die Zahlen sollen es nur andeuten, nicht schmieren. */
+    /* Very faint: the logo glows, the numbers should only hint at that, not smear. */
     --text-shadow: 0 0 16px rgba(95, 234, 245, .16);
 
-    /* Farben */
+    /* Colors */
     --accent: #5FEAF5;
     --ink: #EAF7FF;
     --dim: rgba(234, 247, 255, .5);
-    /* Das Karmin der Nebelwolken - der Live-Punkt ist eine der drei Stellen, an denen
-       etwas leuchten darf (die anderen zwei: Ring und Haarlinie). */
+    /* The carmine of the fog clouds - the live dot is one of the three places allowed to
+       glow (the other two: the ring and the hairline). */
     --dot-live: #D6453A;
     --dot-glow: rgba(214, 69, 58, .85);
     --dot-off: #2A2C50;
 
-    /* Balken. Die zweite Farbe ist die innere Kante, also die zum Spiel hin - dort
-       entscheidet sich, wie schwer der Balken wirkt. Zu durchlässig, und ein helles
-       Spielbild schlägt durch und lässt ihn ausgewaschen aussehen. */
+    /* Bars. The second color is the inner edge, i.e. the one facing the game - that's
+       where how heavy the bar reads gets decided. Too transparent, and a bright game
+       picture shows through and makes it look washed out. */
     --bar-bg-top: linear-gradient(180deg, rgba(7, 8, 22, .97), rgba(10, 10, 30, .82));
     --bar-bg-bottom: linear-gradient(0deg, rgba(7, 8, 22, .97), rgba(10, 10, 30, .82));
 
-    /* Die Kante im Logo-Aufbau: Cyan und Magenta als laufende Kachel.
+    /* The edge in the logo's construction: cyan and magenta as a running tile.
      *
-     * Der Verlauf wiederholt sich alle 240px und wandert genau um diese 240px - deshalb
-     * ist der Rücksprung nicht zu sehen. --bar-line-tile MUSS der Kachelbreite
-     * entsprechen; stehen die auseinander, ruckelt es einmal pro Runde. Ändere für ein
-     * anderes Tempo nur die Sekunden in --bar-line-anim.
+     * The gradient repeats every 240px and travels exactly that same 240px - which is why
+     * the jump back is invisible. --bar-line-tile MUST match the tile width; if they drift
+     * apart, it stutters once per lap. To change the pace, only touch the seconds in
+     * --bar-line-anim.
      *
-     * Warum die vielen Stützstellen statt der drei naheliegenden (Cyan/Magenta/Cyan):
-     * drei ergeben eine Dreieckswelle. Die ist im Wert stetig, in der *Steigung* aber
-     * nicht - an jedem Farbscheitel kippt sie schlagartig um, und dieser Knick wandert
-     * als harte Spitze durchs Bild. Die Stützstellen folgen einer Kosinuskurve, dadurch
-     * läuft die Steigung an den Scheiteln gegen null und der Wechsel ist weich.
-     * Neu erzeugen mit: w = (1 - cos(2*pi*t/240)) / 2, Mischung Cyan -> Magenta nach w. */
+     * Why this many stops instead of the three obvious ones (cyan/magenta/cyan): three
+     * produce a triangle wave. That is continuous in value, but not in *slope* - at every
+     * color peak it flips instantly, and that kink travels through the picture as a hard
+     * spike. The stops here follow a cosine curve instead, so the slope runs to zero at
+     * the peaks and the change is smooth.
+     * Regenerate with: w = (1 - cos(2*pi*t/240)) / 2, blend cyan -> magenta by w. */
     --bar-line-h: 2px;
     --bar-line: repeating-linear-gradient(90deg,
                 #5FEAF5 0px, rgba(105, 221, 237, .993) 20px, rgba(132, 186, 216, .975) 40px,
@@ -109,22 +109,22 @@
     --bar-line-opacity: .9;
     --bar-line-tile: 240px;
     --bar-line-anim: bar-line-run 8s linear infinite;
-    /* Blendet die Linie zu den Rändern aus. Bei einer laufenden Kachel nötig, weil der
-       Verlauf sein Ausfransen nicht mehr selbst mitbringen kann. */
+    /* Fades the line out toward the edges. Needed for a running tile, because the
+       gradient can no longer bring its own fraying along. */
     --bar-line-mask: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
-    /* Gegenläufig, damit die beiden Kanten nicht wie ein Förderband wirken. */
+    /* Runs the opposite way, so the two edges don't read as a conveyor belt. */
     --bar-line-dir-bottom: reverse;
 
-    /* Das Halbtonraster aus den Ecken des Kanalbilds. Ein statischer Verlauf, kostet die
-       GPU nichts, und liegt nur auf den Balken - dazwischen liegt das Spiel. */
+    /* The halftone grid from the corners of the channel art. A static gradient, costs the
+       GPU nothing, and sits only on the bars - the game is in between them. */
     --fx: radial-gradient(rgba(95, 234, 245, .11) 1px, transparent 1.6px) 0 0 / 7px 7px;
     --fx-opacity: 1;
 
-    /* Kameraring - Cyan innen, Magenta außen: die Kontur des Schriftzugs als Ring. */
+    /* Camera ring - cyan inside, magenta outside: the logo's outline, as a ring. */
     --cam: 300px;
     --camx: 230px;
-    /* Radius des Lochs, das der untere Balken für die Kamera freilässt - etwas größer
-       als der Ring, damit dessen Rand nicht angeschnitten wird. */
+    /* Radius of the hole the bottom bar leaves for the camera - a bit larger than the
+       ring, so its edge doesn't get clipped. */
     --cam-cut: calc(var(--cam) / 2 + 10px);
     --cam-ring: var(--accent);
     --cam-ring-w: 3px;
@@ -148,7 +148,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* --- Die beiden Balken ------------------------------------------------------- */
+  /* --- The two bars ----------------------------------------------------------------- */
   .bar {
     position: absolute; left: 0; right: 0;
     height: var(--bar);
@@ -159,7 +159,7 @@
   .bar.top    { top: 0;    background: var(--bar-bg-top); }
   .bar.bottom { bottom: 0; background: var(--bar-bg-bottom); }
 
-  /* Muster-Ebene, von einem Thema über --fx gefüllt. */
+  /* Pattern layer, filled by a theme via --fx. */
   .bar::before {
     content: ""; position: absolute; inset: 0;
     background: var(--fx);
@@ -167,8 +167,8 @@
     pointer-events: none;
   }
 
-  /* Die Haarlinie sitzt an der Kante zum Spielbild und ist das Einzige, was den Balken
-     als gewollt statt als übrig aussehen lässt. */
+  /* The hairline sits at the edge facing the game picture and is the one thing that makes
+     the bar look intentional rather than leftover. */
   .bar::after {
     content: ""; position: absolute; left: 0; right: 0;
     height: var(--bar-line-h);
@@ -181,20 +181,20 @@
   .bar.top::after    { bottom: 0; }
   .bar.bottom::after { top: 0; animation-direction: var(--bar-line-dir-bottom); }
 
-  /* Verschiebt das Muster um genau eine Kachel - dadurch sieht der Sprung zurück wie
-     eine Fortsetzung aus. Bewegt wird nur die Hintergrundposition eines 2px hohen
-     Streifens, nicht Geometrie: kein Layout, kein Reflow. */
+  /* Shifts the pattern by exactly one tile - which makes the jump back read as a
+     continuation. Only the background position of a 2px strip moves, not geometry: no
+     layout, no reflow. */
   @keyframes bar-line-run {
     from { background-position-x: 0; }
     to   { background-position-x: var(--bar-line-tile); }
   }
 
-  /* Der Balken bekommt dort ein Loch, wo die Kamera sitzt.
-     Nötig, weil die Kamera eine OBS-Quelle *unter* dieser Seite ist: ohne das Loch legt
-     sich der halbdurchsichtige Balkenhintergrund über ihre untere Hälfte und dunkelt sie
-     ab. Der Mittelpunkt liegt auf der Oberkante des Balkens, also y=0 in dessen eigenem
-     Koordinatensystem - genau da, wo der Ring die Kante schneidet. Nebenbei bekommt auch
-     die Haarlinie ihre Kerbe, was den Ring eingesetzt statt aufgeklebt aussehen lässt. */
+  /* The bar gets a hole where the camera sits.
+     Needed because the camera is an OBS source *underneath* this page: without the hole,
+     the semi-transparent bar background would lie over its bottom half and darken it. The
+     center sits on the bar's top edge, i.e. y=0 in its own coordinate system - exactly
+     where the ring crosses that edge. As a side effect the hairline gets its notch too,
+     which makes the ring look set into the bar rather than stuck on top of it. */
   .bar.bottom {
     -webkit-mask: var(--bar-mask, none);
     mask: var(--bar-mask, none);
@@ -202,19 +202,19 @@
   :root {
     --bar-mask: radial-gradient(circle at var(--camx) 0,
                 transparent var(--cam-cut), #000 calc(var(--cam-cut) + 2px));
-    /* Der linke Platz im unteren Balken, den der Ring beansprucht. Eigenes Token, damit
-       ihn ?cam=0 zurücknehmen kann - sonst bliebe dort eine leere Lücke stehen. */
+    /* The left-hand space in the bottom bar that the ring claims. A token of its own, so
+       ?cam=0 can take it back - otherwise an empty gap would stay standing there. */
     --bottom-pad: calc(var(--camx) + var(--cam) / 2 + 48px);
   }
 
-  /* space-between greift erst, wenn der Ticker ausgeschaltet ist: solange er da ist,
-     schluckt sein flex:1 den freien Raum ohnehin. Ohne die Zeile klebten Todeszähler und
-     letzter Follower dann beide links. */
+  /* space-between only kicks in once the ticker is switched off: as long as it's there,
+     its flex:1 soaks up the free space anyway. Without this line, the death counter and
+     the last follower would both stick to the left. */
   .bottom { padding-left: var(--bottom-pad); justify-content: space-between; }
 
   .spacer { flex: 1; }
 
-  /* --- Bausteine --------------------------------------------------------------- */
+  /* --- Parts -------------------------------------------------------------------------- */
   .block { display: flex; align-items: baseline; gap: 14px; white-space: nowrap; }
   .label {
     font-size: var(--label-size); font-weight: var(--label-weight);
@@ -225,7 +225,7 @@
   .value.accent { color: var(--accent); }
   .value.small  { font-size: var(--value-small); font-weight: 600; }
 
-  /* Live-Punkt: pulsiert nur über opacity, das kostet die GPU praktisch nichts. */
+  /* Live dot: pulses only via opacity, which costs the GPU next to nothing. */
   .dot {
     width: 20px; height: 20px; border-radius: 50%;
     background: var(--dot-live); align-self: center;
@@ -235,7 +235,7 @@
   .dot.off { background: var(--dot-off); box-shadow: none; animation: none; }
   @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
 
-  /* --- Ticker ------------------------------------------------------------------- */
+  /* --- Ticker --------------------------------------------------------------------- */
   #ticker {
     flex: 1; overflow: hidden; text-align: center;
     font-size: var(--ticker-size); font-weight: 500; color: var(--dim);
@@ -247,13 +247,13 @@
   }
   #ticker > span.out { opacity: 0; transform: translateY(-12px); }
 
-  /* --- Kamera-Ring --------------------------------------------------------------- */
-  /* Nur ein Rahmen. Innen bleibt alles durchsichtig, damit die Kamera-Quelle, die
-     darunter liegt, zu sehen ist. */
+  /* --- Camera ring ---------------------------------------------------------------- */
+  /* Just a frame. The inside stays fully transparent, so the camera source sitting
+     underneath it is visible. */
   #cam {
     position: absolute;
-    /* Über die Balken: der Ring schneidet die Kante, und was die Kante schneidet, darf
-       nicht von ihr übermalt werden. */
+    /* Above the bars: the ring crosses their edge, and whatever crosses that edge must
+       not be painted over by it. */
     z-index: 3;
     left: var(--camx); bottom: var(--bar);
     width: var(--cam); height: var(--cam);
@@ -262,16 +262,16 @@
     border: var(--cam-ring-w) solid var(--cam-ring);
     box-shadow: var(--cam-halo);
   }
-  /* Zweiter, dünnerer Ring außen - macht aus dem Kreis einen Rahmen statt einer Linie. */
+  /* A second, thinner ring outside - turns the circle into a frame instead of a line. */
   #cam::after {
     content: ""; position: absolute; inset: calc(var(--cam-gap) * -1);
     border-radius: 50%; border: var(--cam-outer-w) solid var(--cam-outer);
   }
 
-  /* Verbindungsampel, nur beim Einrichten interessant: mit ?link=1 sichtbar, sonst nicht.
-     Standardmäßig aus, weil ein roter Punkt in der Ecke sonst genau dann im Bild steht,
-     wenn der Bot mitten im Stream neu startet. Dass die Verbindung fehlt, sieht man
-     ohnehin: die Uptime steht auf "offline" und die Zuschauerzahl auf "—". */
+  /* Connection lamp, only interesting while setting up: visible with ?link=1, otherwise
+     not. Off by default, because a red dot in the corner would otherwise sit right in the
+     picture exactly when the bot restarts mid-stream. That the connection is missing is
+     visible anyway: uptime reads "offline" and the viewer count reads "—". */
   #link { display: none; }
   #link.shown {
     display: block;
@@ -282,8 +282,8 @@
   #link.ok { background: #34C759; }
 </style>
 
-<!-- data-part ist der Name, unter dem sich ein Baustein ein- und ausschalten lässt:
-     ?off=clock,deaths blendet aus, ?only=game,viewers lässt nur diese stehen. -->
+<!-- data-part is the name a part can be switched on/off by:
+     ?off=clock,deaths hides it, ?only=game,viewers keeps only those standing. -->
 <div class="bar top" data-part="top">
   <div class="block" data-part="uptime"><span class="dot off" id="dot"></span><span class="value small" id="uptime">--:--:--</span></div>
   <div class="spacer"></div>
@@ -309,30 +309,30 @@
 const params = new URLSearchParams(location.search);
 const root = document.documentElement.style;
 
-// --- Gestaltung ---------------------------------------------------------------------
-// Ebene 3 der Gestaltung (siehe Kommentar oben): alles hier landet als Inline-Stil am
-// Wurzelelement und schlägt damit sowohl :root als auch die Theme-Datei - unabhängig
-// davon, wann diese fertig geladen ist.
+// --- Design -------------------------------------------------------------------------
+// Layer 3 of the design (see the comment up top): everything here lands as an inline
+// style on the root element and so beats both :root and the theme file - regardless of
+// when that finishes loading.
 
-// Bequeme Kurznamen für das, was man am häufigsten dreht.
+// Convenient short names for what gets turned most often.
 const ALIASES = { bar: "--bar", cam: "--cam", camx: "--camx", accent: "--accent" };
 for (const [name, token] of Object.entries(ALIASES)) {
   if (!params.has(name)) continue;
   const raw = params.get(name);
-  // Die Maße dürfen ohne Einheit geschrieben werden, Farben nicht angefasst werden.
+  // Dimensions may be written without a unit; colors are passed through untouched.
   root.setProperty(token, /^-?\d+$/.test(raw) ? raw + "px" : raw);
 }
 
-// Und der allgemeine Weg: ?t.<token>=<wert> für jedes Token aus :root, auch die, für die
-// es keinen Kurznamen gibt. So braucht eine neue Stellschraube keinen neuen Parameter.
+// And the general path: ?t.<token>=<value> for any token from :root, including the ones
+// with no short name. That way a new knob never needs a new parameter.
 for (const [name, value] of params) {
   if (name.startsWith("t.") && name.length > 2) root.setProperty("--" + name.slice(2), value);
 }
 
-// --- Bausteine ein- und ausschalten ---------------------------------------------------
-// Jeder Baustein trägt ein data-part. ?off=a,b blendet aus, ?only=a,b lässt nur diese
-// stehen. Die beiden Balken zählen mit ("top", "bottom"), müssen aber selten genannt
-// werden: ein Balken, in dem nichts mehr sichtbar ist, verschwindet von allein.
+// --- Switching parts on and off -------------------------------------------------------
+// Every part carries a data-part. ?off=a,b hides it, ?only=a,b keeps only those standing.
+// The two bars count too ("top", "bottom"), but rarely need naming: a bar with nothing
+// left visible in it disappears on its own.
 const PARTS = ["top", "bottom", "uptime", "game", "viewers", "clock",
                "deaths", "ticker", "last", "cam"];
 const BARS = ["top", "bottom"];
@@ -342,36 +342,37 @@ const hidden = new Set(list("off"));
 
 const only = list("only");
 if (only.length) {
-  // Die Balken hier bewusst auslassen: wer ?only=clock schreibt, meint die Uhr *im*
-  // oberen Balken, nicht die Uhr ohne ihn. Was übrig leer bleibt, räumt die Regel unten ab.
+  // The bars are deliberately left out here: whoever writes ?only=clock means the clock
+  // *inside* the top bar, not the clock without it. Whatever is left empty gets cleaned
+  // up by the rule below.
   for (const part of PARTS) {
     if (!BARS.includes(part) && !only.includes(part)) hidden.add(part);
   }
 }
 
-// Einen Balken beim Namen zu nennen heißt: den will ich, auch leer. Ohne diese Ausnahme
-// wäre ?only=top,bottom - die nackten Balken als Rahmen - nicht erreichbar, weil die
-// Aufräumregel unten sie mangels Inhalt wieder abräumte.
+// Naming a bar means: I want it, even empty. Without this exception, ?only=top,bottom -
+// the bare bars as a frame - would be unreachable, because the cleanup rule below would
+// remove them again for lack of content.
 const keepEmpty = new Set(only.filter(part => BARS.includes(part)));
 
-// cam=0 bleibt als eigener Schalter erhalten, weil er dokumentiert ist und kürzer bleibt.
+// cam=0 stays as its own switch because it's documented and stays shorter.
 if (params.get("cam") === "0") hidden.add("cam");
 
 for (const element of document.querySelectorAll("[data-part]")) {
   if (hidden.has(element.dataset.part)) element.style.display = "none";
 }
 
-// Ein Balken ohne sichtbaren Inhalt ist nur noch eine dunkle Fläche - der geht mit, außer
-// er wurde ausdrücklich angefordert.
+// A bar with no visible content left is just a dark area - it goes too, unless it was
+// explicitly requested.
 for (const bar of document.querySelectorAll(".bar")) {
   if (keepEmpty.has(bar.dataset.part)) continue;
   const parts = [...bar.querySelectorAll("[data-part]")];
   if (!parts.some(element => element.style.display !== "none")) bar.style.display = "none";
 }
 
-// Ohne Ring fällt beides mit weg, was nur seinetwegen da ist: das Loch im Balken - sonst
-// stünde dort ein Kreis Spielbild mitten in einer dunklen Fläche - und der freigehaltene
-// Platz links, aus dem sonst eine leere Lücke würde.
+// Without the ring, both things that exist only for its sake fall away too: the hole in
+// the bar - otherwise a circle of game picture would sit there in the middle of a dark
+// area - and the space kept clear on the left, which would otherwise leave an empty gap.
 if (hidden.has("cam")) {
   root.setProperty("--bar-mask", "none");
   root.setProperty("--bottom-pad", "var(--pad)");
@@ -381,16 +382,16 @@ if (params.get("link") === "1") document.getElementById("link").classList.add("s
 
 const $ = (id) => document.getElementById(id);
 
-// Der Zustand, wie ihn der Bot schickt. Die Startwerte sind dieselben Felder wie in
-// features/overlay/feature.py - was dort dazukommt, muss hier nur gerendert werden.
+// The state as the bot sends it. The starting values are the same fields as in
+// features/overlay/feature.py - whatever gets added there only needs rendering here.
 let state = {
   live: false, started_at: null, title: "", game: "",
   viewers: 0, last_follower: "", last_sub: "", last_raid: "", deaths: 0, commands: [],
 };
 
-// --- Rendern ---------------------------------------------------------------------
-// Ein Durchgang zeichnet alles. Bei den paar Feldern lohnt kein Diffing, und es kann
-// nichts auseinanderlaufen.
+// --- Rendering -----------------------------------------------------------------------
+// One pass draws everything. With this handful of fields, diffing isn't worth it, and
+// nothing can drift out of sync.
 function render() {
   $("dot").className = "dot" + (state.live ? "" : " off");
   $("viewers").textContent = state.live ? state.viewers : "—";
@@ -418,9 +419,9 @@ function renderClock() {
     { hour: "2-digit", minute: "2-digit" });
 }
 
-// --- Ticker ------------------------------------------------------------------------
-// Zeigt reihum die Befehle, die einem normalen Zuschauer offenstehen. Welche das sind,
-// entscheidet der Bot (mod_only fällt dort schon raus).
+// --- Ticker ---------------------------------------------------------------------------
+// Cycles through the commands open to an ordinary viewer. Which ones those are is decided
+// by the bot (mod_only is already filtered out there).
 let tickIndex = 0;
 function tick(immediate) {
   const list = state.commands || [];
@@ -435,8 +436,8 @@ function tick(immediate) {
     slot.classList.remove("out");
   };
 
-  // Beim ersten Mal ohne Ausblenden: sonst steht der Platz eine halbe Sekunde leer, und
-  // genau die sieht man, wenn die Szene frisch eingeblendet wird.
+  // No fade-out the first time: otherwise the spot sits empty for half a second, and
+  // that's exactly what's visible when the scene is freshly shown.
   if (immediate) return show();
   slot.classList.add("out");
   setTimeout(show, 500);
@@ -447,10 +448,10 @@ function escapeHtml(text) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// --- Verbindung ----------------------------------------------------------------------
-// Der Bot schickt, wir hören zu. Bricht die Verbindung ab, wird sie wieder aufgebaut -
-// ein Overlay muss einen Bot-Neustart mitten im Stream überstehen, ohne dass jemand die
-// Quelle anfassen muss.
+// --- Connection ------------------------------------------------------------------------
+// The bot sends, we listen. If the connection drops, it reconnects on its own - an
+// overlay has to survive a bot restart mid-stream without anyone having to touch the
+// source.
 function connect() {
   const token = params.get("token") || "";
   const host = params.get("host") || "127.0.0.1";
@@ -468,7 +469,7 @@ function connect() {
   socket.onmessage = (message) => {
     let frame;
     try { frame = JSON.parse(message.data); } catch { return; }
-    // Die Befehlsliste kommt erst mit dem Zustand, der Ticker war bis hier also leer.
+    // The command list only arrives with the state, so the ticker was empty until now.
     if (frame.type === "state") { state = { ...state, ...frame.data }; render(); tick(true); }
     else if (frame.type === "patch") { Object.assign(state, frame.data); render(); }
   };
@@ -497,7 +498,7 @@ setInterval(renderClock, 10000);
 setInterval(tick, 8000);
 connect();
 
-// Die Maße des Rings, damit die Kamera-Quelle darauf gelegt werden kann, ohne zu raten.
+// The ring's measurements, so the camera source can be placed on it without guessing.
 {
   const ring = $("cam").getBoundingClientRect();
   console.log(`Kamera-Ring: Mitte (${Math.round(ring.x + ring.width / 2)}, ` +

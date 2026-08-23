@@ -1,17 +1,16 @@
 <meta charset="utf-8">
-<title>BugBot Chat Panel — Vorschau</title>
+<title>BugBot Chat Panel — Preview</title>
 
 <!--
-  Zum Anschauen im normalen Browser, ohne Bot und ohne OBS. Einfach öffnen:
+  To see it in a normal browser, without the bot and without OBS. Just open:
 
-    file:///pfad/zu/bugbot/features/chat_panel/client/preview.html
+    file:///path/to/bugbot/features/chat_panel/client/preview.html
 
-  chat.html füllt, anders als bars.html, die Größe seiner Quelle statt eines festen
-  2560x1440-Canvas - die Vorschau lässt deshalb Breite und Höhe selbst wählen, statt zu
-  skalieren, und legt ein Spielbild-Ersatzbild dahinter, damit sich die Lesbarkeit über
-  bewegtem Bild beurteilen lässt.
+  Unlike bars.html, chat.html fills the size of its source instead of a fixed 2560x1440
+  canvas - so the preview lets width and height be chosen freely instead of scaling, and puts
+  a game-picture stand-in behind it so readability over moving footage can be judged.
 
-  Alle Parameter von chat.html funktionieren auch hier und werden durchgereicht.
+  Every chat.html parameter also works here and is passed through.
 -->
 
 <style>
@@ -52,13 +51,13 @@
 </style>
 
 <div id="bar">
-  <label>Breite <input type="number" id="w" value="420" step="10"></label>
-  <label>Höhe <input type="number" id="h" value="900" step="10"></label>
-  <label>Zeilen <input type="number" id="max" value="12" step="1"></label>
-  <label>Quelle <input type="text" id="source" placeholder="alle, oder z.B. twitch"></label>
-  <label><input type="checkbox" id="badge" checked> Plattform-Marke</label>
-  <label>weitere Parameter <input type="text" id="extra" placeholder="t.msg-size=30px"></label>
-  <span class="hint">chat.html?demo=1 &middot; alle Parameter werden durchgereicht</span>
+  <label>Width <input type="number" id="w" value="420" step="10"></label>
+  <label>Height <input type="number" id="h" value="900" step="10"></label>
+  <label>Lines <input type="number" id="max" value="12" step="1"></label>
+  <label>Source <input type="text" id="source" placeholder="all, or e.g. twitch"></label>
+  <label><input type="checkbox" id="badge" checked> Platform badge</label>
+  <label>extra parameters <input type="text" id="extra" placeholder="t.msg-size=30px"></label>
+  <span class="hint">chat.html?demo=1 &middot; every parameter is passed through</span>
 </div>
 
 <div id="wrap"><div id="stage"><iframe id="frame"></iframe></div></div>

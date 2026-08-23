@@ -1,16 +1,16 @@
 <meta charset="utf-8">
-<title>BugBot Companion — Vorschau</title>
+<title>BugBot Companion — Preview</title>
 
 <!--
-  Zum Anschauen im normalen Browser, ohne Bot und ohne OBS. Einfach öffnen:
+  To see it in a normal browser, without the bot and without OBS. Just open:
 
-    file:///pfad/zu/bugbot/features/companion/client/preview.html
+    file:///path/to/bugbot/features/companion/client/preview.html
 
-  companion.html füllt, wie chat.html, die Größe seiner Quelle statt eines festen Canvas -
-  die Vorschau lässt deshalb Breite und Höhe selbst wählen, statt zu skalieren, und legt ein
-  Spielbild-Ersatzbild dahinter, damit sich die Lesbarkeit über bewegtem Bild beurteilen lässt.
+  Like chat.html, companion.html fills the size of its source instead of a fixed canvas - so
+  the preview lets width and height be chosen freely instead of scaling, and puts a
+  game-picture stand-in behind it so readability over moving footage can be judged.
 
-  Alle Parameter von companion.html funktionieren auch hier und werden durchgereicht.
+  Every companion.html parameter also works here and is passed through.
 -->
 
 <style>
@@ -51,12 +51,12 @@
 </style>
 
 <div id="bar">
-  <label>Breite <input type="number" id="w" value="1280" step="10"></label>
-  <label>Höhe <input type="number" id="h" value="360" step="10"></label>
-  <label>Größe <input type="number" id="size" value="96" step="4"></label>
-  <label>Max. Companions <input type="number" id="max" value="24" step="1"></label>
-  <label>weitere Parameter <input type="text" id="extra" placeholder="t.name-size=20px"></label>
-  <span class="hint">companion.html?demo=1 &middot; alle Parameter werden durchgereicht</span>
+  <label>Width <input type="number" id="w" value="1280" step="10"></label>
+  <label>Height <input type="number" id="h" value="360" step="10"></label>
+  <label>Size <input type="number" id="size" value="96" step="4"></label>
+  <label>Max. companions <input type="number" id="max" value="24" step="1"></label>
+  <label>extra parameters <input type="text" id="extra" placeholder="t.name-size=20px"></label>
+  <span class="hint">companion.html?demo=1 &middot; every parameter is passed through</span>
 </div>
 
 <div id="wrap"><div id="stage"><iframe id="frame"></iframe></div></div>

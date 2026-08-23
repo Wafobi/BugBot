@@ -2,50 +2,51 @@
 <title>BugBot Chat Panel</title>
 
 <!--
-  Die Browser-Quelle für den Chat im Bild. Gehört auf den OBS-Rechner, nicht auf den Server -
-  wie features/overlay/client/bars.html liegt sie hier, weil sie zum Gegenstück gehört
-  (features/chat_panel/server.py), und läuft woanders.
+  The browser source for the chat in the picture. Belongs on the OBS machine, not the server -
+  like features/overlay/client/bars.html it sits here because it belongs to its counterpart
+  (features/chat_panel/server.py), and runs elsewhere.
 
-  Einrichten: Quelle "Browser" anlegen, Breite/Höhe nach Geschmack (z.B. 420x900 - anders als
-  bars.html ist diese Seite kein fester 2560x1440-Canvas, sondern füllt die Quelle, wie groß
-  sie auch gewählt wird), und als URL die Datei mit Token:
+  Setup: add a "Browser" source, width/height to taste (e.g. 420x900 - unlike bars.html this
+  page is not a fixed 2560x1440 canvas, it fills the source at whatever size it's given), and
+  as URL the file with a token:
 
-    file:///pfad/zu/bugbot/features/chat_panel/client/chat.html?token=DEIN_CHAT_PANEL_TOKEN
+    file:///path/to/bugbot/features/chat_panel/client/chat.html?token=YOUR_CHAT_PANEL_TOKEN
 
-  Zum Anschauen ohne OBS: preview.html daneben öffnen, oder ?demo=1 an diese Datei anhängen.
+  To see it without OBS: open preview.html next to it, or append ?demo=1 to this file.
 
-  Parameter (alle optional):
-    token=   das CHAT_PANEL_TOKEN aus der .env des Bots. Ohne ihn keine Daten.
-    host=    Default 127.0.0.1 - der Tunnel endet hier, nicht beim Server
-    port=    Port des Tunnels auf diesem Rechner (Default 4458)
-    source=  welche Chat-Quelle(n) diese Instanz zeigt, mit Komma getrennt: source=twitch
-             oder source=twitch,discord. Leer = alle, die der Bot schickt (Default). Damit
-             können mehrere Browser-Quellen an derselben CHAT_PANEL_TOKEN hängen und trotzdem
-             unterschiedliches zeigen - eine nur Twitch, eine nur Discord - ohne dass
-             chat_panel.json etwas dazu sagen müsste; die Filterung passiert hier, nicht beim
-             Bot, der weiterhin an alle verbundenen Quellen alles schickt.
-    max=     wie viele Zeilen sichtbar bleiben, ältere rutschen raus (Default 12)
-    badge=0  die Plattform-Marke vor dem Namen ausblenden
-    accent=  Akzentfarbe, URL-kodiert: %23FFE100 für #FFE100
-    t.NAME=  jedes einzelne Gestaltungs-Token überschreiben, z.B. t.msg-size=30px
-    link=1   Verbindungsampel oben rechts einblenden (Standard: aus)
-    linewidth=  ab wie vielen Zeichen eine Nachricht in mehrere Chat-Zeilen aufgeteilt wird
-             (an Wortgrenzen, wo möglich) - jedes Stück bekommt seinen eigenen Namen/Badge,
-             liest sich wie mehrere kurze Nachrichten statt einer langen. Leer gelassen: nie
-             aufteilen, eine Nachricht bleibt eine Zeile (kann dann umbrechen/wachsen).
-    bar=     Höhe des unteren Balkens aus bars.html in Pixeln - der Chat wächst von unten
-             nur bis zu dieser Höhe und bleibt damit innerhalb des Balkens, statt darüber
-             hinaus in die Bildmitte zu laufen. Selber Wert wie das ?bar= dort (Default dort
-             184). Leer gelassen: Chat wächst unbegrenzt nach oben.
-    maxchars=  Nachricht wird vor dem Aufteilen auf so viele Zeichen gekürzt (mit "…") - harte
-             Obergrenze, damit eine einzelne Nachricht nicht beliebig viele Zeilen erzeugt und
-             alle anderen aus dem Feed verdrängt (Default 150, 0 = nie kürzen)
-    idle=    Sekunden Ruhe im Chat, bis der Feed ausblendet (Default 8, 0 = nie ausblenden)
-    fade=    Sekunden für die Ein-/Ausblend-Animation (Default 2.5)
-    demo=1   Beispielnachrichten ohne Verbindung - zum Anschauen im normalen Browser
+  Parameters (all optional):
+    token=   the CHAT_PANEL_TOKEN from the bot's .env. Without it, no data.
+    host=    default 127.0.0.1 - the tunnel ends here, not at the server
+    port=    port of the tunnel on this machine (default 4458)
+    source=  which chat source(s) this instance shows, comma-separated: source=twitch
+             or source=twitch,discord. Empty = everything the bot sends (default). This
+             lets several browser sources hang off the same CHAT_PANEL_TOKEN and still show
+             different things - one Twitch-only, one Discord-only - without chat_panel.json
+             having to say anything about it; the filtering happens here, not at the bot,
+             which keeps sending everything to every connected source.
+    max=     how many lines stay visible, older ones scroll out (default 12)
+    badge=0  hide the platform badge in front of the name
+    accent=  accent color, URL-encoded: %23FFE100 for #FFE100
+    t.NAME=  override any single design token, e.g. t.msg-size=30px
+    link=1   show the connection lamp, top right (default off)
+    linewidth=  from how many characters a message gets split into several chat lines
+             (at word boundaries, where possible) - each piece gets its own name/badge, and
+             reads like several short messages instead of one long one. Left empty: never
+             split, a message stays one line (which can then wrap/grow).
+    bar=     height of the bottom bar from bars.html in pixels - the chat grows upward from
+             the bottom only up to this height and so stays within the bar's band, instead
+             of running past it into the middle of the picture. Same value as the ?bar=
+             there (default there 184). Left empty: chat grows unbounded upward.
+    maxchars=  message gets truncated to this many characters (with "…") before splitting -
+             a hard ceiling so a single message cannot produce an unbounded number of lines
+             and push everyone else out of the feed (default 150, 0 = never truncate)
+    idle=    seconds of quiet in chat before the feed fades out (default 8, 0 = never fade)
+    fade=    seconds for the fade-in/fade-out animation (default 2.5)
+    demo=1   sample messages without a connection - for looking at it in a normal browser
 
-  Nur was die Moderation durchlässt, kommt überhaupt hier an (siehe feature.py) - dieses
-  Skript muss also nichts löschen, nur anzeigen und irgendwann aus der Liste rutschen lassen.
+  Only what moderation lets through ever arrives here at all (see feature.py) - this script
+  therefore never has to delete anything, only display and eventually let it scroll off the
+  list.
 -->
 
 <style>
@@ -57,9 +58,9 @@
     --pad: 16px;
     --text-shadow: 0 1px 3px rgba(0, 0, 0, .9), 0 0 12px rgba(0, 0, 0, .5);
 
-    --accent: #5FEAF5;    /* Mod/Broadcaster */
-    --sub: #F22A80;       /* Abonnent*in */
-    --ink: #EAF7FF;       /* normale Zuschauer*innen */
+    --accent: #5FEAF5;    /* mod/broadcaster */
+    --sub: #F22A80;       /* subscriber */
+    --ink: #EAF7FF;       /* ordinary viewers */
     --dim: rgba(234, 247, 255, .55);
     --dot-off: #2A2C50;
     --dot-ok: #34C759;
@@ -126,7 +127,7 @@
 
   .text { word-break: break-word; }
 
-  /* Verbindungsampel, nur beim Einrichten interessant - wie in bars.html. */
+  /* Connection lamp, only interesting while setting up - same as in bars.html. */
   #link { display: none; }
   #link.shown {
     display: block;
@@ -146,8 +147,8 @@
 const params = new URLSearchParams(location.search);
 const root = document.documentElement.style;
 
-// --- Gestaltung: wie in bars.html - Kurzname für den häufigsten Fall, sonst der
-// allgemeine Weg über jedes Token aus :root. ---------------------------------------------
+// --- Design: like in bars.html - a shorthand for the most common case, otherwise the
+// general path over every token from :root. ---------------------------------------------
 if (params.has("accent")) root.setProperty("--accent", params.get("accent"));
 for (const [name, value] of params) {
   if (name.startsWith("t.") && name.length > 2) root.setProperty("--" + name.slice(2), value);
@@ -166,7 +167,7 @@ const MAX_CHARS = params.has("maxchars") ? Math.max(0, parseInt(params.get("maxc
 // sent several shorter messages in a row.
 const CHUNK_CHARS = params.has("linewidth") ? Math.max(10, parseInt(params.get("linewidth"), 10) || 50) : 0;
 
-// Ausblenden bei Ruhe im Chat - 0 schaltet es ab, wer den Feed dauerhaft sichtbar will.
+// Fades out on quiet chat - 0 switches it off, for whoever wants the feed always visible.
 const IDLE_MS = params.has("idle") ? Math.max(0, parseFloat(params.get("idle")) * 1000) : 8000;
 if (params.has("fade")) root.setProperty("--fade", Math.max(0.1, parseFloat(params.get("fade"))) + "s");
 if (params.has("bar")) root.setProperty("--feed-max-height", Math.max(0, parseFloat(params.get("bar")) || 0) + "px");
@@ -178,9 +179,9 @@ function scheduleIdle() {
   if (IDLE_MS > 0) idleTimer = setTimeout(() => feed.classList.add("idle"), IDLE_MS);
 }
 
-// Welche Plattform(en) diese Instanz zeigt - leer heißt alle. Das Filtern passiert hier und
-// nicht beim Bot: der schickt jeder verbundenen Quelle dasselbe, source= entscheidet erst
-// hinterher, was aus dem Strom tatsächlich im Bild landet.
+// Which platform(s) this instance shows - empty means all. The filtering happens here and
+// not at the bot: it sends the same thing to every connected source, source= only decides
+// afterward what from the stream actually lands in the picture.
 const SOURCES = (params.get("source") || "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
@@ -189,9 +190,9 @@ function escapeHtml(text) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// Für gewöhnliche Zuschauer*innen keine feste Farbe (--ink für alle), sondern eine aus dem
-// Namen abgeleitete - wie im Twitch-Chat selbst, damit Namen im Feed auseinanderzuhalten sind.
-// Mod/Broadcaster und Abos behalten ihre feste Rollenfarbe, siehe .privileged/.subscriber.
+// Ordinary viewers get no fixed color (--ink for everyone) but one derived from their name -
+// like in Twitch chat itself, so names in the feed stay easy to tell apart. Mods/broadcaster
+// and subs keep their fixed role color, see .privileged/.subscriber.
 function nameColor(name) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
