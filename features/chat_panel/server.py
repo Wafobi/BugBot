@@ -19,9 +19,12 @@ import asyncio
 import hmac
 import http
 import json
+import logging
 from urllib.parse import urlsplit, parse_qs
 
 import websockets
+
+log = logging.getLogger(__name__)
 
 TOKEN_HEADER = "X-BugBot-Token"
 TOKEN_QUERY = "token"
@@ -52,7 +55,7 @@ class ChatPanelServer:
         self._server = await websockets.serve(
             self._session, self._bind, self._port, process_request=self._check_token,
         )
-        print(f"💬 Chat panel listener on {self._bind}:{self._port}")
+        log.info(f"Chat panel listener on {self._bind}:{self._port}")
 
     async def close(self):
         for connection in list(self._clients):
@@ -78,7 +81,7 @@ class ChatPanelServer:
             header = (query.get(TOKEN_QUERY) or [""])[0]
 
         if not hmac.compare_digest(header.encode("utf-8", "ignore"), self._token.encode("utf-8")):
-            print(f"⛔ Chat panel from {connection.remote_address} rejected: wrong/missing token.")
+            log.warning(f"Chat panel from {connection.remote_address} rejected: wrong/missing token.")
             return connection.respond(http.HTTPStatus.UNAUTHORIZED, "invalid token\n")
         return None
 
@@ -87,7 +90,7 @@ class ChatPanelServer:
         hang here at once, same as with the overlay."""
         self._clients.add(connection)
         peer = f"{connection.remote_address[0]}:{connection.remote_address[1]}"
-        print(f"💬 Chat panel connected: {peer} ({len(self._clients)} open)")
+        log.info(f"Chat panel connected: {peer} ({len(self._clients)} open)")
         try:
             await connection.send(json.dumps({"type": "history", "data": self._history()}))
             # We expect nothing from the far side. Reading runs anyway, because it is the
@@ -100,7 +103,7 @@ class ChatPanelServer:
             self._on_error(f"chat panel session {peer}: {error}")
         finally:
             self._clients.discard(connection)
-            print(f"💬 Chat panel disconnected: {peer} ({len(self._clients)} open)")
+            log.info(f"Chat panel disconnected: {peer} ({len(self._clients)} open)")
 
     async def broadcast(self, type_, data):
         """One message to all open panels. Failures of individual connections are

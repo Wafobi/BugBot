@@ -17,8 +17,11 @@
 #                    with !uptime in chat should not get a second one here.
 
 import json
+import logging
 from pathlib import Path
 from string import Formatter
+
+log = logging.getLogger(__name__)
 
 
 def for_package(module_file, defaults=None):
@@ -119,7 +122,7 @@ class LiveConfig:
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:
-            print(f"⚠️ Could not load {self._path.name}, keeping the previous state: {e}")
+            log.warning(f"Could not load {self._path.name}, keeping the previous state: {e}")
             return
         if self._baseline is None:
             self._baseline = data
@@ -238,7 +241,7 @@ class LiveConfig:
         if key in self._complained:
             return
         self._complained.add(key)
-        print(f"⚠️ {self._path.name}: {message}")
+        log.warning(f"{self._path.name}: {message}")
 
     # --- Command names -------------------------------------------------------------------
 

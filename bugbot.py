@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import os
 import signal
 from pathlib import Path
 
@@ -10,6 +12,27 @@ from core import registry
 # environment, and the packages are only imported afterwards (they load the same .env once
 # more - load_dotenv is idempotent and overwrites nothing already set).
 load_dotenv(Path(__file__).parent / ".env")
+
+# The one place logging is configured - every module below just does logging.getLogger(__name__)
+# and inherits this. No timestamp in the format: under systemd, journald already stamps every
+# line; run outside of it (`python bugbot.py` during development) and journalctl's own
+# formatting is the thing missing, not this one. BUGBOT_LOG_LEVEL is the "make it quieter in
+# production" knob the previous print()-only setup had no way to offer - DEBUG additionally
+# turns on logging chat messages themselves (see platforms/twitch/bot.py), which INFO and above
+# deliberately never do.
+logging.basicConfig(
+    level=os.environ.get("BUGBOT_LOG_LEVEL", "INFO").upper(),
+    format="%(levelname)s %(name)s: %(message)s",
+)
+# discord.py and websockets use the stdlib logging module themselves, so the basicConfig
+# above reaches them too - at BUGBOT_LOG_LEVEL=DEBUG that means discord.py's own internal
+# chatter (every event handler registration, gateway heartbeats) rather than anything of
+# ours. Floored at WARNING regardless of our own level, independently of it: someone turning
+# on DEBUG to see chat text should not have to wade through a library's debug log to find it.
+for _noisy_logger in ("discord", "websockets"):
+    logging.getLogger(_noisy_logger).setLevel(logging.WARNING)
+
+log = logging.getLogger(__name__)
 
 
 async def main():
@@ -28,7 +51,7 @@ async def main():
 
     def request_shutdown(signal_name):
         names = ", ".join(p.name for p in platforms)
-        print(f"\n🛑 {signal_name} empfangen, fahre {names} sauber herunter...")
+        log.info(f"{signal_name} empfangen, fahre {names} sauber herunter...")
         stop_event.set()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -53,7 +76,7 @@ async def main():
         try:
             await part.close()
         except Exception as e:
-            print(f"⚠️ Herunterfahren von '{part.name}' fehlgeschlagen: {e!r}")
+            log.warning(f"Herunterfahren von '{part.name}' fehlgeschlagen: {e!r}")
 
     if not runner.done():
         runner.cancel()
@@ -62,7 +85,7 @@ async def main():
     except asyncio.CancelledError:
         pass
 
-    print("✅ BugBot beendet.")
+    log.info("BugBot beendet.")
 
 
 asyncio.run(main())

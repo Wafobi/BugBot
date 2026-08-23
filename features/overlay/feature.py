@@ -16,6 +16,7 @@ a bot on the server could not reach anyway.
 """
 
 import asyncio
+import logging
 import time
 
 from core import events
@@ -25,6 +26,8 @@ from core import runtime_config
 from . import config as env
 from .server import OverlayServer
 from .store import OverlayStore
+
+log = logging.getLogger(__name__)
 
 # Key stem of the death counter in overlay_counters. Not a configuration value: it lives in
 # the database and renaming it would show an empty counter.
@@ -78,7 +81,7 @@ class OverlayFeature(feature_api.Feature):
             # At startup no game is known yet - the first STREAM_START makes up for that.
             self._state["deaths"] = await self._read_deaths(self._deaths_key())
         else:
-            print("⚠️  Overlay without STORAGE: the death counter starts over on every start.")
+            log.warning("Overlay without STORAGE: the death counter starts over on every start.")
 
         bus.subscribe(events.STREAM_START, self.on_stream_start)
         bus.subscribe(events.STREAM_END, self.on_stream_end)
@@ -87,14 +90,14 @@ class OverlayFeature(feature_api.Feature):
         bus.subscribe(events.PLATFORM_EVENT, self.on_platform_event)
 
         if not env.OVERLAY_TOKEN:
-            print("ℹ️  No OVERLAY_TOKEN set - no overlay listener. "
-                  "The counter commands run regardless.")
+            log.info("No OVERLAY_TOKEN set - no overlay listener. "
+                     "The counter commands run regardless.")
             return
 
         self._server = OverlayServer(
             env.OVERLAY_TOKEN, env.OVERLAY_BIND, env.OVERLAY_PORT,
             snapshot=self.snapshot,
-            on_error=lambda message: print(f"⚠️  {message}"),
+            on_error=lambda message: log.warning(message),
         )
         await self._server.start()
 
@@ -133,7 +136,7 @@ class OverlayFeature(feature_api.Feature):
                 if not command.mod_only
             ]
         except Exception as error:
-            print(f"⚠️  Overlay: Befehlsliste nicht lesbar: {error}")
+            log.warning(f"Overlay: Befehlsliste nicht lesbar: {error}")
             return []
 
     async def _patch(self, **changes):

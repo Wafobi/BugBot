@@ -22,6 +22,7 @@
 # and can be seen in the !obs status.
 
 import asyncio
+import logging
 from pathlib import Path
 
 from core import events, runtime_config
@@ -29,6 +30,8 @@ from core import platform as platform_api
 
 from . import config
 from .link import OBSError, OBSLink
+
+log = logging.getLogger(__name__)
 
 # Platform name as it appears in every bus notification and in the DB. Has to match
 # platform.py:OBSPlatform.name.
@@ -125,7 +128,7 @@ async def _on_obs_event(event_type, data):
 
     counted = _neutral_event(event_type, data)
     if counted:
-        print(f"🎛️ OBS: {counted}" + (f" ({_current_scene})" if counted == "scene_changed" else ""))
+        log.info(f"OBS: {counted}" + (f" ({_current_scene})" if counted == "scene_changed" else ""))
         # user_name stays empty: OBS events have no originator in chat. The column is NOT
         # NULL, not "always a person" (see features/stats/store.py).
         await events.bus.publish(
@@ -142,9 +145,9 @@ async def _on_connected():
     try:
         scenes = await link.request("GetSceneList")
         _current_scene = scenes.get("currentProgramSceneName", "")
-        print(f"🎬 OBS scene: '{_current_scene}' ({len(scenes.get('scenes', []))} scenes).")
+        log.info(f"OBS scene: '{_current_scene}' ({len(scenes.get('scenes', []))} scenes).")
     except OBSError as e:
-        print(f"⚠️ OBS scene list not retrievable: {e}")
+        log.warning(f"OBS scene list not retrievable: {e}")
 
     if OBS_CONFIG.get("hide_on_connect", True):
         for source in {ad_break_source(), announce_text_source()} - {""}:
@@ -191,12 +194,12 @@ async def set_source_visible(source, visible, quiet=False):
         locations = await _locate_source(source)
     except OBSError as e:
         if not quiet:
-            print(f"⚠️ OBS: source '{source}' not locatable: {e}")
+            log.warning(f"OBS: source '{source}' not locatable: {e}")
         return 0
 
     if not locations:
         if not quiet:
-            print(f"⚠️ OBS: source '{source}' is in no scene - nothing to show or hide.")
+            log.warning(f"OBS: source '{source}' is in no scene - nothing to show or hide.")
         return 0
 
     changed = 0
@@ -208,7 +211,7 @@ async def set_source_visible(source, visible, quiet=False):
             changed += 1
         except OBSError as e:
             if not quiet:
-                print(f"⚠️ OBS: '{source}' in '{scene}' not switchable: {e}")
+                log.warning(f"OBS: '{source}' in '{scene}' not switchable: {e}")
     return changed
 
 
@@ -231,7 +234,7 @@ async def _hide_later(source, delay):
     except asyncio.CancelledError:
         raise
     except Exception as e:
-        print(f"⚠️ OBS: '{source}' could not be hidden: {e}")
+        log.warning(f"OBS: '{source}' could not be hidden: {e}")
     finally:
         # Remove only our own entry - a new task may be sitting there by now.
         if _hide_tasks.get(source) is asyncio.current_task():
@@ -254,7 +257,7 @@ async def _on_ad_break(platform, duration_seconds):
         return
     seconds = max(0, int(duration_seconds or 0)) + int(_settings("ad_break").get("extra_seconds", 0) or 0)
     if await show_source(source, seconds):
-        print(f"📺 OBS: '{source}' shown for {seconds}s (ad break).")
+        log.info(f"OBS: '{source}' shown for {seconds}s (ad break).")
 
 
 # --- Announcing ----------------------------------------------------------------------
@@ -282,7 +285,7 @@ async def show_announcement(announcement):
             "inputName": source, "inputSettings": {"text": text}, "overlay": True,
         })
     except OBSError as e:
-        print(f"⚠️ OBS: text source '{source}' not writable: {e}")
+        log.warning(f"OBS: text source '{source}' not writable: {e}")
         return False
 
     return await show_source(source, int(settings.get("hide_after_seconds", 20) or 0))
@@ -404,8 +407,8 @@ async def start_obs():
     Twitch's live reconciliation would hang for up to two minutes on a machine that only
     comes on in the evening."""
     await link.start()
-    print(
-        f"🎛️ OBS link ready: waiting on {config.OBS_BRIDGE_BIND}:{config.OBS_BRIDGE_PORT} "
+    log.info(
+        f"OBS link ready: waiting on {config.OBS_BRIDGE_BIND}:{config.OBS_BRIDGE_PORT} "
         f"for the relay from the OBS machine (platforms/obs/client/obs_bridge.py)."
     )
 
@@ -414,7 +417,7 @@ async def close():
     for source in list(_hide_tasks):
         _cancel_hide(source)
     await link.close()
-    print("🔌 OBS listener closed.")
+    log.info("OBS listener closed.")
 
 
 # --- Wiring --------------------------------------------------------------------------

@@ -16,10 +16,13 @@
 #       (moderation verdict) or collects the features' commands.
 
 import asyncio
+import logging
 from collections import defaultdict
 from dataclasses import replace
 
 from . import platform as platform_api
+
+log = logging.getLogger(__name__)
 
 
 # --- Topics ------------------------------------------------------------------------
@@ -140,8 +143,8 @@ class EventBus:
                 # empty at the moment.
                 continue
             else:
-                print(f"⚠️ '{token}' is neither a loaded platform nor a capability "
-                      f"({', '.join(sorted(platform_api.CAPABILITIES))}) - ignoring it.")
+                log.warning(f"'{token}' is neither a loaded platform nor a capability "
+                            f"({', '.join(sorted(platform_api.CAPABILITIES))}) - ignoring it.")
         return resolved
 
     async def wait_ready(self, timeout=None):
@@ -155,7 +158,7 @@ class EventBus:
             )
             return True
         except asyncio.TimeoutError:
-            print(f"⚠️ Not all platforms were ready after {timeout}s.")
+            log.warning(f"Not all platforms were ready after {timeout}s.")
             return False
 
     # --- Feature registry -----------------------------------------------------------
@@ -216,7 +219,7 @@ class EventBus:
             resolved = config.resolve_commands(declared) if config is not None else declared
             for name, command in resolved.items():
                 if name in merged:
-                    print(f"⚠️ command {name} offered twice - '{feature.name}' is ignored.")
+                    log.warning(f"command {name} offered twice - '{feature.name}' is ignored.")
                     continue
                 merged[name] = command if command.name == name else replace(command, name=name)
         self._commands = merged
@@ -260,7 +263,7 @@ class EventBus:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                print(f"⚠️ Error in the event handler for '{topic}': {e}")
+                log.warning(f"Error in the event handler for '{topic}': {e}")
         return results
 
     async def announce(self, announcement):
@@ -280,7 +283,7 @@ class EventBus:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                print(f"⚠️ {target.name} could not announce '{announcement.kind}': {e}")
+                log.warning(f"{target.name} could not announce '{announcement.kind}': {e}")
         return delivered
 
 

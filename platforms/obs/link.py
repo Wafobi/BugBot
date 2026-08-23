@@ -29,8 +29,11 @@ import hmac
 import http
 import itertools
 import json
+import logging
 
 import websockets
+
+log = logging.getLogger(__name__)
 
 # --- Protocol (obs-websocket 5.x) ---------------------------------------------------
 OP_HELLO = 0
@@ -161,7 +164,7 @@ class OBSLink:
             header = bearer[7:] if bearer.lower().startswith("bearer ") else ""
 
         if not hmac.compare_digest(header.encode("utf-8", "ignore"), self._token.encode("utf-8")):
-            print(f"⛔ OBS relay from {connection.remote_address} rejected: wrong/missing token.")
+            log.warning(f"OBS relay from {connection.remote_address} rejected: wrong/missing token.")
             return connection.respond(http.HTTPStatus.UNAUTHORIZED, "invalid token\n")
         return None
 
@@ -171,7 +174,7 @@ class OBSLink:
         if self._ws is not None:
             # New beats old: a half-dead previous connection (OBS restarted, line dropped
             # without a FIN arriving) must not block the fresh one.
-            print(f"ℹ️ OBS relay {peer} is taking over - closing the previous connection.")
+            log.info(f"OBS relay {peer} is taking over - closing the previous connection.")
             await self._close_session()
 
         try:
@@ -179,13 +182,13 @@ class OBSLink:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"⚠️ OBS sign-in via {peer} failed: {describe(e)}")
+            log.warning(f"OBS sign-in via {peer} failed: {describe(e)}")
             await connection.close()
             return
 
         self._ws = connection
         self.peer = peer
-        print(f"🎛️ OBS connected via relay {peer} (obs-websocket {self.version or '?'}).")
+        log.info(f"OBS connected via relay {peer} (obs-websocket {self.version or '?'}).")
         if self._on_connected:
             self._spawn(self._on_connected())
 
@@ -194,13 +197,13 @@ class OBSLink:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"⚠️ OBS line ({peer}) disturbed: {describe(e)}")
+            log.warning(f"OBS line ({peer}) disturbed: {describe(e)}")
         finally:
             # Only clean up when this session is still the current one: if a new relay has
             # taken over in the meantime, the state belongs to it.
             if self._ws is connection:
                 self._drop_session()
-                print(f"🔌 OBS line to {peer} ended - waiting for a new connection.")
+                log.info(f"OBS line to {peer} ended - waiting for a new connection.")
 
     # --- obs-websocket sign-in ------------------------------------------------------
 
@@ -219,7 +222,7 @@ class OBSLink:
                 raise OBSError("obs-websocket demands a password, but OBS_PASSWORD is empty")
             payload["authentication"] = auth_response(self._password, auth["salt"], auth["challenge"])
         elif self._password:
-            print("ℹ️ OBS demands no password - OBS_PASSWORD stays unused.")
+            log.info("OBS demands no password - OBS_PASSWORD stays unused.")
 
         await connection.send(json.dumps({"op": OP_IDENTIFY, "d": payload}))
         answer = await self._recv_json(connection)
@@ -257,7 +260,7 @@ class OBSLink:
         except Exception as e:
             # As with the EventSub handlers in platforms/twitch/bot.py: a broken handler
             # must not drag the line down with it.
-            print(f"⚠️ Error in the OBS handler for {event_type}: {e}")
+            log.warning(f"Error in the OBS handler for {event_type}: {e}")
 
     def _settle(self, data):
         future = self._pending.pop(data.get("requestId"), None)

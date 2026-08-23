@@ -18,9 +18,12 @@ import asyncio
 import hmac
 import http
 import json
+import logging
 from urllib.parse import urlsplit, parse_qs
 
 import websockets
+
+log = logging.getLogger(__name__)
 
 # As with the relay: the token goes in this header, alternatively as "Authorization: Bearer
 # <token>", so the connection can also be led through a reverse proxy that can only handle
@@ -65,7 +68,7 @@ class OverlayServer:
         self._server = await websockets.serve(
             self._session, self._bind, self._port, process_request=self._check_token,
         )
-        print(f"🖼  Overlay listener on {self._bind}:{self._port}")
+        log.info(f"Overlay listener on {self._bind}:{self._port}")
 
     async def close(self):
         for connection in list(self._clients):
@@ -96,7 +99,7 @@ class OverlayServer:
             header = (query.get(TOKEN_QUERY) or [""])[0]
 
         if not hmac.compare_digest(header.encode("utf-8", "ignore"), self._token.encode("utf-8")):
-            print(f"⛔ Overlay from {connection.remote_address} rejected: wrong/missing token.")
+            log.warning(f"Overlay from {connection.remote_address} rejected: wrong/missing token.")
             return connection.respond(http.HTTPStatus.UNAUTHORIZED, "invalid token\n")
         return None
 
@@ -108,7 +111,7 @@ class OverlayServer:
         things up."""
         self._clients.add(connection)
         peer = f"{connection.remote_address[0]}:{connection.remote_address[1]}"
-        print(f"🖼  Overlay connected: {peer} ({len(self._clients)} open)")
+        log.info(f"Overlay connected: {peer} ({len(self._clients)} open)")
         try:
             await connection.send(json.dumps({"type": "state", "data": self._snapshot()}))
             # We expect nothing from the far side. Reading runs anyway, because it is the
@@ -121,7 +124,7 @@ class OverlayServer:
             self._on_error(f"overlay session {peer}: {error}")
         finally:
             self._clients.discard(connection)
-            print(f"🖼  Overlay disconnected: {peer} ({len(self._clients)} open)")
+            log.info(f"Overlay disconnected: {peer} ({len(self._clients)} open)")
 
     async def broadcast(self, type_, data):
         """One message to all open overlays. Failures of individual connections are

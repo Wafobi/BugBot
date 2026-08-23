@@ -16,6 +16,7 @@ The history lives in RAM and not in STORAGE: it exists to catch up a browser sou
 reloads mid-stream, not to be queried afterwards - features/chat_log already is the record.
 """
 
+import logging
 from collections import deque
 
 from core import events
@@ -24,6 +25,8 @@ from core import runtime_config
 
 from . import config as env
 from .server import ChatPanelServer
+
+log = logging.getLogger(__name__)
 
 DEFAULTS = {
     # Which platforms' chat reaches the panel. Empty = all that report a message - see
@@ -63,13 +66,13 @@ class ChatPanelFeature(feature_api.Feature):
         bus.subscribe(events.CHAT_CLEARED, self.on_chat_cleared)
 
         if not env.CHAT_PANEL_TOKEN:
-            print("ℹ️  No CHAT_PANEL_TOKEN set - no chat panel listener.")
+            log.info("No CHAT_PANEL_TOKEN set - no chat panel listener.")
             return
 
         self._server = ChatPanelServer(
             env.CHAT_PANEL_TOKEN, env.CHAT_PANEL_BIND, env.CHAT_PANEL_PORT,
             history=lambda: list(self._history),
-            on_error=lambda message: print(f"⚠️  {message}"),
+            on_error=lambda message: log.warning(message),
         )
         await self._server.start()
 

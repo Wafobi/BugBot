@@ -53,6 +53,7 @@ without STORAGE a custom seed survives only until the next restart.
 """
 
 import asyncio
+import logging
 import time
 
 from core import events
@@ -62,6 +63,8 @@ from core import runtime_config
 from . import config as env
 from .server import CompanionServer
 from .store import CompanionStore
+
+log = logging.getLogger(__name__)
 
 DEFAULTS = {
     "platforms": [],
@@ -127,21 +130,21 @@ class CompanionFeature(feature_api.Feature):
             self._store = CompanionStore(db)
             await asyncio.to_thread(self._store.init_schema)
         else:
-            print("ℹ️  Companion without STORAGE: a custom look from !companion set "
-                  "is forgotten on the next restart.")
+            log.info("Companion without STORAGE: a custom look from !companion set "
+                     "is forgotten on the next restart.")
 
         bus.subscribe(events.MESSAGE_ACCEPTED, self.on_message_accepted)
         self._sweep_task = asyncio.create_task(self._sweep_loop())
 
         if not env.COMPANION_TOKEN:
-            print("ℹ️  No COMPANION_TOKEN set - no companion listener. "
-                  "The !companion command still runs, just without anywhere to show it.")
+            log.info("No COMPANION_TOKEN set - no companion listener. "
+                     "The !companion command still runs, just without anywhere to show it.")
             return
 
         self._server = CompanionServer(
             env.COMPANION_TOKEN, env.COMPANION_BIND, env.COMPANION_PORT,
             snapshot=lambda: [self._public(c) for c in self._companions.values()],
-            on_error=lambda message: print(f"⚠️  {message}"),
+            on_error=lambda message: log.warning(message),
         )
         await self._server.start()
 

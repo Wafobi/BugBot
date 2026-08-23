@@ -25,12 +25,15 @@
 # gets skipped cleanly - nothing is imported across package boundaries, as before.
 
 import importlib
+import logging
 import os
 from pathlib import Path
 
 from . import events
 from . import feature as feature_api
 from . import platform as platform_api
+
+log = logging.getLogger(__name__)
 
 PLATFORM_PACKAGE = "platforms"
 FEATURE_PACKAGE = "features"
@@ -59,7 +62,7 @@ def _select(names, env_var):
     wanted = [n.strip().lower() for n in selected.split(",") if n.strip()]
     unknown = [n for n in wanted if n not in names]
     if unknown:
-        print(f"⚠️ {env_var} names unknown entry/entries: {', '.join(unknown)}")
+        log.warning(f"{env_var} names unknown entry/entries: {', '.join(unknown)}")
     return [n for n in names if n in wanted]
 
 
@@ -86,7 +89,7 @@ def feature_sources(root=None):
     unique, seen = [], {}
     for package, name in sources:
         if name in seen:
-            print(f"⚠️ Feature '{name}' exists twice ({seen[name]} and {package}) - {package} is ignored.")
+            log.warning(f"Feature '{name}' exists twice ({seen[name]} and {package}) - {package} is ignored.")
             continue
         seen[name] = package
         unique.append((package, name))
@@ -127,10 +130,10 @@ def _instantiate(sources, module_name, factory_name, expected_type, label):
             module = importlib.import_module(f"{package}.{name}.{module_name}")
             instance = getattr(module, factory_name)()
         except Exception as e:
-            print(f"⚠️ {label} '{name}' could not be loaded, skipping it: {e!r}")
+            log.warning(f"{label} '{name}' could not be loaded, skipping it: {e!r}")
             continue
         if not isinstance(instance, expected_type):
-            print(f"⚠️ {package}.{name}.{module_name}.{factory_name}() returns no {expected_type.__name__} object - skipped.")
+            log.warning(f"{package}.{name}.{module_name}.{factory_name}() returns no {expected_type.__name__} object - skipped.")
             continue
         instances.append((package, name, instance))
     return instances
@@ -152,12 +155,12 @@ def load(names=None, bus=None):
         # filters on a name that does not exist and quietly does nothing from then on -
         # hence one line here rather than a riddle later.
         if instance.name != directory:
-            print(f"⚠️ platforms/{directory} calls itself '{instance.name}' - platform-owned "
-                  f"features below it will not find their platform again by that name.")
+            log.warning(f"platforms/{directory} calls itself '{instance.name}' - platform-owned "
+                        f"features below it will not find their platform again by that name.")
         bus.register(instance)
         platforms.append(instance)
         abilities = ", ".join(sorted(instance.capabilities)) or "no capabilities"
-        print(f"🔌 Platform '{instance.name}' loaded ({abilities}).")
+        log.info(f"Platform '{instance.name}' loaded ({abilities}).")
 
     if not platforms:
         raise RuntimeError("Not a single platform could be loaded - see the warnings above.")
@@ -191,7 +194,7 @@ def _in_dependency_order(features):
         if not ready:
             for f in pending:
                 missing = ", ".join(sorted(f.requires - satisfied))
-                print(f"⚠️ Feature '{f.name}' skipped: no source for {missing}.")
+                log.warning(f"Feature '{f.name}' skipped: no source for {missing}.")
             break
         for f in ready:
             ordered.append(f)
@@ -224,11 +227,11 @@ async def load_features(names=None, bus=None):
         try:
             await instance.setup(bus)
         except Exception as e:
-            print(f"⚠️ Feature '{instance.name}' could not be set up, skipping it: {e!r}")
+            log.warning(f"Feature '{instance.name}' could not be set up, skipping it: {e!r}")
             continue
         bus.register_feature(instance)
         ready.append(instance)
         abilities = ", ".join(sorted(instance.provides)) or "no capabilities"
         belongs = f", belongs to '{instance.owner}'" if instance.owner else ""
-        print(f"🧩 Feature '{instance.name}' loaded ({abilities}{belongs}).")
+        log.info(f"Feature '{instance.name}' loaded ({abilities}{belongs}).")
     return ready

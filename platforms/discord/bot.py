@@ -1,12 +1,15 @@
 import discord
 from discord.ext import commands, tasks
 import asyncio
+import logging
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime, timedelta
 from core import events, runtime_config
 from core import feature as feature_api
 from core import platform as platform_api
+
+log = logging.getLogger(__name__)
 
 intents = discord.Intents.default()
 intents.guilds = True
@@ -212,7 +215,7 @@ async def post_announcement(announcement):
                 await channel.send(content=content, embed=embed)
                 posted = True
             except discord.HTTPException as e:
-                print(f"⚠️ Announcement '{announcement.kind}' in #{channel_name} failed: {e}")
+                log.warning(f"Announcement '{announcement.kind}' in #{channel_name} failed: {e}")
         if announcement.log:
             await log_action(guild, announcement.title, announcement.text or announcement.url, announcement.color)
     return posted
@@ -469,7 +472,7 @@ async def cmd_setup(message, arg_text):
             try:
                 await channel.delete()
             except Exception as e:
-                print(f"⚠️ Channel {channel.name} could not be deleted: {e}")
+                log.warning(f"Channel {channel.name} could not be deleted: {e}")
 
     # 2. Rollen erstellen
     role_objects = {}
@@ -544,14 +547,14 @@ DISCORD_DYNAMIC_MOD_COMMANDS = {
 
 @bot.event
 async def on_ready():
-    print("=== LIVE-BOT AKTIV ===")
-    print(f"Eingeloggt als: {bot.user.name}")
+    log.info("=== LIVE-BOT AKTIV ===")
+    log.info(f"Eingeloggt als: {bot.user.name}")
     # Interval from discord.json, 0 switches the report off. It is only set here: the
     # decorator below runs at import time, and change_interval only takes on a loop that has
     # not been started yet.
     hours = DISCORD_CONFIG.get("status_report_hours", 1)
     if not hours:
-        print("ℹ️ Statusbericht deaktiviert (status_report_hours = 0).")
+        log.info("Statusbericht deaktiviert (status_report_hours = 0).")
         return
     if status_report.is_running():
         # on_ready comes again after every reconnect - a second start() would be a
@@ -573,7 +576,7 @@ async def status_report():
             if report_channel:
                 await report_channel.send(embed=await build_status_embed(guild))
     except Exception as e:
-        print(f"⚠️ Statusbericht fehlgeschlagen: {e}")
+        log.warning(f"Statusbericht fehlgeschlagen: {e}")
 
 @bot.event
 async def on_message(message):
@@ -600,7 +603,7 @@ async def on_message(message):
             await _publish_mod_action(user.name, "honey_pot", "ban")
             return
         except Exception as e:
-            print(f"⚠️ Honeypot ban failed for {user} ({user.id}): {e}")
+            log.warning(f"Honeypot ban failed for {user} ({user.id}): {e}")
 
     msg_lower = message.content.lower()
     command_word, _, arg_text = message.content.partition(" ")
@@ -692,7 +695,7 @@ async def handle_discord_violation(message, verdict):
             )
             await _publish_mod_action(message.author.name, verdict.reason, "delete")
         except Exception as e:
-            print(f"⚠️ Message could not be deleted ({message.id}): {e}")
+            log.warning(f"Message could not be deleted ({message.id}): {e}")
 
     if verdict.timeout_seconds:
         try:
@@ -706,7 +709,7 @@ async def handle_discord_violation(message, verdict):
             )
             await _publish_mod_action(message.author.name, verdict.reason, "timeout")
         except Exception as e:
-            print(f"⚠️ Timeout failed for {message.author} ({message.author.id}): {e}")
+            log.warning(f"Timeout failed for {message.author} ({message.author.id}): {e}")
 
 
 async def _on_level_up(message, level):

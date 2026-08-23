@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import random
 import websockets
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,8 @@ from . import config
 from . import commands as twitch_commands_file
 from . import api as twitch_api
 from . import scopes as twitch_scopes
+
+log = logging.getLogger(__name__)
 
 _reader = None
 _writer = None
@@ -379,10 +382,10 @@ async def send_twitch_chat(message_text):
         message_text = message_text[:_MAX_CHAT_MESSAGE_LENGTH - 1] + "…"
     try:
         await _send_raw(f"PRIVMSG #{config.TWITCH_CHANNEL.lower()} :{message_text}")
-        print(f"💬 Twitch-Chat gesendet: {message_text}")
+        log.debug(f"Twitch-Chat gesendet: {message_text}")
         return True
     except Exception as e:
-        print(f"⚠️ Error while sending to Twitch: {e}")
+        log.warning(f"Error while sending to Twitch: {e}")
         return False
 
 
@@ -462,11 +465,11 @@ async def _announce_ad_break_end(delay_seconds):
     try:
         await asyncio.sleep(delay_seconds)
         await send_twitch_chat(text("ad_break.end"))
-        print("📺 Werbepause beendet.")
+        log.info("Werbepause beendet.")
     except asyncio.CancelledError:
         raise
     except Exception as e:
-        print(f"⚠️ Werbe-Ende-Meldung fehlgeschlagen: {e}")
+        log.warning(f"Werbe-Ende-Meldung fehlgeschlagen: {e}")
 
 
 async def handle_ad_break_begin(event):
@@ -479,7 +482,7 @@ async def handle_ad_break_begin(event):
     except (KeyError, ValueError):
         start_at = datetime.now(timezone.utc)
     end_local = _clock(start_at + timedelta(seconds=duration))
-    print(f"📺 Werbepause gestartet: {duration}s, Ende ca. {end_local} Uhr.")
+    log.info(f"Werbepause gestartet: {duration}s, Ende ca. {end_local} Uhr.")
     await send_twitch_chat(text("ad_break.start", seconds=duration, end_time=end_local))
     await events.bus.publish(events.AD_BREAK, platform=NAME, duration_seconds=duration)
 
@@ -503,7 +506,7 @@ async def handle_automod_hold(event):
     held_text = (event.get("message") or {}).get("text", "")
     user = event.get("user_login", "unbekannt")
     category = event.get("category", "?")
-    print(f"🚧 AutoMod is holding back message #{key} from {user} ({category}).")
+    log.info(f"AutoMod is holding back message #{key} from {user} ({category}).")
     await send_twitch_chat(config.text(
         "automod.hold", key=key, user=user, category=category, text=held_text[:200],
     ))
@@ -581,7 +584,7 @@ async def _flush_follow_batch():
     except asyncio.CancelledError:
         raise
     except Exception as e:
-        print(f"⚠️ Follow-Sammelmeldung fehlgeschlagen: {e}")
+        log.warning(f"Follow-Sammelmeldung fehlgeschlagen: {e}")
     finally:
         _follow_batch_task = None
 
@@ -625,7 +628,7 @@ async def handle_reward_redemption(event):
         return
     user_name = event.get("user_name") or event.get("user_login") or "jemand"
     _giveaway["entries"][redemption_id] = (event.get("user_id"), user_name)
-    print(f"🎟️ Neue Giveaway-Teilnahme: {user_name}")
+    log.info(f"Neue Giveaway-Teilnahme: {user_name}")
 
 
 def _stream_url():
@@ -715,7 +718,7 @@ async def _reconcile_live_status():
     Waits for the other platforms first: before its on_ready, Discord knows no guilds and would
     silently discard the announcement (see core.platform.Platform.wait_ready)."""
     if not BROADCASTER_ID:
-        print("⚠️ Live status reconciliation skipped: broadcaster id not available.")
+        log.warning("Live status reconciliation skipped: broadcaster id not available.")
         return
     await events.bus.wait_ready(timeout=timing("platform_ready_timeout", 120))
     loop = asyncio.get_event_loop()
@@ -749,7 +752,7 @@ async def _viewer_sample_loop():
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"⚠️ Zuschauer-Sampling fehlgeschlagen: {e}")
+            log.warning(f"Zuschauer-Sampling fehlgeschlagen: {e}")
 
 
 async def handle_channel_update(event):
@@ -761,7 +764,7 @@ async def handle_channel_update(event):
         events.STREAM_SEGMENT, platform=NAME, title=title, category=game_name
     ))
     if changed:
-        print(f"📝 Stream-Update: \"{title}\" ({game_name})")
+        log.info(f"Stream-Update: \"{title}\" ({game_name})")
 
 
 async def handle_channel_ban(event):
@@ -869,7 +872,10 @@ async def twitch_eventsub_listener():
                                     None, twitch_api.create_eventsub_subscription,
                                     sub_type, version, condition, session["id"], config.TWITCH_CHAT_ACCESS_TOKEN,
                                 )
-                                print(f"{label}-EventSub-Abo eingerichtet." if ok else f"⚠️ {label}-EventSub-Abo fehlgeschlagen.")
+                                if ok:
+                                    log.info(f"{label}-EventSub-Abo eingerichtet.")
+                                else:
+                                    log.warning(f"{label}-EventSub-Abo fehlgeschlagen.")
                             resubscribe = False
 
                     elif msg_type == "session_reconnect":
@@ -891,12 +897,12 @@ async def twitch_eventsub_listener():
                             except Exception as e:
                                 # A broken handler must not drag the whole EventSub session
                                 # down - all other events would then be lost.
-                                print(f"⚠️ Error in the EventSub handler for {sub_type}: {e}")
+                                log.warning(f"Error in the EventSub handler for {sub_type}: {e}")
 
                     elif msg_type == "revocation":
                         subscription = msg["payload"]["subscription"]
                         status = subscription.get("status")
-                        print(f"⚠️ EventSub-Abo {subscription.get('type')} widerrufen ({status}).")
+                        log.warning(f"EventSub-Abo {subscription.get('type')} widerrufen ({status}).")
                         if status == "authorization_revoked":
                             # Token has gone invalid: renew first, then re-subscribe
                             # everything with a fresh session. Merely noting it would have
@@ -907,7 +913,7 @@ async def twitch_eventsub_listener():
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"⚠️ EventSub-Verbindung unterbrochen: {e}")
+            log.warning(f"EventSub-Verbindung unterbrochen: {e}")
             url = EVENTSUB_WS_URL
             resubscribe = True
             await asyncio.sleep(10)
@@ -918,28 +924,28 @@ def log_token_capabilities(scopes):
     with them - the plain-text counterpart to checking manually via
     https://id.twitch.tv/oauth2/validate."""
     if scopes is None:
-        print("⚠️ Token scopes could not be queried (see the error above).")
+        log.warning("Token scopes could not be queried (see the error above).")
         return
 
-    print(f"🔑 Twitch-Token hat {len(scopes)} Scope(s):")
+    log.info(f"Twitch-Token hat {len(scopes)} Scope(s):")
     known = [s for s in scopes if s in twitch_scopes.CAPABILITIES]
     unknown = [s for s in scopes if s not in twitch_scopes.CAPABILITIES]
     for scope in known:
-        print(f"   ✅ {scope} -> {twitch_scopes.CAPABILITIES[scope]}")
+        log.info(f"   {scope} -> {twitch_scopes.CAPABILITIES[scope]}")
     if unknown:
-        print(f"   ℹ️ weitere Scopes ohne Bot-Funktion: {', '.join(unknown)}")
+        log.info(f"   weitere Scopes ohne Bot-Funktion: {', '.join(unknown)}")
 
     # Against the same list get_token.py requests when creating one: if a scope is added in
     # config without the token being fetched again, startup says so here.
     missing = [s for s in twitch_scopes.REQUIRED if s not in scopes]
     if missing:
-        print(f"   ⚠️ {len(missing)} required scope(s) missing: {', '.join(missing)}")
-        print("      -> create the token afresh with 'python3 -m platforms.twitch.get_token' "
-              "(Twitch does not extend existing tokens after the fact).")
+        log.warning(f"   {len(missing)} required scope(s) missing: {', '.join(missing)}")
+        log.warning("      -> create the token afresh with 'python3 -m platforms.twitch.get_token' "
+                     "(Twitch does not extend existing tokens after the fact).")
 
     for scope, warning in twitch_scopes.DANGEROUS_UNNEEDED.items():
         if scope in scopes:
-            print(f"   🚨 needlessly risky scope present: {scope} ({warning}) - remove it at the next token refresh")
+            log.warning(f"   needlessly risky scope present: {scope} ({warning}) - remove it at the next token refresh")
 
 
 async def twitch_token_refresh_loop():
@@ -973,10 +979,10 @@ async def _supervised(name, coro_factory):
             raise
         except Exception as e:
             delay = timing("task_restart_delay", 10)
-            print(f"⚠️ Background task {name} crashed: {e!r} - restarting in {delay}s")
+            log.warning(f"Background task {name} crashed: {e!r} - restarting in {delay}s")
         else:
             delay = timing("task_restart_delay", 10)
-            print(f"⚠️ Hintergrundtask {name} unerwartet beendet - Neustart in {delay}s")
+            log.warning(f"Hintergrundtask {name} unerwartet beendet - Neustart in {delay}s")
         await asyncio.sleep(delay)
 
 
@@ -985,7 +991,7 @@ def _warn_if_task_died(task):
     does, it must not happen silently."""
     if task.cancelled():
         return
-    print(f"🚨 Twitch-Supervisor {task.get_name()} beendet: {task.exception()!r}")
+    log.error(f"Twitch-Supervisor {task.get_name()} beendet: {task.exception()!r}")
 
 
 async def start_twitch_bot():
@@ -1007,8 +1013,8 @@ async def start_twitch_bot():
     BROADCASTER_ID = await loop.run_in_executor(None, twitch_api.get_broadcaster_id, config.TWITCH_CHANNEL)
     MODERATOR_ID = await loop.run_in_executor(None, twitch_api.get_moderator_id, config.TWITCH_CHAT_ACCESS_TOKEN)
     if not BROADCASTER_ID or not MODERATOR_ID:
-        print(
-            "⚠️ Broadcaster/moderator id not resolvable - Twitch delete/timeout are disabled. "
+        log.warning(
+            "Broadcaster/moderator id not resolvable - Twitch delete/timeout are disabled. "
             "Check that TWITCH_CHAT_ACCESS_TOKEN holds the scopes moderator:manage:chat_messages "
             "and moderator:manage:banned_users, and that the account is a moderator in the channel."
         )
@@ -1034,7 +1040,7 @@ async def start_twitch_bot():
         await asyncio.wait_for(_connected.wait(), timeout=60)
         await send_twitch_chat(text("startup"))
     except asyncio.TimeoutError:
-        print("⚠️ Twitch IRC still not connected after 60s - startup message skipped, the reader keeps trying.")
+        log.warning("Twitch IRC still not connected after 60s - startup message skipped, the reader keeps trying.")
 
 
 async def close():
@@ -1058,7 +1064,7 @@ async def close():
     _listener_task = _eventsub_task = _token_task = _viewer_task = _reconcile_task = None
     _ad_break_task = _follow_batch_task = None
     await _close_connection()
-    print("🔌 Twitch-IRC-Verbindung geschlossen.")
+    log.info("Twitch-IRC-Verbindung geschlossen.")
 
 
 async def handle_twitch_violation(message, msg_id, verdict):
@@ -1075,8 +1081,8 @@ async def handle_twitch_violation(message, msg_id, verdict):
             BROADCASTER_ID, MODERATOR_ID, msg_id, config.TWITCH_CHAT_ACCESS_TOKEN,
         )
 
-    print(
-        f"🧹 Twitch message deleted: {message.user_name} - {verdict.label}{detail_suffix} "
+    log.info(
+        f"Twitch message deleted: {message.user_name} - {verdict.label}{detail_suffix} "
         f"(offence #{verdict.violation_count})"
     )
     # Post the reason as a category (label), not as a detail - otherwise a deleted banned word
@@ -1092,7 +1098,7 @@ async def handle_twitch_violation(message, msg_id, verdict):
                 verdict.label, config.TWITCH_CHAT_ACCESS_TOKEN,
             )
         await _publish_mod_action(message.user_name, verdict.reason, "timeout")
-        print(f"⏱️ Twitch-Timeout: {message.user_name} ({verdict.timeout_seconds}s, {verdict.label})")
+        log.info(f"Twitch-Timeout: {message.user_name} ({verdict.timeout_seconds}s, {verdict.label})")
 
 
 async def deny_mod_command(user_name, msg_id, command_word):
@@ -1104,7 +1110,7 @@ async def deny_mod_command(user_name, msg_id, command_word):
             None, twitch_api.delete_chat_message,
             BROADCASTER_ID, MODERATOR_ID, msg_id, config.TWITCH_CHAT_ACCESS_TOKEN,
         )
-    print(f"🚫 Mod command {command_word} from {user_name} refused (no moderator rights).")
+    log.info(f"Mod command {command_word} from {user_name} refused (no moderator rights).")
     await send_twitch_chat(text("mod_only", user=user_name))
 
 
@@ -1114,7 +1120,7 @@ async def twitch_chat_listener():
     Twitch (recv() -> b"") was acknowledged with nothing but a sleep(0.5) - the bot then ran on
     endlessly without ever seeing another message."""
     backoff = 5
-    print("👀 Twitch chat reader running in the background...")
+    log.info("Twitch chat reader running in the background...")
 
     while True:
         try:
@@ -1123,16 +1129,16 @@ async def twitch_chat_listener():
         except asyncio.CancelledError:
             raise
         except _AuthFailed:
-            print("⚠️ Twitch login rejected, renewing the token and reconnecting...")
+            log.warning("Twitch login rejected, renewing the token and reconnecting...")
             await asyncio.get_event_loop().run_in_executor(None, twitch_api.refresh_chat_token)
         except Exception as e:
-            print(f"⚠️ Twitch-IRC-Verbindung verloren: {e}")
+            log.warning(f"Twitch-IRC-Verbindung verloren: {e}")
 
         # Only retry quickly after a connection that really stood - otherwise we would hammer
         # Twitch on a broken token or a dead network.
         backoff = 5 if _connected.is_set() else min(backoff * 2, timing("irc_reconnect_backoff_max", 300))
         await _close_connection()
-        print(f"🔄 Next Twitch IRC connection attempt in {backoff}s...")
+        log.info(f"Next Twitch IRC connection attempt in {backoff}s...")
         await asyncio.sleep(backoff)
 
 
@@ -1175,7 +1181,7 @@ async def _handle_irc_line(line):
     # :tmi.twitch.tv 001 <nick> :Welcome, GLHF! - only from here on is the sign-in complete.
     if " 001 " in line:
         _connected.set()
-        print(f"✅ Twitch-IRC verbunden (#{config.TWITCH_CHANNEL.lower()}).")
+        log.info(f"Twitch-IRC verbunden (#{config.TWITCH_CHANNEL.lower()}).")
         return
 
     if "PRIVMSG" in line and ":" in line:
@@ -1185,7 +1191,7 @@ async def _handle_irc_line(line):
             raise
         except Exception as e:
             # An error in message processing must not cost us the connection.
-            print(f"⚠️ Error while processing a Twitch message: {e}")
+            log.warning(f"Error while processing a Twitch message: {e}")
         return
 
     if "CLEARCHAT" in line:
@@ -1194,7 +1200,7 @@ async def _handle_irc_line(line):
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"⚠️ Error while processing a Twitch CLEARCHAT: {e}")
+            log.warning(f"Error while processing a Twitch CLEARCHAT: {e}")
 
 
 async def _send_command_reply(reply):
@@ -1244,7 +1250,7 @@ async def _handle_privmsg(line):
     user_name = raw_user.replace(":", "").strip()
     message = parts[2].strip()
 
-    print(f"[Twitch Chat] {user_name}: {message}")
+    log.debug(f"[Twitch Chat] {user_name}: {message}")
 
     badges = tags.get("badges", "")
     is_privileged = any(b.startswith(("broadcaster", "moderator")) for b in badges.split(","))

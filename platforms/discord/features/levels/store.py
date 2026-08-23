@@ -14,8 +14,11 @@
 # Everything here is blocking sqlite3 and has to be called from async code via
 # loop.run_in_executor(None, ...).
 
+import logging
 import random
 import time
+
+log = logging.getLogger(__name__)
 
 TABLE = "discord_levels"
 
@@ -113,7 +116,7 @@ class LevelsStore:
             """
         )
         conn.execute("DROP TABLE levels")
-        print(f"🔁 {cur.rowcount} level entry/entries taken over from the levels table, table removed.")
+        log.info(f"{cur.rowcount} level entry/entries taken over from the levels table, table removed.")
 
     def add_message_xp(self, user_id, user_name, cooldown_seconds, xp_min, xp_max):
         """Awards (if the cooldown since the last award to this user has expired) a random

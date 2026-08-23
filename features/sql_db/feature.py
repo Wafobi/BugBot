@@ -12,12 +12,15 @@
 # would mean building a second feature with the same capability - the features using it
 # would only have to change their CREATE statements.
 
+import logging
 import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
 from core import feature as feature_api, runtime_config
+
+log = logging.getLogger(__name__)
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent / "bugbot.db"
 
@@ -47,7 +50,7 @@ class SqlDbFeature(feature_api.Feature):
         # Only create/open, no tables: those belong to the features using them.
         with self.connect():
             pass
-        print(f"🗄️ Storage: {self.path}")
+        log.info(f"Storage: {self.path}")
 
     @contextmanager
     def connect(self):

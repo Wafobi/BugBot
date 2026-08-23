@@ -4,9 +4,12 @@
 # exclusively through the Helix endpoints ever since.
 # https://dev.twitch.tv/docs/chat/irc-migration/
 
+import logging
 import requests
 from dotenv import set_key, find_dotenv
 from . import config
+
+log = logging.getLogger(__name__)
 
 ENV_PATH = find_dotenv()
 
@@ -28,8 +31,8 @@ def refresh_chat_token():
     if not config.TWITCH_CHAT_CLIENT_SECRET:
         if not _refresh_unavailable_logged:
             _refresh_unavailable_logged = True
-            print(
-                f"⚠️ Twitch chat token cannot be renewed: no client secret known for client "
+            log.warning(
+                f"Twitch chat token cannot be renewed: no client secret known for client "
                 f"id {config.TWITCH_CHAT_CLIENT_ID}. Either set TWITCH_CHAT_CLIENT_SECRET in "
                 f".env, or create the token afresh with your own app (TWITCH_CLIENT_ID)."
             )
@@ -47,7 +50,7 @@ def refresh_chat_token():
         data = response.json()
         new_access = data.get("access_token")
         if not new_access:
-            print(f"⚠️ Twitch-Token-Refresh fehlgeschlagen: {data}")
+            log.warning(f"Twitch-Token-Refresh fehlgeschlagen: {data}")
             return None
 
         config.TWITCH_CHAT_ACCESS_TOKEN = new_access
@@ -60,10 +63,10 @@ def refresh_chat_token():
             if ENV_PATH:
                 set_key(ENV_PATH, "TWITCH_CHAT_REFRESH_TOKEN", new_refresh)
 
-        print("🔄 Twitch-Chat-Token erneuert.")
+        log.info("Twitch-Chat-Token erneuert.")
         return new_access
     except Exception as e:
-        print(f"⚠️ Twitch-Token-Refresh fehlgeschlagen: {e}")
+        log.warning(f"Twitch-Token-Refresh fehlgeschlagen: {e}")
         return None
 
 
@@ -85,7 +88,7 @@ def _helix_request(method, url, chat_access_token, params=None, json_body=None):
                 response = attempt(new_token)
         return response
     except Exception as e:
-        print(f"⚠️ Twitch-Helix-Request-Fehler ({method} {url}): {e}")
+        log.warning(f"Twitch-Helix-Request-Fehler ({method} {url}): {e}")
         return None
 
 
@@ -117,7 +120,7 @@ def get_broadcaster_id(channel_login):
         data = response.json().get("data", [])
         return data[0]["id"] if data else None
     except Exception as e:
-        print(f"⚠️ Could not resolve the broadcaster id: {e}")
+        log.warning(f"Could not resolve the broadcaster id: {e}")
         return None
 
 
@@ -130,10 +133,10 @@ def validate_token_info(chat_access_token):
         response = requests.get("https://id.twitch.tv/oauth2/validate", headers=headers, timeout=10)
         if response.status_code == 200:
             return response.json()
-        print(f"⚠️ Twitch-Token-Validierung fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Token-Validierung fehlgeschlagen ({response.status_code}): {response.text}")
         return None
     except Exception as e:
-        print(f"⚠️ Twitch-Token-Validierung fehlgeschlagen: {e}")
+        log.warning(f"Twitch-Token-Validierung fehlgeschlagen: {e}")
         return None
 
 
@@ -152,7 +155,7 @@ def get_users(logins, chat_access_token):
     if response is not None and response.status_code == 200:
         return response.json().get("data", [])
     if response is not None:
-        print(f"⚠️ Twitch-User-Lookup fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-User-Lookup fehlgeschlagen ({response.status_code}): {response.text}")
     return []
 
 
@@ -169,7 +172,7 @@ def delete_chat_message(broadcaster_id, moderator_id, message_id, chat_access_to
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Delete fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Delete fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -181,7 +184,7 @@ def timeout_user(broadcaster_id, moderator_id, user_id, duration, reason, chat_a
     if response is not None and response.status_code == 200:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Timeout fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Timeout fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -194,7 +197,7 @@ def ban_user(broadcaster_id, moderator_id, user_id, reason, chat_access_token):
     if response is not None and response.status_code == 200:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Ban fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Ban fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -205,7 +208,7 @@ def unban_user(broadcaster_id, moderator_id, user_id, chat_access_token):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Unban fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Unban fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -218,7 +221,7 @@ def warn_user(broadcaster_id, moderator_id, user_id, reason, chat_access_token):
     if response is not None and response.status_code == 200:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Warnung fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Warnung fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -230,7 +233,7 @@ def get_chatters_count(broadcaster_id, moderator_id, chat_access_token):
     if response is not None and response.status_code == 200:
         return response.json().get("total")
     if response is not None:
-        print(f"⚠️ Twitch-Chatter-Abfrage fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Chatter-Abfrage fehlgeschlagen ({response.status_code}): {response.text}")
     return None
 
 
@@ -244,7 +247,7 @@ def get_stream_info(broadcaster_id, chat_access_token):
         data = response.json().get("data", [])
         return data[0] if data else None
     if response is not None:
-        print(f"⚠️ Twitch-Stream-Info fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Stream-Info fehlgeschlagen ({response.status_code}): {response.text}")
     return None
 
 
@@ -257,7 +260,7 @@ def get_game_id(name, chat_access_token):
         data = response.json().get("data", [])
         return data[0]["id"] if data else None
     if response is not None:
-        print(f"⚠️ Twitch-Game-Lookup fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Game-Lookup fehlgeschlagen ({response.status_code}): {response.text}")
     return None
 
 
@@ -277,7 +280,7 @@ def modify_channel(broadcaster_id, chat_access_token, title=None, game_id=None):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Channel-Update fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Channel-Update fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -292,7 +295,7 @@ def create_clip(broadcaster_id, chat_access_token):
         if data:
             return f"https://clips.twitch.tv/{data[0]['id']}"
     if response is not None:
-        print(f"⚠️ Twitch-Clip-Erstellung fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Clip-Erstellung fehlgeschlagen ({response.status_code}): {response.text}")
     return None
 
 
@@ -307,7 +310,7 @@ def get_subscriber_count(broadcaster_id, chat_access_token):
         data = response.json()
         return data.get("total"), data.get("points")
     if response is not None:
-        print(f"⚠️ Twitch-Abo-Abfrage fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Abo-Abfrage fehlgeschlagen ({response.status_code}): {response.text}")
     return None, None
 
 
@@ -322,7 +325,7 @@ def get_bits_leaderboard(chat_access_token):
         data = response.json().get("data", [])
         return data[0] if data else None
     if response is not None:
-        print(f"⚠️ Twitch-Bits-Leaderboard-Abfrage fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Bits-Leaderboard-Abfrage fehlgeschlagen ({response.status_code}): {response.text}")
     return None
 
 
@@ -337,7 +340,7 @@ def get_hype_train_status(broadcaster_id, chat_access_token):
         data = response.json().get("data", [])
         return data[0] if data else None
     if response is not None:
-        print(f"⚠️ Twitch-Hype-Train-Abfrage fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Hype-Train-Abfrage fehlgeschlagen ({response.status_code}): {response.text}")
     return None
 
 
@@ -352,7 +355,7 @@ def get_followage(broadcaster_id, user_id, chat_access_token):
         data = response.json().get("data", [])
         return data[0]["followed_at"] if data else None
     if response is not None:
-        print(f"⚠️ Twitch-Followage-Abfrage fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Followage-Abfrage fehlgeschlagen ({response.status_code}): {response.text}")
     return None
 
 
@@ -368,7 +371,7 @@ def send_shoutout(broadcaster_id, moderator_id, to_broadcaster_id, chat_access_t
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Shoutout fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Shoutout fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -379,7 +382,7 @@ def start_raid(broadcaster_id, to_broadcaster_id, chat_access_token):
     if response is not None and response.status_code == 200:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Raid fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Raid fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -401,7 +404,7 @@ def create_eventsub_subscription(sub_type, version, condition, session_id, chat_
     if response is not None and response.status_code == 202:
         return True
     if response is not None:
-        print(f"⚠️ EventSub-Abo ({sub_type}) fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"EventSub-Abo ({sub_type}) fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -417,7 +420,7 @@ def create_poll(broadcaster_id, title, choices, duration_seconds, chat_access_to
     if response is not None and response.status_code == 200:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Poll-Erstellung fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Poll-Erstellung fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -433,7 +436,7 @@ def create_prediction(broadcaster_id, title, outcomes, prediction_window_seconds
     if response is not None and response.status_code == 200:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Prediction-Erstellung fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Prediction-Erstellung fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -444,7 +447,7 @@ def add_channel_vip(broadcaster_id, user_id, chat_access_token):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Adding a Twitch VIP failed ({response.status_code}): {response.text}")
+        log.warning(f"Adding a Twitch VIP failed ({response.status_code}): {response.text}")
     return False
 
 
@@ -455,7 +458,7 @@ def remove_channel_vip(broadcaster_id, user_id, chat_access_token):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-VIP-Entfernen fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-VIP-Entfernen fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -466,7 +469,7 @@ def add_channel_moderator(broadcaster_id, user_id, chat_access_token):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Adding a Twitch mod failed ({response.status_code}): {response.text}")
+        log.warning(f"Adding a Twitch mod failed ({response.status_code}): {response.text}")
     return False
 
 
@@ -477,7 +480,7 @@ def remove_channel_moderator(broadcaster_id, user_id, chat_access_token):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Mod-Entfernen fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Mod-Entfernen fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -489,7 +492,7 @@ def resolve_automod_message(moderator_id, msg_id, action, chat_access_token):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ AutoMod-Freigabe/Ablehnung fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"AutoMod-Freigabe/Ablehnung fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -503,7 +506,7 @@ def update_chat_settings(broadcaster_id, moderator_id, chat_access_token, settin
     if response is not None and response.status_code == 200:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Chat-Settings fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Chat-Settings fehlgeschlagen ({response.status_code}): {response.text}")
     return False
 
 
@@ -525,7 +528,7 @@ def create_custom_reward(broadcaster_id, title, cost, chat_access_token):
         data = response.json().get("data", [])
         return data[0] if data else None
     if response is not None:
-        print(f"⚠️ Twitch-Reward-Erstellung fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Reward-Erstellung fehlgeschlagen ({response.status_code}): {response.text}")
     return None
 
 
@@ -539,7 +542,7 @@ def delete_custom_reward(broadcaster_id, reward_id, chat_access_token):
     if response is not None and response.status_code == 204:
         return True
     if response is not None:
-        print(f"⚠️ Deleting a Twitch reward failed ({response.status_code}): {response.text}")
+        log.warning(f"Deleting a Twitch reward failed ({response.status_code}): {response.text}")
     return False
 
 
@@ -554,5 +557,5 @@ def update_redemption_status(broadcaster_id, reward_id, redemption_id, status, c
     if response is not None and response.status_code == 200:
         return True
     if response is not None:
-        print(f"⚠️ Twitch-Redemption-Update fehlgeschlagen ({response.status_code}): {response.text}")
+        log.warning(f"Twitch-Redemption-Update fehlgeschlagen ({response.status_code}): {response.text}")
     return False
