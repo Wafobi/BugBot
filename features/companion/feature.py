@@ -71,7 +71,11 @@ DEFAULTS = {
     "min_bits_to_speak": 100,
     "min_bits_to_set_seed": 300,
     "speech_ttl_seconds": 8,
-    "idle_minutes": 20,
+    # Deliberately generous (24h): there is no reliable "left chat" signal to despawn on
+    # instead (Twitch IRC JOIN/PART is throttled/unreliable past ~1000 chatters and isn't
+    # tracked here at all), so idle_minutes staying high is what keeps a companion around
+    # for someone who is quietly watching rather than typing every few minutes.
+    "idle_minutes": 1440,
     "exclude_users": [],
 }
 

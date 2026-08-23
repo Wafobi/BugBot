@@ -4,7 +4,7 @@
   "min_bits_to_speak": 100,
   "min_bits_to_set_seed": 300,
   "speech_ttl_seconds": 8,
-  "idle_minutes": 20,
+  "idle_minutes": 1440,
   "exclude_users": ["wafobitv"],
   "command_names": {
     "_comment": "Rename commands, give them aliases, or switch them off: \"!stats\": \"!zahlen\" | \"!stats\": [\"!zahlen\", \"!stat\"] | \"!stats\": false"
