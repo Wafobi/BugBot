@@ -19,8 +19,19 @@
 # into their command resolution without knowing them - which is how !rank or !leaderboard
 # work everywhere without anyone writing Twitch- or Discord-specific code for them.
 
+from __future__ import annotations
+
 from abc import ABC
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Only for type hints - importing core.events/core.runtime_config for real would still
+    # be safe today (neither imports core.feature back), but TYPE_CHECKING keeps that true
+    # by construction rather than by nobody having added the wrong import yet.
+    from .events import EventBus
+    from .runtime_config import LiveConfig
 
 # Announcement/Field are the neutral presentation language between platforms and features:
 # a platform renders them (embed/chat line), a feature produces them as a command reply or
@@ -89,7 +100,7 @@ class Command:
     platforms that can present richly - Discord turns it into an embed, Twitch into a line
     of text) or None."""
     name: str
-    handler: object
+    handler: Callable
     mod_only: bool = False
     help: str = ""
 
@@ -99,7 +110,7 @@ class Feature(ABC):
     overrides setup(); one that only contributes commands, only commands()."""
 
     #: short, unique name ("stats", "moderation", "levels")
-    name = ""
+    name: str = ""
 
     #: name of the platform this feature belongs to - set by core/registry.py from the
     #: folder it lives in (platforms/discord/features/levels -> "discord"). Empty for the
@@ -109,11 +120,11 @@ class Feature(ABC):
     #: anywhere: `if message.platform != self.owner` says "not my platform" and stays
     #: correct if the folder is ever renamed. A feature does *not* have to filter - the raw
     #: log, for instance, deliberately keeps everything that comes in.
-    owner = ""
+    owner: str = ""
 
     #: The bus this feature is attached to. core/registry.py sets it before setup(), so
     #: that methods outside setup() can reach the directory of platforms too.
-    bus = None
+    bus: EventBus | None = None
 
     #: Capabilities a *platform* must have for its notifications to concern this feature
     #: (from core/platform.py: CHAT, ANNOUNCE, STREAM, MODERATE). Empty = all of them.
@@ -122,22 +133,22 @@ class Feature(ABC):
     #: with a stream" instead of "Twitch". It survives a change of service, it is right on
     #: an installation that never existed, and it cannot quietly point at nothing - unlike
     #: a name, which on the wrong installation simply never matches.
-    platform_capabilities = frozenset()
+    platform_capabilities: frozenset[str] = frozenset()
 
     #: frozenset of the capabilities defined above that this feature offers
-    provides = frozenset()
+    provides: frozenset[str] = frozenset()
 
     #: Capabilities this feature needs from *other* features. core/registry.py sets the
     #: features up in dependency order and skips one whose needs nobody covers - a
     #: half-working feature is worse than none.
-    requires = frozenset()
+    requires: frozenset[str] = frozenset()
 
     #: This feature's own LiveConfig (features/<name>/<name>.json), or None for a feature
     #: without settings. Setting one gets you two things for free: your texts via
     #: config.text() and the renaming of your commands - the bus applies the "command_names"
     #: section when collecting them, and the feature has to do nothing for it (see
     #: core/events.py:EventBus.commands).
-    config = None
+    config: LiveConfig | None = None
 
     #: Capabilities this feature *takes along if they exist*. They only decide the order,
     #: never the whether: if nobody offers them, the feature is set up anyway and has to
@@ -148,12 +159,12 @@ class Feature(ABC):
     #: feature is registered, and the look into the directory would quietly find nothing.
     #: Example: stats takes the stream sessions along when Twitch is running, but counts
     #: without them too.
-    optional = frozenset()
+    optional: frozenset[str] = frozenset()
 
-    def supports(self, capability):
+    def supports(self, capability: str) -> bool:
         return capability in self.provides
 
-    def platform_scope(self):
+    def platform_scope(self) -> set[str] | None:
         """The names of the platforms that concern this feature - or None for "all".
 
         First the own platform (for a platform-owned feature), otherwise those bringing the
@@ -169,26 +180,26 @@ class Feature(ABC):
             if self.platform_capabilities <= platform.capabilities
         }
 
-    def handles(self, platform_name):
+    def handles(self, platform_name: str) -> bool:
         """Does a notification from this platform concern me?"""
         scope = self.platform_scope()
         return scope is None or platform_name in scope
 
-    async def setup(self, bus):
+    async def setup(self, bus: EventBus) -> None:
         """Called once at startup, before the platforms come up: create tables, subscribe
         to topics, restore state. The bus is passed in so a feature can also fetch the
         features it needs per `requires` here (see features/stats: storage via the STORAGE
         capability)."""
         return
 
-    async def close(self):
+    async def close(self) -> None:
         """Clean up on shutdown. Must work even when setup() never ran, or only halfway."""
         return
 
-    def commands(self):
+    def commands(self) -> tuple[Command, ...]:
         """This feature's commands, as a tuple of Command. The platforms wire them into
         their own command resolution."""
         return ()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{type(self).__name__} name={self.name!r}>"

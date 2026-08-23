@@ -3,7 +3,7 @@ import json
 import logging
 import random
 import websockets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from core import events
 from core import feature as feature_api
 from core import platform as platform_api
@@ -371,7 +371,7 @@ async def _send_raw(line):
         raise ConnectionError("no Twitch IRC connection")
     # A single logical line, always - see _IRC_LINE_BREAKS above.
     line = line.translate(_IRC_LINE_BREAKS)
-    _writer.write(f"{line}\r\n".encode("utf-8"))
+    _writer.write(f"{line}\r\n".encode())
     await _writer.drain()
 
 
@@ -480,7 +480,7 @@ async def handle_ad_break_begin(event):
     try:
         start_at = datetime.fromisoformat(event["started_at"].replace("Z", "+00:00"))
     except (KeyError, ValueError):
-        start_at = datetime.now(timezone.utc)
+        start_at = datetime.now(UTC)
     end_local = _clock(start_at + timedelta(seconds=duration))
     log.info(f"Werbepause gestartet: {duration}s, Ende ca. {end_local} Uhr.")
     await send_twitch_chat(text("ad_break.start", seconds=duration, end_time=end_local))
@@ -488,7 +488,7 @@ async def handle_ad_break_begin(event):
 
     # Remaining duration from now, not from started_at - the notification can arrive delayed,
     # and the all-clear would otherwise come too late.
-    remaining = (start_at + timedelta(seconds=duration) - datetime.now(timezone.utc)).total_seconds()
+    remaining = (start_at + timedelta(seconds=duration) - datetime.now(UTC)).total_seconds()
     if _ad_break_task and not _ad_break_task.done():
         _ad_break_task.cancel()
     if remaining > 0:
@@ -856,7 +856,7 @@ async def twitch_eventsub_listener():
                     try:
                         deadline = keepalive_timeout + timing("eventsub_keepalive_grace", 10)
                         raw = await asyncio.wait_for(ws.recv(), timeout=deadline)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         raise ConnectionError(f"no keepalive for {deadline}s")
 
                     msg = json.loads(raw)
@@ -1039,7 +1039,7 @@ async def start_twitch_bot():
     try:
         await asyncio.wait_for(_connected.wait(), timeout=60)
         await send_twitch_chat(text("startup"))
-    except asyncio.TimeoutError:
+    except TimeoutError:
         log.warning("Twitch IRC still not connected after 60s - startup message skipped, the reader keeps trying.")
 
 
@@ -1103,7 +1103,15 @@ async def handle_twitch_violation(message, msg_id, verdict):
 
 async def deny_mod_command(user_name, msg_id, command_word):
     """Deletes a non-moderator's attempt to use a mod command and posts a short refusal -
-    previously this was simply ignored in silence."""
+    previously this was simply ignored in silence.
+
+    Discord's equivalent path (platforms/discord/bot.py:on_message) still does the old
+    "simply ignored" thing, deliberately kept rather than made consistent: deleting a
+    message on Discord is a heavier, more visible action there (an audit log entry, a
+    "message deleted" notice mods see) than dropping one IRC line on Twitch, so treating a
+    failed Discord attempt as a private no-op rather than a public correction is the more
+    proportionate default. Both behaviours are defensible; this is the reason the two
+    diverge, not an inconsistency that needs fixing."""
     if BROADCASTER_ID and MODERATOR_ID and msg_id:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
@@ -1153,7 +1161,7 @@ async def _read_until_disconnect():
         try:
             ping_interval = timing("irc_ping_interval", 180)
             raw_line = await asyncio.wait_for(reader.readline(), timeout=ping_interval)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             if awaiting_pong:
                 raise ConnectionError(f"no answer to our own PING within {ping_interval}s")
             await _send_raw("PING :tmi.twitch.tv")
@@ -1235,26 +1243,53 @@ async def _handle_clearchat(line):
     await events.bus.publish(events.CHAT_CLEARED, platform=NAME)
 
 
-async def _handle_privmsg(line):
+def parse_privmsg(line):
+    """Parses one Twitch IRC PRIVMSG line into (tags, user_name, message), or None when the
+    line does not have the shape Twitch always sends a chat message in:
+    "[@<tags> ]:<nick>!<nick>@<nick>.tmi.twitch.tv PRIVMSG #<channel> :<message>".
+
+    Deliberately not a general-purpose IRC parser - Twitch's PRIVMSG shape is fixed, so this
+    only needs to be robust to *that* one shape, not to arbitrary tags-with-colons or
+    optional prefixes a real IRC server could send. `line` is assumed already stripped of
+    the trailing \\r\\n (see _read_until_disconnect) - this is also the one place a stray
+    \\r or \\n *within* the line (Twitch has never sent one, but nothing stops a future
+    proxy/relay from mangling one in) would end up, since split(":", 2) simply treats it as
+    ordinary message text rather than anything structural.
+
+    partition() rather than split(" ", 1) for the tags prefix: on a malformed line with an
+    "@" but no following space, split() would raise ValueError and take the whole message
+    loop down with it (caught up in _handle_irc_line, but as a logged error rather than the
+    quiet "not a PRIVMSG we can use" this is)."""
     tags = {}
     if line.startswith("@"):
-        raw_tags, line = line.split(" ", 1)
+        raw_tags, _, line = line.partition(" ")
         tags = parse_irc_tags(raw_tags)
 
     parts = line.split(":", 2)
     if len(parts) < 3:
-        return
+        return None
 
     # Pulls the plain username out cleanly and without cruft
     raw_user = parts[1].split("!")[0]
     user_name = raw_user.replace(":", "").strip()
     message = parts[2].strip()
+    return tags, user_name, message
+
+
+async def _handle_privmsg(line):
+    parsed = parse_privmsg(line)
+    if parsed is None:
+        return
+    tags, user_name, message = parsed
 
     log.debug(f"[Twitch Chat] {user_name}: {message}")
 
-    badges = tags.get("badges", "")
-    is_privileged = any(b.startswith(("broadcaster", "moderator")) for b in badges.split(","))
-    is_subscriber = any(b.startswith(("subscriber", "founder")) for b in badges.split(","))
+    # Badges have the form "name/version" (e.g. "moderator/1") - the name is the part before
+    # the slash. Matched as a whole segment, not a prefix: a future badge whose name merely
+    # starts with "moderator" (or "subscriber") must not silently grant its rights too.
+    badge_names = {b.split("/", 1)[0] for b in tags.get("badges", "").split(",") if b}
+    is_privileged = bool(badge_names & {"broadcaster", "moderator"})
+    is_subscriber = bool(badge_names & {"subscriber", "founder"})
 
     msg_lower = message.lower()
     command_word, _, arg_text = message.partition(" ")

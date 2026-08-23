@@ -13,6 +13,8 @@
 # module level would have been a circular import. Everything cross-platform now goes
 # through core/events.py, and the two packages no longer know each other.
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -75,12 +77,18 @@ class Announcement:
     author: str = ""
     highlight: bool = False
     log: bool = False
-    fields: tuple = ()
+    fields: tuple[Field, ...] = ()
 
-    def as_text(self, max_fields=None):
+    def as_text(self, max_fields: int | None = None) -> str:
         """Single-line rendering for purely text-based platforms (e.g. Twitch chat).
         `max_fields` limits the detail fields - an IRC line may only be about 500
-        characters long, and a stream summary would otherwise stand no chance."""
+        characters long, and a stream summary would otherwise stand no chance.
+
+        title/text themselves stay unbounded here on purpose: this method has no way to
+        know the line's actual budget (it varies by platform and by how much of it max_fields
+        already used), so truncating a fixed amount here would either cut a short title too
+        early or a long one not at all. The sender enforces the real limit once, on the
+        finished line - see platforms/twitch/bot.py:_MAX_CHAT_MESSAGE_LENGTH."""
         parts = [self.title, self.text]
         parts += [f"{f.name}: {f.value}" for f in self.fields[:max_fields]]
         parts.append(self.url)
@@ -99,27 +107,27 @@ class Platform(ABC):
 
     #: short, unique name ("twitch", "discord"). Also appears as the platform column in
     #: core/stats.py and in the logs.
-    name = ""
+    name: str = ""
 
     #: frozenset of the capabilities defined above.
-    capabilities = frozenset()
+    capabilities: frozenset[str] = frozenset()
 
-    def supports(self, capability):
+    def supports(self, capability: str) -> bool:
         return capability in self.capabilities
 
     @abstractmethod
-    async def start(self):
+    async def start(self) -> None:
         """Brings the platform up. May return as soon as it is running (its own background
         tasks then keep going), or block for its entire lifetime - bugbot.py waits on both
         alike through a shared gather()."""
 
     @abstractmethod
-    async def close(self):
+    async def close(self) -> None:
         """Shuts down cleanly: cancel background tasks, close connections. Must work even
         when start() never ran, or only halfway - when another platform crashes, close() is
         called regardless."""
 
-    async def wait_ready(self):
+    async def wait_ready(self) -> None:
         """Waits until the platform can accept announcements. Default: immediately.
 
         Discord waits for on_ready here - before that it does not know its guilds yet and
@@ -128,17 +136,17 @@ class Platform(ABC):
         a bot that is not even logged in yet."""
         return
 
-    async def send_text(self, text):
+    async def send_text(self, text: str) -> bool:
         """Writes free text into the platform's main channel. True on success.
         Default: the platform cannot (capability CHAT missing)."""
         return False
 
-    async def announce(self, announcement):
+    async def announce(self, announcement: Announcement) -> bool:
         """Posts an announcement, provided the platform wants to present this `kind`. True
         if it actually got posted - the caller uses that to count whether the announcement
         arrived anywhere at all (see !bug).
         Default: the platform cannot (capability ANNOUNCE missing)."""
         return False
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{type(self).__name__} name={self.name!r}>"

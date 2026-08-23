@@ -24,12 +24,12 @@ import webbrowser
 import requests
 from dotenv import find_dotenv, set_key
 
-REDIRECT_URI = "http://localhost:3000"
-PORT = 3000
-
 # The scope list lives in scopes.py so that it only has to be maintained in one place - the
 # bot checks against the same list at startup.
 from . import scopes
+
+REDIRECT_URI = "http://localhost:3000"
+PORT = 3000
 
 try:
     from . import config
@@ -89,10 +89,11 @@ def main():
     print(f"🔑 Requesting {len(SCOPES)} scopes for client id {client_id}.")
     print("\n🌐 Open this URL in a browser (if it does not open by itself):\n")
     print(auth_url + "\n")
+    # Best-effort only, the URL is printed above regardless - nothing here needs to fail loudly.
     try:
         webbrowser.open(auth_url)
     except Exception:
-        pass
+        pass  # nosec B110
 
     server = http.server.HTTPServer(("localhost", PORT), CallbackHandler)
     server.result = None

@@ -22,7 +22,6 @@ from urllib.parse import urlsplit
 # added at runtime via "moderation.extra_banned_words" in discord.json/twitch.json (see
 # build_settings below).
 BASE_BANNED_WORDS = [
-    "bread",
     "2 girls 1 cup", "2g1c", "acrotomophilia", "alabama hot pocket", "alaskan pipeline", "anal",
     "analritter", "anilingus", "anus", "apeshit", "arsch", "arschficker", "arschkriecher",
     "arschlecker", "arschloch", "arsehole", "ass", "asshole", "assmunch", "autist", "auto erotic",

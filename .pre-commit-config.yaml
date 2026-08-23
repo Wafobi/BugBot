@@ -1,0 +1,17 @@
+# Local dev tooling only - nothing here runs in production or is required to run the bot.
+# Install once per clone with `pip install pre-commit && pre-commit install`; after that it
+# runs automatically on `git commit`. Config for both tools lives in pyproject.toml, not
+# here - this file only says which tools run and when.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: "1.9.4"
+    hooks:
+      - id: bandit
+        args: ["-c", "pyproject.toml"]
+        additional_dependencies: ["bandit[toml]"]

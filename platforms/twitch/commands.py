@@ -10,7 +10,7 @@
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from core import events
 from core import platform as platform_api
 from . import api as twitch_api
@@ -41,7 +41,7 @@ async def cmd_uptime(ctx, user_name, arg_text):
     if not stream:
         return text("uptime.offline", channel=ctx.channel)
     started = datetime.fromisoformat(stream["started_at"].replace("Z", "+00:00"))
-    hours, rem = divmod(int((datetime.now(timezone.utc) - started).total_seconds()), 3600)
+    hours, rem = divmod(int((datetime.now(UTC) - started).total_seconds()), 3600)
     minutes, _ = divmod(rem, 60)
     return text("uptime.live", hours=hours, minutes=minutes)
 
@@ -60,7 +60,7 @@ async def cmd_followage(ctx, user_name, arg_text):
     if not followed_at:
         return text("followage.not_following", user=users[0]["display_name"], channel=ctx.channel)
     since = datetime.fromisoformat(followed_at.replace("Z", "+00:00"))
-    days = (datetime.now(timezone.utc) - since).days
+    days = (datetime.now(UTC) - since).days
     return text("followage.done", user=users[0]["display_name"], days=days, since=since.date())
 
 

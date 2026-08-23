@@ -639,6 +639,12 @@ async def on_message(message):
     # where the spam is happening - and only for the moderator role resp. admins
     # (roles.moderator). Public commands only in the command channel (channels.commands); both
     # names live in discord.json.
+    #
+    # A non-moderator's mod-command attempt is silently ignored below (unlike Twitch, which
+    # deletes the message and posts a refusal - see platforms/twitch/bot.py:deny_mod_command)
+    # - a deliberate difference, not an inconsistency: deleting a Discord message is a
+    # heavier, more visible action there (audit log entry, "message deleted" notice) than
+    # dropping one IRC line, so a quiet no-op is the more proportionate response here.
     mod_commands = DISCORD_CONFIG.section("mod_commands")
     feature_command = events.bus.commands().get(command_word)
     dynamic_mod_commands = DISCORD_CONFIG.resolve_commands(DISCORD_DYNAMIC_MOD_COMMANDS)

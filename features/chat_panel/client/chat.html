@@ -246,9 +246,9 @@ function addMessage(entry) {
   scheduleIdle();
 }
 
-// --- Verbindung ----------------------------------------------------------------------
-// Der Bot schickt, wir hören zu - wie bars.html. Bricht die Verbindung ab, wird sie wieder
-// aufgebaut, ohne dass jemand die Quelle anfassen muss.
+// --- Connection ------------------------------------------------------------------------
+// The bot sends, we listen - like bars.html. If the connection drops, it reconnects on its
+// own, without anyone having to touch the source.
 function connect() {
   const token = params.get("token") || "";
   const host = params.get("host") || "127.0.0.1";

@@ -249,10 +249,13 @@ class VariablesFeature(feature_api.Feature):
         environment = {**_SAFE_NAMES, **namespace, **context, "now": self.now()}
         try:
             value = await asyncio.wait_for(
-                asyncio.get_running_loop().run_in_executor(None, lambda: eval(compiled, environment)),
+                # A deliberate, hardened eval() of an operator-authored expression - see the
+                # docstring above and _SAFE_NAMES for what actually makes this safe
+                # (compile(..., "eval") plus an explicit, import-free __builtins__).
+                asyncio.get_running_loop().run_in_executor(None, lambda: eval(compiled, environment)),  # nosec B307
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # The thread keeps running - a running expression cannot be cancelled in
             # Python. The bot merely stops waiting for it, and that is the point.
             self.config.complain(f"python:{key}", f"variable '{key}' takes longer than {timeout}s - skipped")

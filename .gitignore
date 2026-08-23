@@ -6,7 +6,7 @@ chat-archive/
 __pycache__/
 *.pyc
 
-# Werkzeuge, nicht Projekt (.dockerignore hält sie ebenso heraus)
+# Tooling, not project (.dockerignore keeps these out too)
 .claude/
 .venv/
 venv/

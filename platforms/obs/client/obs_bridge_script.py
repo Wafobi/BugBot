@@ -212,11 +212,13 @@ def _stop_relay(reason=""):
 def _pump_output(process):
     """Runs in a thread of its own and only collects the output - logging happens in the
     main thread (see _tick), because that is where the obs_* functions belong."""
+    # The pipe closing/erroring just ends the pump; `finally` below still signals completion
+    # either way, so there is nothing more to do with the exception here.
     try:
         for line in process.stdout:
             _log_queue.put(line.rstrip())
     except Exception:
-        pass
+        pass  # nosec B110
     finally:
         _log_queue.put(None)  # the process closed its output
 

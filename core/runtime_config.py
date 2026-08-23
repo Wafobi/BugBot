@@ -215,11 +215,11 @@ class LiveConfig:
             self.complain(f"render:{template[:60]}", f"command is not a valid template - {e}")
             return template
         if unfilled.missing:
-            available = ", ".join("{%s}" % name for name in sorted(values)) or "none"
+            available = ", ".join(f"{{{name}}}" for name in sorted(values)) or "none"
             self.complain(
                 f"render:{template[:60]}",
                 f"command uses unknown placeholders "
-                f"({', '.join('{%s}' % name for name in sorted(unfilled.missing))}) - "
+                f"({', '.join(f'{{{name}}}' for name in sorted(unfilled.missing))}) - "
                 f"known are {available}",
             )
         return filled

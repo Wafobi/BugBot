@@ -32,7 +32,7 @@ import locale
 import os
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -95,7 +95,7 @@ def local_zone():
 def to_local(stamp, zone):
     """"2026-08-09 11:03:49" (UTC, as SQLite writes it) -> datetime in `zone`."""
     try:
-        moment = datetime.fromisoformat(str(stamp)).replace(tzinfo=timezone.utc)
+        moment = datetime.fromisoformat(str(stamp)).replace(tzinfo=UTC)
     except ValueError:
         return None
     return moment.astimezone(zone) if zone else moment.astimezone()

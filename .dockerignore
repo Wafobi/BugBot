@@ -3,6 +3,6 @@
 __pycache__
 *.pyc
 .env
-# Die DB kommt per Bind-Mount vom Host (siehe bugbot.container); eine ins Image kopierte
-# Kopie wäre nur totes Gewicht, das mit jedem Build wächst.
+# The DB comes in via bind mount from the host (see bugbot.container); a copy baked into
+# the image would just be dead weight that grows with every build.
 features/sql_db/bugbot.db

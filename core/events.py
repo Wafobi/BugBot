@@ -15,12 +15,21 @@
 #   feature(...)/command(...)  the pull directory: where a platform needs an *answer*
 #       (moderation verdict) or collects the features' commands.
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections import defaultdict
+from collections.abc import Callable, Iterable
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from . import platform as platform_api
+
+if TYPE_CHECKING:
+    # Only for type hints - see the identical note in core/feature.py. core.feature does not
+    # import core.events except under its own TYPE_CHECKING guard, so this stays acyclic.
+    from .feature import Command, Feature
 
 log = logging.getLogger(__name__)
 
@@ -93,30 +102,30 @@ LEVEL_UP = "level.up"
 
 class EventBus:
     def __init__(self):
-        self._platforms = {}
-        self._features = {}
-        self._commands = None
+        self._platforms: dict[str, platform_api.Platform] = {}
+        self._features: dict[str, Feature] = {}
+        self._commands: dict[str, Command] | None = None
         self._commands_version = None
-        self._handlers = defaultdict(list)
+        self._handlers: defaultdict[str, list[Callable]] = defaultdict(list)
 
     # --- Platform registry ----------------------------------------------------------
 
-    def register(self, platform):
+    def register(self, platform: platform_api.Platform) -> None:
         if platform.name in self._platforms:
             raise ValueError(f"platform '{platform.name}' is already registered")
         self._platforms[platform.name] = platform
 
     @property
-    def platforms(self):
+    def platforms(self) -> tuple[platform_api.Platform, ...]:
         return tuple(self._platforms.values())
 
-    def get(self, name):
+    def get(self, name: str) -> platform_api.Platform | None:
         return self._platforms.get(name)
 
-    def with_capability(self, capability):
+    def with_capability(self, capability: str) -> tuple[platform_api.Platform, ...]:
         return tuple(p for p in self._platforms.values() if p.supports(capability))
 
-    def resolve_platforms(self, tokens):
+    def resolve_platforms(self, tokens: Iterable[str] | None) -> set[str] | None:
         """The intended set of names from a list of capabilities and/or platform names.
         Empty list -> None, i.e. "all".
 
@@ -147,7 +156,7 @@ class EventBus:
                             f"({', '.join(sorted(platform_api.CAPABILITIES))}) - ignoring it.")
         return resolved
 
-    async def wait_ready(self, timeout=None):
+    async def wait_ready(self, timeout: float | None = None) -> bool:
         """Waits until all registered platforms are ready. False on timeout - the caller
         then decides for itself whether to carry on regardless."""
         if not self._platforms:
@@ -157,13 +166,13 @@ class EventBus:
                 asyncio.gather(*(p.wait_ready() for p in self.platforms)), timeout=timeout
             )
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning(f"Not all platforms were ready after {timeout}s.")
             return False
 
     # --- Feature registry -----------------------------------------------------------
 
-    def register_feature(self, feature):
+    def register_feature(self, feature: Feature) -> None:
         if feature.name in self._features:
             raise ValueError(f"feature '{feature.name}' is already registered")
         self._features[feature.name] = feature
@@ -176,23 +185,23 @@ class EventBus:
         self._commands = None
 
     @property
-    def features(self):
+    def features(self) -> tuple[Feature, ...]:
         return tuple(self._features.values())
 
-    def feature(self, name):
+    def feature(self, name: str) -> Feature | None:
         return self._features.get(name)
 
-    def features_with(self, capability):
+    def features_with(self, capability: str) -> tuple[Feature, ...]:
         return tuple(f for f in self._features.values() if f.supports(capability))
 
-    def feature_with(self, capability):
+    def feature_with(self, capability: str) -> Feature | None:
         """The first feature with this capability, or None. For the normal case where
         exactly one offers it (storage, levels) - anyone wanting to walk several (say,
         several moderation filters in a row) takes features_with."""
         found = self.features_with(capability)
         return found[0] if found else None
 
-    def commands(self):
+    def commands(self) -> dict[str, Command]:
         """{command name: Command} of all features together. The platforms wire this into
         their own command resolution without knowing the features. On a collision the
         feature registered first wins - the conflict is reported rather than letting one of
@@ -240,18 +249,18 @@ class EventBus:
             for feature in self._features.values()
         )
 
-    def command(self, name):
+    def command(self, name: str) -> Command | None:
         return self.commands().get(name)
 
     # --- Pub/sub --------------------------------------------------------------------
 
-    def subscribe(self, topic, handler):
+    def subscribe(self, topic: str, handler: Callable) -> Callable:
         """Registers an async handler for a topic. The handler receives the payload from
         publish() as keyword arguments."""
         self._handlers[topic].append(handler)
         return handler
 
-    async def publish(self, topic, **payload):
+    async def publish(self, topic: str, **payload) -> list:
         """Calls all subscribers of the topic one after another and returns their return
         values. A failing subscriber takes down neither the publisher nor the remaining
         subscribers - the same rule as for the EventSub handlers in
@@ -266,7 +275,7 @@ class EventBus:
                 log.warning(f"Error in the event handler for '{topic}': {e}")
         return results
 
-    async def announce(self, announcement):
+    async def announce(self, announcement: platform_api.Announcement) -> int:
         """Distributes an announcement to all platforms with the ANNOUNCE capability and
         returns how many actually posted it.
 
