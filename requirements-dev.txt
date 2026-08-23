@@ -1,0 +1,7 @@
+# Local dev/test tooling only - not part of the deployed image (Dockerfile only installs
+# requirements.txt). Install with: pip install -r requirements-dev.txt
+pytest>=9.0,<10
+pytest-asyncio>=1.0,<2
+ruff>=0.16,<0.17
+bandit>=1.9,<2
+pre-commit>=4.0,<5

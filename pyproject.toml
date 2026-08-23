@@ -1,3 +1,17 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# The project has no src-layout/packaging - core/features/platforms are only importable at
+# all when the repo root is on sys.path. `python -m pytest` would add it automatically; this
+# makes plain `pytest` do the same, so both invocations work identically.
+pythonpath = ["."]
+# importlib import mode: several test files share a name across different package
+# directories (tests/features/moderation/test_feature.py, tests/features/companion/
+# test_feature.py, ...) - mirroring the source layout, per-package, was the point (see
+# tests/README.md). The default "prepend" mode needs __init__.py files everywhere to
+# disambiguate those; importlib mode does not.
+addopts = "--import-mode=importlib"
+
 [tool.ruff]
 line-length = 120
 target-version = "py314"
@@ -19,6 +33,12 @@ ignore = [
 ]
 
 [tool.bandit]
+# assert is how pytest tests work, not a production reliability risk (B101 exists because
+# `python -O` strips asserts, which matters for asserts doing real production checks - a
+# test file asserting an expected result is a different thing bandit's own docs call out as
+# a standard exclusion, not a case-by-case judgment call worth 100+ individual skips).
+exclude_dirs = ["tests"]
+
 # Every skip below is a check bandit raises unconditionally in a shape this codebase uses
 # deliberately, already verified safe by hand (see the 2026-08-23 security review's
 # "Anhang: Prüfungen ohne Befund") rather than something nobody looked at. A finding in a
