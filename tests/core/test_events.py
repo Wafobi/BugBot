@@ -177,13 +177,10 @@ def test_commands_cache_invalidates_when_a_feature_config_reloads(tmp_path):
     # resolution, and LiveConfig.reload() only picks up a change once the mtime differs.
     newer = (config_path.stat().st_mtime or 0) + 5
     os.utime(config_path, (newer, newer))
-    # _command_config_version() (see core/events.py) reads LiveConfig.version as a plain
-    # attribute - it does not itself call reload() to check the file. In the running bot
-    # something else touches this same config on essentially every message before
-    # bus.commands() runs (a platform reading its own settings, at minimum), so the version
-    # bump has already happened by the time the cache is checked; here nothing else does
-    # that, so it has to be triggered explicitly the same way a real access would.
-    f.config.reload()
+    # No explicit f.config.reload() here on purpose: _command_config_version() (see
+    # core/events.py) now calls reload() on every feature's config itself before reading its
+    # .version, so bus.commands() picks up a changed file on its own - it no longer depends
+    # on something else having polled this same config first.
 
     second = bus.commands()
     assert "!renamed" in second

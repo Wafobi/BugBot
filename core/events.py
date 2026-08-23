@@ -240,14 +240,26 @@ class EventBus:
         stat() per feature (see LiveConfig.reload) - the same order of magnitude as the
         hot-reload check that runs per message anyway.
 
+        reload() is called here explicitly rather than trusting .version to already be
+        current: LiveConfig only updates it when something actually calls reload()
+        (get()/section()/the data property), and nothing guarantees a feature's own config
+        has been touched that way before commands() asks for its version - relying on that
+        would make a rename take effect only by coincidence, whenever something else
+        happened to poll the same config first.
+
         The identity of the configuration belongs in it, not just its counter: if a feature
         is handed a different LiveConfig (tests, a feature swapping its configuration), that
         one's counter starts at one again - the counter alone would then look like "nothing
         happened"."""
-        return tuple(
-            (feature.name, id(feature.config), feature.config.version if feature.config is not None else 0)
-            for feature in self._features.values()
-        )
+        versions = []
+        for feature in self._features.values():
+            if feature.config is not None:
+                feature.config.reload()
+            versions.append((
+                feature.name, id(feature.config),
+                feature.config.version if feature.config is not None else 0,
+            ))
+        return tuple(versions)
 
     def command(self, name: str) -> Command | None:
         return self.commands().get(name)
