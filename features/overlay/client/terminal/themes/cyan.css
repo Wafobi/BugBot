@@ -1,6 +1,6 @@
 /* Theme "cyan" - cool cyan terminal, tying the personal skin's accent back to bugbot's own
-   default (--accent in bars.html/chat.html). Loaded via ?theme=cyan by overlay.html,
-   chat.html and tubbi.html (see ../themes/README.md). */
+   default (--accent in bars.html/chat.html). Loaded via ?theme=cyan by chat.html and
+   tubbi.html (see ../themes/README.md). */
 :root {
   --amber: #4FD8FF;
   --amber-soft: #8FE8FF;

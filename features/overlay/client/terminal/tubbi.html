@@ -7,8 +7,8 @@
   Parameters (all optional), same convention as bugbot's bars.html/chat.html:
 
     theme=   load themes/<name>.css - see themes/README.md. Same file
-             overlay.html and chat.html in this folder load, so one
-             parameter restyles the whole scene.
+             chat.html in this folder loads, so one parameter restyles
+             both.
     t.NAME=  override any single design token from :root below, e.g.
              ?t.bar-h-top=140px
              lands as an inline style on the root element, so it wins over
@@ -21,10 +21,10 @@
 <style>
   /*
     Design plan
-    Split out of overlay.html so the Vtubbi terminal frame is its own OBS
-    browser source and can be moved/resized/toggled independently of the
-    letterbox chrome and the chat card. Same fixed 2560x1440 stage/position
-    as overlay.html so it lines up when stacked on top of it. Sized to the
+    Its own OBS browser source, independent of the chat card (chat.html
+    next to it) so each can be moved/resized/toggled on its own. Same
+    fixed 2560x1440 stage/position as chat.html so it lines up when
+    stacked with it. Sized to the
     real Avatar source's aspect ratio (829x468 ≈ 1.77:1) rather than a
     webcam-shaped or circular box. Anchored top-right and overlapping down
     out of where the top bar sits — the way a vtuber avatar usually breaks
@@ -145,8 +145,8 @@
   }
 </style>
 
-<!-- ?theme=<name> loads themes/<name>.css - the same file overlay.html and chat.html in
-     this folder load for the same ?theme=. See themes/README.md. -->
+<!-- ?theme=<name> loads themes/<name>.css - the same file chat.html in this folder loads
+     for the same ?theme=. See themes/README.md. -->
 <script>
 (function () {
   var theme = new URLSearchParams(location.search).get("theme");

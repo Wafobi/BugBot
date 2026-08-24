@@ -8,8 +8,8 @@
   features/overlay/client/chat.html - this page is a reskin of that one, wired to the
   same listener:
 
-    token=   the bot's OVERLAY_TOKEN. Without it, no connection - the card stays
-             on "PREVIEW" and empty (no more random mock lines).
+    token=   the bot's OVERLAY_TOKEN. Without it, no connection - the card
+             just stays empty (no more random mock lines).
     host=    default 127.0.0.1 - the tunnel ends here, not at the server
     port=    default 4457 - same listener as the real bars.html/chat.html,
              stat bars and chat both go through it
@@ -31,13 +31,13 @@
 <style>
   /*
     Design plan
-    Split out of overlay.html so the chat card is its own OBS browser
-    source and can be moved/resized/toggled independently of the letterbox
-    chrome and the Vtubbi frame. Same fixed 2560x1440 stage/position as
-    overlay.html so it lines up when stacked on top of it. Docked near the
-    bottom bar but allowed to poke up a bit into the game area, kept
-    compact like the real chat_panel (max lines visible) rather than a
-    tall log.
+    Its own OBS browser source, independent of the Vtubbi frame (tubbi.html
+    next to it) so each can be moved/resized/toggled on its own - the
+    letterbox chrome this used to share a file with (overlay.html) is gone,
+    unused in this streamer's actual scene. Same fixed 2560x1440
+    stage/position as tubbi.html so it lines up when stacked with it.
+    Docked near the bottom but allowed to poke up a bit into the game area,
+    kept compact (max lines visible) rather than a tall log.
     Chat    wired to bugbot's real overlay/chat_panel WebSocket (one listener,
             both bars.html's stat frames and this chat's history/message/clear
             frames) - see the connect() script below. ?demo=1 still gives the
@@ -66,7 +66,7 @@
     padding: 0;
     width: 100%;
     height: 100%;
-    background: transparent; /* composited over Game Capture + overlay.html in OBS */
+    background: transparent; /* composited over Game Capture in OBS */
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
@@ -199,8 +199,8 @@
   }
 </style>
 
-<!-- ?theme=<name> loads themes/<name>.css - the same file overlay.html and tubbi.html in
-     this folder load for the same ?theme=. See themes/README.md. -->
+<!-- ?theme=<name> loads themes/<name>.css - the same file tubbi.html in this folder loads
+     for the same ?theme=. See themes/README.md. -->
 <script>
 (function () {
   var theme = new URLSearchParams(location.search).get("theme");

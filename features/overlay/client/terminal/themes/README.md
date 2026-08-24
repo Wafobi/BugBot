@@ -1,10 +1,10 @@
 # Themes
 
-`?theme=<name>` loads `<name>.css` from this folder. All three pages in `terminal/`
-(`overlay.html`, `chat.html`, `tubbi.html`) build on the same four tokens for everything that
-isn't plain ink/background — `--amber`, `--amber-soft`, `--amber-dim`, `--glow` — so one theme
-file recolours titlebars, badges, the connection dot and the glow across all three at once, as
-long as the same `?theme=` is on all three source URLs.
+`?theme=<name>` loads `<name>.css` from this folder. Both pages in `terminal/` (`chat.html`,
+`tubbi.html`) build on the same four tokens for everything that isn't plain ink/background —
+`--amber`, `--amber-soft`, `--amber-dim`, `--glow` — so one theme file recolours titlebars,
+badges, the connection dot and the glow across both at once, as long as the same `?theme=` is on
+both source URLs.
 
 Shipped:
 
