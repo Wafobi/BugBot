@@ -4,6 +4,11 @@ Counterpart to platforms/obs/config.py, and separate from overlay.json for the s
 the JSON files are what you look into when adapting things, and secrets have no business
 being there.
 
+One token, one port for both halves of what is on screen: the stat bars and the chat
+mirrored alongside them (formerly the separate CHAT_PANEL_TOKEN/-PORT/-BIND of the now-folded
+chat_panel feature - see features/overlay/feature.py). Whoever only wants one of the two
+still needs just this.
+
 Without OVERLAY_TOKEN the feature opens no port. It still loads - its commands (death
 counter) work without an overlay too. That is at the same time the guarantee that the port
 never stands open without a secret.

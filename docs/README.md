@@ -32,8 +32,7 @@ the reference material you need when changing something.
 
 | Page | What's in it |
 |---|---|
-| [Overlay](overlay.md) | The stat bars on screen: viewers, uptime, deaths, follows/subs/raids |
-| [Chat panel](chat_panel.md) | Chat mirrored into OBS as its own browser source |
+| [Overlay](overlay.md) | The stat bars on screen — viewers, uptime, deaths, follows/subs/raids — and the chat mirrored alongside them as its own browser source |
 | [Companion](companion.md) | One small pet per chatter, seeded from their name; `!companion`/`!vtubbi` |
 
 ## Running it

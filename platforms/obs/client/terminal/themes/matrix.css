@@ -1,0 +1,14 @@
+/* Theme "matrix" - green phosphor terminal. Loaded via ?theme=matrix by ad-break.html,
+   stream-boot.html and stream-pause.html (see ../themes/README.md). Every titlebar, badge,
+   dot, glow and (in stream-boot.html) the rain canvas reads --amber/--amber-soft/
+   --amber-dim/--glow - recolouring those four flips the whole scene. Same file as
+   features/overlay/client/terminal/themes/matrix.css - kept as its own copy rather than a
+   shared one, same reasoning as the token-check duplication elsewhere in this repo: a small
+   copy is cheaper than a cross-feature dependency neither side may ever need to diverge
+   from. */
+:root {
+  --amber: #39FF14;
+  --amber-soft: #7CFF6B;
+  --amber-dim: #235C18;
+  --glow: rgba(57, 255, 20, 0.35);
+}

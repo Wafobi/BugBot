@@ -177,3 +177,69 @@ There is no theme mechanism: with one appearance, the tokens *are* the theme.
 **Judge fine lines at 100 %.** A 2 px line scaled to 61 % becomes 1.21 px and is rounded to 1 or
 2 depending on where it lands — two identical lines then look different. `preview.html` has a
 zoom control for exactly this.
+
+---
+
+# Chat — parameter reference
+
+Every knob on `chat.html`, the chat mirrored alongside the bars — same listener, same
+`OVERLAY_TOKEN`, but its own browser source, so it can be shown or hidden live with the eye icon
+in OBS's Sources dock without touching a URL. What the feature *is* lives in
+[docs/overlay.md](../../docs/overlay.md#chat); this is the lookup table.
+
+```
+file:///path/to/bugbot/features/overlay/client/chat.html?token=…&source=twitch&max=6
+```
+
+## URL parameters
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `token=` | — | the `OVERLAY_TOKEN` from the bot's `.env` — the same one bars.html uses. Without it the page renders but stays empty |
+| `host=` | `127.0.0.1` | where the SSH tunnel ends on **this** machine, not the server |
+| `port=` | `4457` | must match `OVERLAY_PORT` |
+| `source=` | — | which platform(s) this instance shows, comma-separated: `source=twitch` or `source=twitch,discord`. Empty = everything the bot sends. Filtered here, client-side — several instances can hang off one token and each show something different, see [docs/overlay.md](../../docs/overlay.md#chat) |
+| `max=` | `12` | how many lines stay visible; the oldest scrolls off as new ones arrive |
+| `badge=0` | shown | hide the platform tag in front of the name |
+| `accent=` | `#5FEAF5` | colour for mod/broadcaster names, URL-encoded: `%23FFE100` for `#FFE100` |
+| `t.NAME=` | — | override any single design token, e.g. `t.msg-size=30px` |
+| `link=1` | off | show the connection lamp, top right. Off by default so a bot restart mid-stream does not put a red dot on screen |
+| `demo=1` | off | sample messages without a connection, for previewing |
+
+`chat_preview.html` next to this file takes the same parameters and adds a stage with a stand-in
+gameplay background, plus a toolbar for the ones worth turning without editing a URL by hand
+(width, height, rows, source, badge).
+
+## Design tokens
+
+All of these are settable as `?t.<name>=<value>`. The defaults below are what `:root` in
+`chat.html` ships with.
+
+### Geometry & type
+
+| Token | Default | |
+|---|---|---|
+| `--font` | `"Roboto", "DejaVu Sans", system-ui, sans-serif` | |
+| `--msg-size` | `26px` | |
+| `--name-weight` | `700` | |
+| `--gap` | `10px` | space between message lines |
+| `--pad` | `16px` | padding inside the box |
+| `--text-shadow` | `0 1px 3px rgba(0,0,0,.9), 0 0 12px rgba(0,0,0,.5)` | legibility over bright game footage |
+
+### Colour
+
+| Token | Default | |
+|---|---|---|
+| `--accent` | `#5FEAF5` | mod/broadcaster names; `accent=` writes this |
+| `--sub` | `#F22A80` | subscriber names |
+| `--ink` | `#EAF7FF` | everyone else |
+| `--dim` | `rgba(234,247,255,.55)` | the platform badge |
+| `--dot-off` / `--dot-ok` | `#2A2C50` / `#34C759` | connection lamp, see `link=1` |
+
+### Layout
+
+No box, no border — just the lines themselves over whatever OBS composites behind this source.
+
+| Token | Default | |
+|---|---|---|
+| `--margin` | `10px` | gap between the text and the source's edges |

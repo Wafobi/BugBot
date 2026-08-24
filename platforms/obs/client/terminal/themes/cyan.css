@@ -1,0 +1,11 @@
+/* Theme "cyan" - cool cyan terminal, tying back to bugbot's own default accent (--accent in
+   features/overlay/client/bars.html/chat.html). Loaded via ?theme=cyan by ad-break.html,
+   stream-boot.html and stream-pause.html (see ../themes/README.md). Same file as
+   features/overlay/client/terminal/themes/cyan.css - see matrix.css here for why it is its
+   own copy rather than a shared one. */
+:root {
+  --amber: #4FD8FF;
+  --amber-soft: #8FE8FF;
+  --amber-dim: #245A6B;
+  --glow: rgba(79, 216, 255, 0.35);
+}

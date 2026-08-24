@@ -1,17 +1,19 @@
 # Overlay
 
-The browser sources in the picture. Same reversed direction as [OBS](obs.md), and for the same
-reason: the overlay runs in OBS on the streamer's PC, the bot runs on a server. So the overlay
-*dials the bot*, and the bot pushes.
+The browser sources in the picture — the stat bars *and* the chat mirrored alongside them (see
+[Chat](#chat) below; formerly its own feature, folded in here). Same reversed direction as
+[OBS](obs.md), and for the same reason: the overlay runs in OBS on the streamer's PC, the bot
+runs on a server. So the overlay *dials the bot*, and the bot pushes.
 
 ```
 OBS machine                                     server
 ┌──────────────────────┐                  ┌──────────────────────┐
-│ Browser source       │                  │ BugBot (container)   │
-│   bars.html          │                  │  features/overlay    │
-│        │             │                  │  listens :4457       │
-│        └── ws ──► :4457 ══ SSH -L ══════►  token check         │
-└──────────────────────┘  encrypted tunnel└──────────────────────┘
+│ Browser sources       │                  │ BugBot (container)   │
+│   bars.html            │                  │  features/overlay    │
+│   chat.html            │                  │  listens :4457       │
+│        │               │                  │  token check          │
+│        └── ws ──► :4457 ══ SSH -L ══════►  (one listener, both)   │
+└──────────────────────┘  encrypted tunnel └──────────────────────┘
 ```
 
 The payoff of pushing rather than polling: a follower is in the picture the moment they arrive,
@@ -20,16 +22,20 @@ the previous number sends nothing, so the page does not repaint without reason.
 
 ```
 features/overlay/
-  feature.py      the state, the topics it comes from, the death counter commands
+  feature.py      the state, the topics it comes from, the death counter commands,
+                   and the chat history/scope (formerly features/chat_panel)
   server.py       the listener — token check, connections, broadcast
   store.py        overlay_counters, so the death count survives a restart
   config.py       token/port/bind from .env
-  overlay.json    which event fills which field, and every line the bot says
+  overlay.json    which event fills which field, every line the bot says, and the
+                   "chat" section (platforms, hide_commands, max_messages)
   README.md       every parameter and every design token, as a lookup table
 
   client/         ── runs on the OBS machine, not the server ──
-    bars.html     the page itself, opened as the browser source
-    preview.html  the same page in a scaled frame, for looking at it in a browser
+    bars.html         the stat bars, opened as the browser source
+    preview.html       the same page in a scaled frame, for looking at it in a browser
+    chat.html          the chat, as its own browser source — see Chat below
+    chat_preview.html  chat.html in a stage with a stand-in gameplay background
 ```
 
 ---
@@ -267,3 +273,76 @@ exists twice — with `{game}` and as `…_no_game`, because a single text would
 word in the sentence whenever no game is known. The values live in `overlay_counters` and survive
 restarts; the table is kept general so the next counter (wins, crashes, coffee) needs no new one.
 Without a `STORAGE` feature the counter still works, but only until the bot restarts.
+
+---
+
+## Chat
+
+A second browser source, `client/chat.html`, mirrors chat in the picture — same listener as
+`bars.html`, same `OVERLAY_TOKEN`, but its own file rather than a part of the stat bars. Formerly
+its own feature (`chat_panel`, with its own `CHAT_PANEL_TOKEN`/port); folded in here because both
+are the same thing underneath — a browser source that dials in and gets pushed whatever changed.
+One listener, one token instead of two.
+
+Kept as a separate source rather than merged into `bars.html` itself so it can be **shown or
+hidden live from inside OBS** — right-click the source in the Sources dock and toggle the eye
+icon, or bind a hotkey to "Toggle Source Visibility". A `?chat=` URL parameter could only ever
+take effect on the next page load; the eye icon takes effect immediately, mid-stream, which is
+the point.
+
+### What it sends
+
+Three frame types, all JSON, over the same connection as `state`/`patch`:
+
+| `type` | when | `data` |
+|---|---|---|
+| `history` | once, on connect, right after `state` | the recent messages, oldest first |
+| `message` | for every accepted message | one message |
+| `clear` | a mod/broadcaster cleared the whole chat on the platform itself | `null` |
+
+A message: `platform`, `user_name`, `text`, `is_privileged` (mod/broadcaster),
+`is_subscriber`. `bars.html` and `chat.html` see the same four frame types on the same socket and
+each simply ignores the ones it does not render — `bars.html` skips `history`/`message`/`clear`,
+`chat.html` skips `state`/`patch`.
+
+**Deliberately `MESSAGE_ACCEPTED`, not `MESSAGE`.** A line moderation deletes never reaches this
+part of the feature, so it can never flash on screen for the second it takes the bot to remove it
+— there is no per-message "take this back" frame, because there is nothing to take back. That is
+also why the history lives only in RAM: it exists to catch up a browser source that reloads
+mid-stream, not to be queried afterwards — [`features/chat_log`](database.md) is already the
+record, and it keeps the opposite half on purpose (everything, so a deleted message can still be
+read back by a mod).
+
+**`clear` is the one exception**, because it is not about any one message. On Twitch, a moderator
+or the broadcaster hitting "Clear chat" in Twitch's own UI sends `CLEARCHAT` over IRC with no
+target user (a per-user purge/timeout is a different `CLEARCHAT`, and does *not* trigger this —
+that already surfaces through `MOD_ACTION` when the bot is the one acting). The bot forwards it as
+`events.CHAT_CLEARED`, the feature empties its in-memory chat history, and every connected `chat.
+html` wipes its feed the moment the frame arrives — Twitch does not say who cleared it, so neither
+does this. A fresh `STREAM_START` clears it too, for the same reason a mid-stream reload should
+not find yesterday's chat still sitting there.
+
+Lines starting with `!` are left out by default (`chat.hide_commands` in `overlay.json`) — they
+are addressed to the bot, not to whoever is reading the panel.
+
+**Two different knobs decide "which platform".** `overlay.json`'s `chat.platforms` is
+server-side: it decides what ever reaches *any* connected browser source in the first place.
+`?source=` on `chat.html`'s own URL is client-side: it decides what that one instance renders out
+of what it receives. Several browser sources can hang on the same `OVERLAY_TOKEN` and show
+different things — one `?source=twitch`, another `?source=discord` — without touching the JSON at
+all; `chat.platforms` only needs setting when you want a platform excluded everywhere, not just
+from one scene.
+
+### Setup
+
+Add a second **Browser** source, width/height to taste (e.g. `420x900` — unlike `bars.html` this
+page is not a fixed `2560×1440` canvas, it fills whatever size the source is given), and as URL:
+
+```
+file:///path/to/bugbot/features/overlay/client/chat.html?token=YOUR_OVERLAY_TOKEN
+```
+
+Same token, same tunnel, same port — nothing extra to open. To see it without a bot running,
+open **`chat_preview.html`** next to it, or append `?demo=1` to `chat.html` directly.
+
+Parameters are documented in [features/overlay/README.md](../features/overlay/README.md#chat--parameter-reference).

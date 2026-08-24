@@ -1,0 +1,24 @@
+/* Theme "mono" - grayscale, minimal, no pattern. Loaded via ?theme=mono by both bars.html
+   and chat.html (see features/overlay/README.md#themes). Only the tokens that actually
+   change colour are here - geometry stays whatever bars.html/chat.html ship. */
+:root {
+  --accent: #F5F5F5;
+  --ink: #E8E8E8;
+  --dim: rgba(232, 232, 232, .5);
+  --sub: #FFFFFF;
+
+  --dot-live: #F5F5F5;
+  --dot-glow: rgba(245, 245, 245, .6);
+  --dot-off: #333333;
+
+  --bar-bg-top: linear-gradient(180deg, rgba(6, 6, 6, .97), rgba(10, 10, 10, .82));
+  --bar-bg-bottom: linear-gradient(0deg, rgba(6, 6, 6, .97), rgba(10, 10, 10, .82));
+  --fx: none;
+  --fx-opacity: 0;
+
+  --bar-line: repeating-linear-gradient(90deg, #F5F5F5 0px, rgba(245, 245, 245, .5) 120px, #F5F5F5 240px);
+  --bar-line-opacity: .5;
+
+  --cam-ring: #F5F5F5;
+  --cam-outer: rgba(245, 245, 245, .35);
+}

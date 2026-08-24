@@ -1,0 +1,28 @@
+/* Theme "sunset" - warm amber/coral, no cool colours left. Loaded via ?theme=sunset by both
+   bars.html and chat.html (see features/overlay/README.md#themes). Only the tokens that
+   actually change colour are here - geometry (--bar, --pad, --cam, ...) is not a theme's to
+   touch, so it stays identical across every look. */
+:root {
+  --accent: #FFB000;
+  --ink: #FFEFD9;
+  --dim: rgba(255, 239, 217, .5);
+  --sub: #F2542A;
+
+  --dot-live: #FF6B4A;
+  --dot-glow: rgba(255, 107, 74, .85);
+  --dot-off: #3A2A18;
+
+  --bar-bg-top: linear-gradient(180deg, rgba(20, 10, 4, .97), rgba(28, 14, 6, .82));
+  --bar-bg-bottom: linear-gradient(0deg, rgba(20, 10, 4, .97), rgba(28, 14, 6, .82));
+  --fx: radial-gradient(rgba(255, 176, 0, .11) 1px, transparent 1.6px) 0 0 / 7px 7px;
+
+  --bar-line: repeating-linear-gradient(90deg,
+              #FFB000 0px, rgba(255, 170, 60, .99) 20px, rgba(255, 140, 70, .97) 40px,
+              rgba(255, 110, 85, .95) 60px, rgba(245, 85, 100, .93) 80px, rgba(235, 65, 110, .91) 100px,
+              rgba(230, 55, 115, .9) 120px, rgba(235, 65, 110, .91) 140px, rgba(245, 85, 100, .93) 160px,
+              rgba(255, 110, 85, .95) 180px, rgba(255, 140, 70, .97) 200px, rgba(255, 170, 60, .99) 220px,
+              #FFB000 240px);
+
+  --cam-ring: var(--accent);
+  --cam-outer: rgba(242, 84, 42, .6);
+}

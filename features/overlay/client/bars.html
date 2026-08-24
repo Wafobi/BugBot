@@ -23,6 +23,9 @@
     cam=     diameter of the camera ring (default 300). cam=0 hides it
     camx=    center of the ring, from the left (default 230)
     accent=  accent color, URL-encoded: %23FFE100 for #FFE100
+    theme=   load themes/<name>.css - a second :root block overriding a handful of the
+             tokens below (see themes/README.md for what a theme covers and the shipped
+             ones). Without it: the look as it ships, below.
     t.NAME=  override any single design token, e.g. t.bar-line-h=4px
     link=1   show the connection lamp, top right (default off)
     demo=1   sample data without a connection - for looking at it in a normal browser
@@ -31,9 +34,11 @@
   changed from outside via ?t.<token>=<value> - that lands as an inline style on the root
   element and so beats every rule in the stylesheet.
 
-  There is deliberately no theme mechanism any more: with exactly one look, a separate file
-  plus a ?theme= parameter was only a detour. Whoever wants to switch between several looks
-  again needs a <link> that loads in a file with a :root block for it - about ten lines.
+  ?theme= is the middle layer between "the shipped look" and "one token at a time": a
+  second, smaller :root block loaded as a <link>, restyling a handful of tokens together
+  (accent, ink, the bar gradients, the hairline) rather than the geometry - which stays
+  identical across themes, so bar=/cam=/camx= keep meaning what they mean regardless of
+  which one is active. ?t.<token>= still beats it, same as it beats the shipped look.
 
   The ring is only a frame: the camera itself is an OBS source that sits *underneath* this
   one and gets cut round with Advanced Masks. The source's console (right-click ->
@@ -281,6 +286,21 @@
   }
   #link.ok { background: #34C759; }
 </style>
+
+<!-- ?theme=<name> loads themes/<name>.css right here - after the :root block above, so its
+     rules win on equal specificity, and before every script below, so a ?t.<token>= later in
+     the URL still beats it (inline style always wins regardless of load order - see the
+     precedence note in README.md). No theme means no request, no extra file. -->
+<script>
+(function () {
+  var theme = new URLSearchParams(location.search).get("theme");
+  if (!theme) return;
+  var link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "themes/" + encodeURIComponent(theme) + ".css";
+  document.currentScript.insertAdjacentElement("afterend", link);
+})();
+</script>
 
 <!-- data-part is the name a part can be switched on/off by:
      ?off=clock,deaths hides it, ?only=game,viewers keeps only those standing. -->

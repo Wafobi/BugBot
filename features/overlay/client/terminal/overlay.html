@@ -1,0 +1,197 @@
+<title>Stream Overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!--
+  Parameters (all optional), same convention as bugbot's bars.html/chat.html:
+
+    theme=   load themes/<name>.css - see themes/README.md. Same file
+             chat.html and tubbi.html in this folder load, so one
+             parameter restyles the whole scene.
+    t.NAME=  override any single design token from :root below, e.g.
+             ?t.bar-h-top=140px&t.bar-h-bottom=180px
+             lands as an inline style on the root element, so it wins over
+             every rule in the stylesheet regardless of load order.
+
+  No spaces in values (rgba(4,5,14,1) survives a URL, "rgba(4, 5, 14, 1)"
+  tears the query apart).
+-->
+
+<style>
+  /*
+    Design plan
+    Canvas  fixed 2560x1440, same as bugbot's features/overlay/client/bars.html
+            — this is meant to sit at the same size/position (0,0) as the
+            other browser sources in the "PC" scene (Wafobi_2K.json), not a
+            responsive page.
+    Layout  top/bottom letterbox bars, sized independently (--bar-h-top /
+            --bar-h-bottom). A thin 120px top strip just for the clock, a
+            slightly deeper 160px bottom strip. The game area in between is
+            a transparent frame (Game Capture / Display Capture sits
+            underneath in OBS).
+    Split   this used to also carry the Vtubbi cam frame and the chat card;
+            those are now separate browser sources — tubbi.html and
+            chat.html — so each can be repositioned/resized/toggled on its
+            own in OBS. This file is just the letterbox chrome + clock and
+            is meant to be stacked underneath both of them.
+    Note    if this ever runs *alongside* the real Overlay source in OBS,
+            turn its own bar backgrounds off (see .bar) to avoid drawing the
+            letterbox twice — here they're on so the format reads on its
+            own.
+  */
+
+  :root {
+    --ink: #15100a;
+    --ink-deep: #0d0904;
+    --amber: #ffb000;
+    --glow: rgba(255, 176, 0, 0.35);
+    --font-display: "VT323", ui-monospace, "Courier New", monospace;
+    --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+    --bar-h-top: 120px;
+    --bar-h-bottom: 160px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent; /* composited over Game Capture in OBS */
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* Fixed 2560x1440 internal coordinate system (matches the OBS canvas),
+     auto-scaled to fit whatever window this actually opens in — see the
+     fitStage() script at the bottom. In OBS, where the Browser Source is
+     set to exactly 2560x1440, this scales to 1 and changes nothing. */
+  .stage {
+    position: absolute;
+    top: 0; left: 0;
+    width: 2560px;
+    height: 1440px;
+    transform-origin: top left;
+  }
+
+  /* ---------- letterbox bars ---------- */
+
+  .bar {
+    position: absolute;
+    left: 0; right: 0;
+    background: linear-gradient(var(--bar-dir, 180deg), var(--ink-deep) 0%, var(--ink) 100%);
+  }
+  .bar.top { top: 0; height: var(--bar-h-top); --bar-dir: 180deg; border-bottom: 1px solid rgba(255, 176, 0, .18); }
+  .bar.bottom { bottom: 0; height: var(--bar-h-bottom); --bar-dir: 0deg; border-top: 1px solid rgba(255, 176, 0, .18); }
+
+  /* ---------- game capture region ---------- */
+
+  .game-frame {
+    position: absolute;
+    left: 0; right: 0;
+    top: var(--bar-h-top);
+    bottom: var(--bar-h-bottom);
+  }
+
+  /* ---------- clock (top bar) ---------- */
+
+  .clock {
+    position: absolute;
+    right: 40px;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 1px;
+  }
+  .clock .time {
+    font-family: var(--font-display);
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--amber);
+    text-shadow: 0 0 8px var(--glow);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+  }
+</style>
+
+<!-- ?theme=<name> loads themes/<name>.css - the same file chat.html and tubbi.html in this
+     folder load for the same ?theme=, so one parameter restyles all three at once. After
+     :root above (wins on equal specificity), before every script below (?t.<token>= still
+     wins regardless - inline style beats any stylesheet). See themes/README.md. -->
+<script>
+(function () {
+  var theme = new URLSearchParams(location.search).get("theme");
+  if (!theme) return;
+  var link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "themes/" + encodeURIComponent(theme) + ".css";
+  document.currentScript.insertAdjacentElement("afterend", link);
+})();
+</script>
+
+<script>
+(function () {
+  /* ?t.<token>=<value> -> inline style on <html>, beats every stylesheet
+     rule regardless of load order. Same convention as bars.html/chat.html.
+     Runs before the stage below paints, so there's no flash of the
+     un-overridden default. */
+  var params = new URLSearchParams(location.search);
+  var root = document.documentElement;
+  params.forEach(function (value, key) {
+    if (key.indexOf("t.") === 0) root.style.setProperty("--" + key.slice(2), value);
+  });
+})();
+</script>
+
+<div class="stage">
+  <div class="bar top">
+    <div class="clock">
+      <span class="time" id="clockTime">00:00</span>
+    </div>
+  </div>
+  <div class="bar bottom"></div>
+
+  <div class="game-frame"></div>
+</div>
+
+<script>
+(function () {
+  var clockTime = document.getElementById("clockTime");
+  function updateClock() {
+    var d = new Date();
+    function p(n) { return String(n).padStart(2, "0"); }
+    clockTime.textContent = p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+})();
+</script>
+
+<script>
+(function () {
+  /* Scales the fixed 2560x1440 stage to fit whatever window this opens in.
+     In OBS with the Browser Source set to exactly 2560x1440 this comes out
+     to scale 1 and changes nothing. Opened directly in a normal browser it
+     shrinks (and centers) the whole thing so nothing ends up clipped by the
+     viewport, since html/body deliberately don't scroll. */
+  var stage = document.querySelector(".stage");
+  function fit() {
+    var scale = Math.min(window.innerWidth / 2560, window.innerHeight / 1440);
+    var offsetX = (window.innerWidth - 2560 * scale) / 2;
+    var offsetY = (window.innerHeight - 1440 * scale) / 2;
+    stage.style.transform = "translate(" + offsetX + "px," + offsetY + "px) scale(" + scale + ")";
+  }
+  window.addEventListener("resize", fit);
+  fit();
+})();
+</script>

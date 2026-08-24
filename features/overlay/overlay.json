@@ -1,6 +1,18 @@
 {
   "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Was hier steht, entscheidet, was im Bild landet - die Adresse und das Geheimnis des Lauschers stehen dagegen in der .env (OVERLAY_TOKEN, OVERLAY_PORT, OVERLAY_BIND), weil Geheimnisse in keiner Konfigurationsdatei etwas verloren haben.",
 
+  "_comment_chat": "Der Chat, der über denselben Lauscher mitläuft (vormals das eigene Feature chat_panel, siehe client/chat.html) - eigenes Geheimnis/Port gibt es dafür nicht mehr, OVERLAY_TOKEN/-PORT/-BIND gelten für beides.",
+  "chat": {
+    "_comment_platforms": "Von welchen Plattformen der Chat im Overlay mitläuft. Default: nur Twitch - das Overlay läuft sichtbar im Stream, Discord-Nachrichten sollen dort nicht ungefragt mit auftauchen. Leer = von allen, die Nachrichten melden.",
+    "platforms": ["twitch"],
+
+    "_comment_hide_commands": "Zeilen, die mit ! beginnen, landen nicht im Chat-Teil - sie sind an den Bot gerichtet, nicht ans Publikum.",
+    "hide_commands": true,
+
+    "_comment_max_messages": "Wie viele zuletzt gesendete Nachrichten eine neu verbindende (oder neu ladende) Browser-Quelle zum Aufholen bekommt.",
+    "max_messages": 50
+  },
+
   "command_names": {
     "_comment": "Befehle umbenennen, ihnen Aliase geben oder sie abschalten: \"!tod\": \"!death\" | \"!tod\": [\"!death\", \"!rip\"] | \"!tod\": false"
   },

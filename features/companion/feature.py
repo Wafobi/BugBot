@@ -4,8 +4,8 @@ A subscriber (or a mod/the broadcaster) who writes an accepted chat message gets
 companion, seeded from their name by default - the same DiceBear "sprouts" seed the
 standalone vtubbi avatar uses, so a viewer's companion here and their own avatar (if they
 run vtubbi themselves) look the same creature unless they have picked a custom one (see
-!companion set below). Presence itself lives in RAM only, exactly like features/chat_panel's
-history - it says who is around right now, not a record.
+!companion set below). Presence itself lives in RAM only, exactly like the chat mirrored in
+features/overlay's history - it says who is around right now, not a record.
 
 !companion <text> makes that person's companion talk. !companion set <hash> changes what it
 looks like - "hash" is just DiceBear's seed string, so any text works, but the appeal is
@@ -110,7 +110,7 @@ class CompanionFeature(feature_api.Feature):
         self._moderation = None
         self._store = None
         # key -> {"key", "seed", "platform", "user_name", "last_seen"}. RAM only, like
-        # chat_panel's history: this says who is around right now, not a record.
+        # the overlay's chat history: this says who is around right now, not a record.
         self._companions = {}
         # key -> custom seed or None, cached from the store on first sight of that key -
         # see _seed_for. Kept even without a STORAGE feature (see __init__ comment on

@@ -1,0 +1,202 @@
+<title>Vtubbi Frame</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!--
+  Parameters (all optional), same convention as bugbot's bars.html/chat.html:
+
+    theme=   load themes/<name>.css - see themes/README.md. Same file
+             overlay.html and chat.html in this folder load, so one
+             parameter restyles the whole scene.
+    t.NAME=  override any single design token from :root below, e.g.
+             ?t.bar-h-top=140px
+             lands as an inline style on the root element, so it wins over
+             every rule in the stylesheet regardless of load order.
+
+  No spaces in values (rgba(4,5,14,1) survives a URL, "rgba(4, 5, 14, 1)"
+  tears the query apart).
+-->
+
+<style>
+  /*
+    Design plan
+    Split out of overlay.html so the Vtubbi terminal frame is its own OBS
+    browser source and can be moved/resized/toggled independently of the
+    letterbox chrome and the chat card. Same fixed 2560x1440 stage/position
+    as overlay.html so it lines up when stacked on top of it. Sized to the
+    real Avatar source's aspect ratio (829x468 ≈ 1.77:1) rather than a
+    webcam-shaped or circular box. Anchored top-right and overlapping down
+    out of where the top bar sits — the way a vtuber avatar usually breaks
+    out of its letterbox. The viewport itself stays transparent; the actual
+    Vtubbi avatar browser source shows through underneath in OBS.
+  */
+
+  :root {
+    --ink: #15100a;
+    --ink-deep: #0d0904;
+    --ink-line: #2a1f10;
+    --amber: #ffb000;
+    --amber-dim: #8a6a34;
+    --amber-soft: #d99a3d;
+    --cyan: #6fe7dd;
+    --glow: rgba(255, 176, 0, 0.35);
+    --font-display: "VT323", ui-monospace, "Courier New", monospace;
+    --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent; /* composited over the real Avatar source in OBS */
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+
+  /* Fixed 2560x1440 internal coordinate system (matches the OBS canvas),
+     auto-scaled to fit whatever window this actually opens in — see the
+     fitStage() script at the bottom. */
+  .stage {
+    position: absolute;
+    top: 0; left: 0;
+    width: 2560px;
+    height: 1440px;
+    transform-origin: top left;
+  }
+
+  /* ---------- shared terminal chrome (titlebar) ---------- */
+
+  .titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #1c140a;
+    border-bottom: 1px solid var(--ink-line);
+    flex-shrink: 0;
+  }
+  .dots { display: flex; gap: 5px; flex-shrink: 0; }
+  .dots span {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--amber-dim);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.3);
+  }
+  .dots span:nth-child(1) { opacity: .55; }
+  .dots span:nth-child(2) { opacity: .75; }
+  .dots span:nth-child(3) { opacity: 1; background: var(--amber-soft); }
+  .filename {
+    flex: 1;
+    font-size: 11px;
+    color: var(--amber-dim);
+    letter-spacing: .02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---------- vtubbi / avatar frame ---------- */
+
+  .cam-frame {
+    position: absolute;
+    right: 160px;
+    top: 16px;
+    width: 290px;
+    height: 250px;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--ink) 0%, var(--ink-deep) 100%);
+    border: 1px solid var(--ink-line);
+    border-radius: 6px;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.4),
+      0 14px 40px rgba(0, 0, 0, 0.5),
+      0 0 30px var(--glow);
+    overflow: hidden;
+  }
+  .cam-viewport {
+    position: relative;
+    flex: 1;
+    background: transparent; /* Avatar (Vtubbi) source shows through here in OBS */
+  }
+  .cam-viewport::before {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, rgba(255,176,0,.05) 0px, rgba(255,176,0,.05) 1px, transparent 1px, transparent 3px
+    );
+    mix-blend-mode: overlay;
+  }
+  .cam-viewport::after {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 40px rgba(0,0,0,.55);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+  }
+</style>
+
+<!-- ?theme=<name> loads themes/<name>.css - the same file overlay.html and chat.html in
+     this folder load for the same ?theme=. See themes/README.md. -->
+<script>
+(function () {
+  var theme = new URLSearchParams(location.search).get("theme");
+  if (!theme) return;
+  var link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "themes/" + encodeURIComponent(theme) + ".css";
+  document.currentScript.insertAdjacentElement("afterend", link);
+})();
+</script>
+
+<script>
+(function () {
+  /* ?t.<token>=<value> -> inline style on <html>, beats every stylesheet
+     rule regardless of load order. Same convention as bars.html/chat.html.
+     Runs before the stage below paints, so there's no flash of the
+     un-overridden default. */
+  var params = new URLSearchParams(location.search);
+  var root = document.documentElement;
+  params.forEach(function (value, key) {
+    if (key.indexOf("t.") === 0) root.style.setProperty("--" + key.slice(2), value);
+  });
+})();
+</script>
+
+<div class="stage">
+  <div class="cam-frame">
+    <div class="titlebar">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="filename">vtubbi.feed — Avatar</div>
+    </div>
+    <div class="cam-viewport"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  /* Scales the fixed 2560x1440 stage to fit whatever window this opens in.
+     In OBS with the Browser Source set to exactly 2560x1440 this comes out
+     to scale 1 and changes nothing. Opened directly in a normal browser it
+     shrinks (and centers) the whole thing so the frame isn't clipped by
+     the viewport, since html/body deliberately don't scroll. */
+  var stage = document.querySelector(".stage");
+  function fit() {
+    var scale = Math.min(window.innerWidth / 2560, window.innerHeight / 1440);
+    var offsetX = (window.innerWidth - 2560 * scale) / 2;
+    var offsetY = (window.innerHeight - 1440 * scale) / 2;
+    stage.style.transform = "translate(" + offsetX + "px," + offsetY + "px) scale(" + scale + ")";
+  }
+  window.addEventListener("resize", fit);
+  fit();
+})();
+</script>

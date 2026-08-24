@@ -13,11 +13,33 @@ unchanged.
 It also brings the death counter along. That lives here because the overlay is where you see
 it - and because it is counted up via a chat command, not via a file on the OBS machine that
 a bot on the server could not reach anyway.
+
+And it brings the chat panel along - formerly its own feature (features/chat_panel), folded
+in here because both are the same thing underneath: a browser source that dials in and gets
+pushed whatever changed. One listener, one token, one port instead of two - the "chat"
+section of overlay.json is what chat_panel.json used to be. It keeps a short, in-memory
+history of accepted messages and sends every new one alongside the state/patch frames - the
+recent history on connect, one frame per message afterwards.
+
+Deliberately MESSAGE_ACCEPTED and not MESSAGE: a message that moderation deletes never
+reaches this feature, so it never reaches the screen either. There is still no per-message
+"remove this again" frame - the same reasoning as features/chat_log recording MESSAGE and not
+MESSAGE_ACCEPTED, only pointed the other way: that one wants everything for the record, this
+one wants only what a viewer was ever allowed to read. Two things wipe the panel after the
+fact instead of a single message: CHAT_CLEARED (a platform-wide "clear chat" is not about any
+one message) and STREAM_START (a fresh stream starts with an empty panel - the mid-stream
+reload is what the history exists for, not someone tuning in to find yesterday's chat still
+sitting there).
+
+The chat history lives in RAM and not in STORAGE, same reasoning as the death counter's
+absence without one: it exists to catch up a browser source that reloads mid-stream, not to
+be queried afterwards - features/chat_log already is the record.
 """
 
 import asyncio
 import logging
 import time
+from collections import deque
 
 from core import events
 from core import feature as feature_api
@@ -38,6 +60,23 @@ log = logging.getLogger(__name__)
 # previous meaning, and there is nothing to migrate.
 DEATHS = "deaths"
 
+DEFAULTS = {
+    # The chat mirrored alongside the numbers - what used to be chat_panel.json's whole
+    # file, now one section of overlay.json.
+    "chat": {
+        # Which platforms' chat reaches the panel. Default: Twitch only - the panel is
+        # visible in the stream itself, so a Discord conversation must not show up there
+        # unasked. Empty = all that report a message - see EventBus.resolve_platforms.
+        "platforms": ["twitch"],
+        # Lines starting with "!" are usually meant for the bot, not for an audience reading
+        # along.
+        "hide_commands": True,
+        # How many recent messages a freshly connecting/reloading browser source catches up
+        # on.
+        "max_messages": 50,
+    },
+}
+
 
 class OverlayFeature(feature_api.Feature):
     name = "overlay"
@@ -51,7 +90,7 @@ class OverlayFeature(feature_api.Feature):
     optional = frozenset({feature_api.STORAGE, feature_api.SESSIONS})
 
     def __init__(self):
-        self.config = runtime_config.for_package(__file__)
+        self.config = runtime_config.for_package(__file__, DEFAULTS)
         self.store = None
         self._server = None
         self._bus = None
@@ -67,7 +106,12 @@ class OverlayFeature(feature_api.Feature):
             "last_sub": "",
             "last_raid": "",
             "deaths": 0,
+            "ad_break_started_at": None,  # unix seconds; the page computes the countdown itself
+            "ad_break_seconds": 0,
         }
+        # The chat history - see class docstring.
+        self._chat_history = deque(maxlen=self._max_messages())
+        self._next_message_id = 1
 
     # --- Lifecycle ------------------------------------------------------------------
 
@@ -88,6 +132,9 @@ class OverlayFeature(feature_api.Feature):
         bus.subscribe(events.STREAM_SEGMENT, self.on_segment)
         bus.subscribe(events.VIEWERS, self.on_viewers)
         bus.subscribe(events.PLATFORM_EVENT, self.on_platform_event)
+        bus.subscribe(events.AD_BREAK, self.on_ad_break)
+        bus.subscribe(events.MESSAGE_ACCEPTED, self.on_message)
+        bus.subscribe(events.CHAT_CLEARED, self.on_chat_cleared)
 
         if not env.OVERLAY_TOKEN:
             log.info("No OVERLAY_TOKEN set - no overlay listener. "
@@ -97,6 +144,7 @@ class OverlayFeature(feature_api.Feature):
         self._server = OverlayServer(
             env.OVERLAY_TOKEN, env.OVERLAY_BIND, env.OVERLAY_PORT,
             snapshot=self.snapshot,
+            history=lambda: list(self._chat_history),
             on_error=lambda message: log.warning(message),
         )
         await self._server.start()
@@ -155,6 +203,10 @@ class OverlayFeature(feature_api.Feature):
     async def on_stream_start(self, platform=None, title="", category="", **_):
         await self._patch(live=True, started_at=time.time(), title=title or "", game=category or "")
         await self._refresh_deaths()
+        # A fresh stream starts with an empty chat panel too - the mid-stream reload is what
+        # the history exists for, not someone tuning in to find yesterday's chat still there.
+        if platform is None or self._chat_in_scope(platform):
+            await self._clear_chat()
 
     async def on_stream_end(self, platform=None, **_):
         await self._patch(live=False, started_at=None, viewers=0)
@@ -180,6 +232,63 @@ class OverlayFeature(feature_api.Feature):
         slot = (self.config.section("event_slots") or {}).get(event_type)
         if slot:
             await self._patch(**{slot: user_name})
+
+    async def on_ad_break(self, platform=None, duration_seconds=0, **_):
+        """Twitch reported an ad break starting - same shape as started_at/live: one
+        timestamp plus a length, and whichever browser source cares (platforms/obs/client/
+        terminal/ad-break.html) computes its own countdown from it, the same way bars.html
+        computes uptime from started_at.
+
+        Deliberately the raw Twitch duration, not platforms/obs's extra_seconds (the grace
+        period the OBS source stays visible a little longer) - that value lives in
+        platforms/obs/obs.json and reading it here would mean importing across a
+        feature/platform boundary for a few extra seconds of a bar sitting at 100%, which is
+        a fine thing for a bar to do anyway."""
+        await self._patch(ad_break_started_at=time.time(), ad_break_seconds=int(duration_seconds or 0))
+
+    # --- Chat -------------------------------------------------------------------------
+
+    def _max_messages(self):
+        return max(1, int(self.config.section("chat").get("max_messages", 50)))
+
+    def _chat_in_scope(self, platform_name):
+        if self._bus is None:
+            return True   # without a bus no resolution - then better to show than to lose
+        scope = self._bus.resolve_platforms(self.config.section("chat").get("platforms", ()))
+        return scope is None or platform_name in scope
+
+    async def on_message(self, message):
+        if not self._chat_in_scope(message.platform):
+            return
+        if self.config.section("chat").get("hide_commands", True) and message.text.lstrip().startswith("!"):
+            return
+
+        maxlen = self._max_messages()
+        if self._chat_history.maxlen != maxlen:
+            self._chat_history = deque(self._chat_history, maxlen=maxlen)
+
+        entry = {
+            "id": self._next_message_id,
+            "platform": message.platform,
+            "user_name": message.user_name,
+            "text": message.text,
+            "is_privileged": message.is_privileged,
+            "is_subscriber": message.is_subscriber,
+        }
+        self._next_message_id += 1
+        self._chat_history.append(entry)
+        if self._server is not None:
+            await self._server.broadcast("message", entry)
+
+    async def on_chat_cleared(self, platform):
+        if not self._chat_in_scope(platform):
+            return
+        await self._clear_chat()
+
+    async def _clear_chat(self):
+        self._chat_history.clear()
+        if self._server is not None:
+            await self._server.broadcast("clear", None)
 
     # --- Commands -------------------------------------------------------------------
 

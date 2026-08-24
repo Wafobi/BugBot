@@ -182,8 +182,9 @@ installation with a different mix.
 
 One row per person who has ever paid for a custom look with `!companion set <hash>` — everyone
 else's companion is seeded from their name and never appears here at all. Persisted, unlike
-presence (who currently has a companion on screen is a RAM list, like `features/chat_panel`'s
-history), because losing a look someone paid bits for on a restart would mean paying again.
+presence (who currently has a companion on screen is a RAM list, like the chat mirrored in
+[Overlay](overlay.md#chat)'s history), because losing a look someone paid bits for on a restart
+would mean paying again.
 
 | Column | Type |
 |---|---|

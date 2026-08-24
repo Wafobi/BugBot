@@ -46,7 +46,6 @@ Volume=/path/to/bugbot/features/stats/stats.json:/app/features/stats/stats.json:
 Volume=/path/to/bugbot/features/chat_log/chat_log.json:/app/features/chat_log/chat_log.json:Z
 Volume=/path/to/bugbot/features/sql_db/sql_db.json:/app/features/sql_db/sql_db.json:Z
 Volume=/path/to/bugbot/features/overlay/overlay.json:/app/features/overlay/overlay.json:Z
-Volume=/path/to/bugbot/features/chat_panel/chat_panel.json:/app/features/chat_panel/chat_panel.json:Z
 Volume=/path/to/bugbot/features/companion/companion.json:/app/features/companion/companion.json:Z
 Volume=/path/to/bugbot/features/sql_db/bugbot.db:/app/features/sql_db/bugbot.db:Z
 # The first incoming port: this is where the OBS relay from the streamer's machine dials in
@@ -63,30 +62,24 @@ Volume=/path/to/bugbot/features/sql_db/bugbot.db:/app/features/sql_db/bugbot.db:
 # The restriction to loopback therefore belongs here, on the host side of the forward.
 PublishPort=127.0.0.1:4456:4456
 
-# The second: this is where the overlays hang (see features/overlay). Has to match OVERLAY_PORT
-# from the .env. Anyone not embedding a browser source leaves the line out.
+# The second: this is where the overlays hang (see features/overlay) - both the stat bars and
+# the chat mirrored alongside them (formerly the separate chat_panel feature, folded in; see
+# features/overlay/feature.py). Has to match OVERLAY_PORT from the .env. Anyone not embedding a
+# browser source leaves the line out.
 #
 # The same arrangement and the same loopback restriction as above - an SSH tunnel from the OBS
 # machine leads here too, and here too the bot in the container listens on 0.0.0.0.
 #
-# What goes out here is read-only (viewer count, last follower, game, death counter), and the
-# listener accepts nothing from the far side. There is a token in front of it nonetheless: the
-# `127.0.0.1:` in this line is the first lock, and it is exactly one forgotten prefix away from
-# no longer being one.
+# What goes out here is read-only (viewer count, last follower, game, death counter, already-
+# moderated chat text), and the listener accepts nothing from the far side. There is a token in
+# front of it nonetheless: the `127.0.0.1:` in this line is the first lock, and it is exactly
+# one forgotten prefix away from no longer being one.
 PublishPort=127.0.0.1:4457:4457
 
-# The third: this is where the chat panel hangs (see features/chat_panel). Has to match
-# CHAT_PANEL_PORT from the .env. Anyone not embedding that browser source leaves the line out.
-#
-# Same arrangement and the same loopback restriction as the two above. What goes out here is
-# already-moderated chat text rather than numbers, but the principle is unchanged: read-only,
-# and the listener accepts nothing from the far side.
-PublishPort=127.0.0.1:4458:4458
-
-# The fourth: this is where the companion page hangs (see features/companion). Has to match
+# The third: this is where the companion page hangs (see features/companion). Has to match
 # COMPANION_PORT from the .env. Anyone not embedding that browser source leaves the line out.
 #
-# Same arrangement and the same loopback restriction as the three above: read-only, and the
+# Same arrangement and the same loopback restriction as the two above: read-only, and the
 # listener accepts nothing from the far side.
 PublishPort=127.0.0.1:4459:4459
 

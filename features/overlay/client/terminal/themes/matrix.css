@@ -1,0 +1,10 @@
+/* Theme "matrix" - green phosphor terminal. Loaded via ?theme=matrix by overlay.html,
+   chat.html and tubbi.html (see ../themes/README.md). Every titlebar, badge, dot and glow in
+   all three reads --amber/--amber-soft/--amber-dim/--glow - recolouring those four flips the
+   whole scene, nothing else needs touching. */
+:root {
+  --amber: #39FF14;
+  --amber-soft: #7CFF6B;
+  --amber-dim: #235C18;
+  --glow: rgba(57, 255, 20, 0.35);
+}

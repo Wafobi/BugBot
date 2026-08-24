@@ -1,0 +1,13 @@
+/* Theme "aurora" - cyan and magenta together, echoing the hairline on bars.html's own
+   default look (see features/overlay/client/bars.html's --bar-line comment). Unlike matrix/
+   cyan, which just recolour all four tokens to one hue, this one splits them: --amber and
+   --amber-soft land on two different elements (dots cycle through both, caption/prompt use
+   them separately), so cyan and magenta actually sit side by side rather than blending into
+   one tint. --amber-dim bridges the two so the titlebar dots still read as one ramp.
+   Loaded via ?theme=aurora by overlay.html, chat.html and tubbi.html (see themes/README.md). */
+:root {
+  --amber: #5FEAF5;
+  --amber-soft: #F22A80;
+  --amber-dim: #6B4A6E;
+  --glow: rgba(95, 234, 245, 0.35);
+}

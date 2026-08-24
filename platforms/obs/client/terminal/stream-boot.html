@@ -1,0 +1,675 @@
+<title>Stream Boot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  /*
+    Design plan
+    Color   ink #15100a / ink-deep #0d0904 (warm near-black terminal body),
+            amber #ffb000 (phosphor primary), amber-soft #d99a3d, amber-dim #7a5a26,
+            cyan #6fe7dd (info), green #7cffb2 (ok), red #ff5f6d (error/warn)
+    Type    VT323 for the hero line (authentic pixel-terminal face),
+            IBM Plex Mono for log & prompt text (readable monospace, tabular figures)
+    Layout  a single CRT terminal card showing a boot log: "getting ready to go
+            live" status, an antenna icon, a scrolling log, and a connection-
+            quality bar. Backed by a full-page amber matrix-rain canvas plus a
+            radial vignette, so the page looks intentional when opened
+            directly in a browser (not only pasted into OBS as a source).
+  */
+
+  :root {
+    --ink: #15100a;
+    --ink-deep: #0d0904;
+    --ink-line: #2a1f10;
+    --amber: #ffb000;
+    --amber-soft: #d99a3d;
+    --amber-dim: #8a6a34;
+    --cyan: #6fe7dd;
+    --green: #7cffb2;
+    --red: #ff5f6d;
+    --glow: rgba(255, 176, 0, 0.35);
+    --font-display: "VT323", ui-monospace, "Courier New", monospace;
+    --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--ink-deep);
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  #rain {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .vignette {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 0%, transparent 38%, rgba(13, 9, 4, 0.9) 100%);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .crt { animation: flicker 6.5s infinite steps(60); }
+  }
+  @keyframes flicker {
+    0%, 96%, 100% { opacity: 1; }
+    97% { opacity: 0.86; }
+    98% { opacity: 1; }
+    98.5% { opacity: 0.9; }
+  }
+  @keyframes blink { 50% { opacity: .15; } }
+
+  .crt {
+    position: relative;
+    width: min(600px, 92vw);
+    background: linear-gradient(180deg, var(--ink) 0%, var(--ink-deep) 100%);
+    border: 1px solid var(--ink-line);
+    border-radius: 6px;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.4),
+      0 20px 60px rgba(0, 0, 0, 0.55),
+      0 0 40px var(--glow);
+    overflow: hidden;
+  }
+
+  @keyframes glitch-shift {
+    0%   { transform: translate(0,0); filter: none; clip-path: none; }
+    8%   { transform: translate(-5px, 1px); filter: hue-rotate(12deg) saturate(1.5); clip-path: inset(6% 0 78% 0); }
+    18%  { transform: translate(4px, -2px); filter: hue-rotate(-10deg); clip-path: inset(62% 0 10% 0); }
+    30%  { transform: translate(-3px, 0); clip-path: inset(30% 0 46% 0); filter: none; }
+    42%  { transform: translate(3px, 1px); clip-path: inset(4% 0 88% 0); }
+    55%  { transform: translate(-2px, -1px); clip-path: none; filter: hue-rotate(6deg); }
+    100% { transform: translate(0,0); filter: none; clip-path: none; }
+  }
+  .crt.glitching { animation: glitch-shift 0.34s steps(1, end); }
+
+  .glitch-slice {
+    position: absolute;
+    left: 0; right: 0;
+    pointer-events: none;
+    opacity: 0;
+    mix-blend-mode: screen;
+    transition: opacity .04s linear;
+  }
+  .glitch-slice.active { opacity: .85; }
+
+  .titlebar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #1c140a;
+    border-bottom: 1px solid var(--ink-line);
+  }
+  .dots { display: flex; gap: 6px; flex-shrink: 0; }
+  .dots span {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--amber-dim);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.3);
+  }
+  .dots span:nth-child(1) { opacity: .55; }
+  .dots span:nth-child(2) { opacity: .75; }
+  .dots span:nth-child(3) { opacity: 1; background: var(--amber-soft); }
+  .filename {
+    flex: 1;
+    font-size: 12px;
+    color: var(--amber-dim);
+    letter-spacing: .02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    color: var(--amber);
+    flex-shrink: 0;
+  }
+  .badge .pip {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 6px var(--amber);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .badge .pip { animation: blink 1.1s steps(1) infinite; }
+  }
+
+  .screen { position: relative; padding: 18px 20px 16px; }
+  .screen::before {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, rgba(255,176,0,.05) 0px, rgba(255,176,0,.05) 1px, transparent 1px, transparent 3px
+    );
+    mix-blend-mode: overlay;
+    z-index: 3;
+  }
+  .screen::after {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.65);
+    z-index: 3;
+  }
+
+  .hero { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .icon-art {
+    font-family: var(--font-body);
+    font-size: 9px;
+    line-height: 1.05;
+    color: var(--amber);
+    text-shadow: 0 0 6px var(--glow);
+    white-space: pre;
+    flex-shrink: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .icon-art { animation: pulse 2.4s ease-in-out infinite; }
+  }
+  @keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+  .hero-text h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(26px, 5.4vw, 38px);
+    line-height: 1;
+    letter-spacing: .03em;
+    color: var(--amber);
+    text-shadow: 0 0 10px var(--glow), 2px 0 0 rgba(111,231,221,.25), -2px 0 0 rgba(255,95,109,.15);
+    text-wrap: balance;
+  }
+  .prompt { margin-top: 4px; font-size: 13px; color: var(--amber-soft); }
+  .prompt .cursor {
+    display: inline-block;
+    width: 8px; height: 14px;
+    background: var(--amber);
+    vertical-align: -2px;
+    margin-left: 2px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .prompt .cursor { animation: blink 1s steps(1) infinite; }
+  }
+
+  .log {
+    height: 168px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 2px;
+    padding: 10px 12px;
+    background: rgba(0,0,0,.28);
+    border: 1px solid var(--ink-line);
+    border-radius: 3px;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .log-line { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .log-line .ts { color: var(--amber-dim); flex-shrink: 0; }
+  .log-line .lvl { flex-shrink: 0; font-weight: 600; width: 58px; }
+  .log-line .msg { color: #e9d9b8; overflow: hidden; text-overflow: ellipsis; }
+  .lvl.info  { color: var(--cyan); }
+  .lvl.ok    { color: var(--green); }
+  .lvl.warn  { color: var(--amber); }
+  .lvl.error { color: var(--red); }
+  .lvl.debug { color: var(--amber-dim); }
+
+  .progress { margin-top: 14px; font-size: 12px; color: var(--amber-soft); }
+  .progress-row {
+    display: flex; justify-content: space-between; margin-bottom: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .bar {
+    height: 7px; border-radius: 4px;
+    background: rgba(255,255,255,.06);
+    border: 1px solid var(--ink-line);
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--amber-dim), var(--amber));
+    box-shadow: 0 0 8px var(--glow);
+    transition: width .5s ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+  }
+</style>
+
+<!-- ?theme=<name> loads themes/<name>.css - the same file ad-break.html and
+     stream-pause.html in this folder load for the same ?theme=. See themes/README.md. -->
+<script>
+(function () {
+  var theme = new URLSearchParams(location.search).get("theme");
+  if (!theme) return;
+  var link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "themes/" + encodeURIComponent(theme) + ".css";
+  document.currentScript.insertAdjacentElement("afterend", link);
+})();
+</script>
+
+<canvas id="rain"></canvas>
+<div class="vignette"></div>
+
+<script>
+(function () {
+  var canvas = document.getElementById("rain");
+  var ctx = canvas.getContext("2d");
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var chars = "01010101010101ABCDEF01010101░▒▓01".split("");
+  var fontSize = 15;
+  var columns, drops;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    columns = Math.floor(canvas.width / fontSize);
+    drops = new Array(columns).fill(0).map(function () { return Math.random() * -50; });
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // Read fresh every frame rather than once at startup: a ?theme= stylesheet (see the
+  // loader above <canvas>) loads asynchronously even from file://, so caching these once
+  // could still be reading the shipped amber before the theme finishes arriving. A
+  // getComputedStyle() call sixteen times a second on one element costs nothing worth
+  // avoiding.
+  function themeColor(token, fallback) {
+    var value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    return value || fallback;
+  }
+
+  function draw() {
+    var bg = themeColor("--ink-deep", "#0d0904");
+    var bright = themeColor("--amber", "#ffb000");
+    var dim = themeColor("--amber-dim", "#8a6a34");
+
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+    ctx.font = fontSize + "px 'IBM Plex Mono', monospace";
+    for (var i = 0; i < columns; i++) {
+      var char = chars[Math.floor(Math.random() * chars.length)];
+      var x = i * fontSize;
+      var y = drops[i] * fontSize;
+      var hit = Math.random() < 0.05;
+      ctx.globalAlpha = hit ? 0.9 : 0.35;
+      ctx.fillStyle = hit ? bright : dim;
+      ctx.fillText(char, x, y);
+      if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (reduceMotion) {
+    ctx.fillStyle = themeColor("--ink-deep", "#0d0904");
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else {
+    setInterval(draw, 60);
+  }
+})();
+</script>
+
+<script>
+(function () {
+  /* Synthesized, royalty-free sci-fi terminal sound — no samples, no modem noises. */
+  var AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) { window.__bootSound = { blip: function () {}, ready: function () {} }; return; }
+  var ctx = new AudioCtx();
+
+  function resume() { if (ctx.state === "suspended") ctx.resume(); }
+  resume();
+  ["click", "keydown", "pointerdown"].forEach(function (evt) {
+    window.addEventListener(evt, resume, { once: true });
+  });
+
+  function tone(freq, start, duration, type, gainPeak) {
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = type || "square";
+    osc.frequency.setValueAtTime(freq, start);
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(gainPeak || 0.08, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + duration + 0.02);
+  }
+
+  function playBootChime() {
+    var t = ctx.currentTime + 0.05;
+    var notes = [220, 277.18, 329.63, 440, 587.33];
+    notes.forEach(function (f, i) {
+      tone(f, t + i * 0.09, 0.16, "square", 0.05);
+      tone(f * 2, t + i * 0.09, 0.12, "sine", 0.02);
+    });
+    var bufferSize = Math.floor(ctx.sampleRate * 0.5);
+    var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    var data = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    var noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    var filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 1200;
+    var noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.03, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    noise.connect(filter).connect(noiseGain).connect(ctx.destination);
+    noise.start(t);
+  }
+
+  var blipFreq = { info: 1046.5, ok: 1318.5, warn: 392, debug: 660, error: 220 };
+  function playBlip(level) {
+    var t = ctx.currentTime;
+    var wave = (level === "warn" || level === "error") ? "sawtooth" : "square";
+    var dur = level === "error" ? 0.18 : 0.06;
+    var peak = level === "debug" ? 0.02 : 0.045;
+    tone(blipFreq[level] || 800, t, dur, wave, peak);
+  }
+
+  function playReadyChime() {
+    var t = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) {
+      tone(f, t + i * 0.07, 0.22, "triangle", 0.07);
+    });
+  }
+
+  function playGlitchZap() {
+    var t = ctx.currentTime;
+    var bufferSize = Math.floor(ctx.sampleRate * 0.12);
+    var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    var data = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    var noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    var filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 2000;
+    var noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.05, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    noise.connect(filter).connect(noiseGain).connect(ctx.destination);
+    noise.start(t);
+
+    var osc = ctx.createOscillator();
+    var oscGain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(900, t);
+    osc.frequency.exponentialRampToValueAtTime(80, t + 0.09);
+    oscGain.gain.setValueAtTime(0.04, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    osc.connect(oscGain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.1);
+  }
+
+  playBootChime();
+  window.__bootSound = { blip: playBlip, ready: playReadyChime, glitch: playGlitchZap };
+})();
+</script>
+
+<div class="crt">
+  <div class="titlebar">
+    <div class="dots"><span></span><span></span><span></span></div>
+    <div class="filename">stream_boot.sh — PID 0001</div>
+    <div class="badge"><span class="pip"></span>STANDBY</div>
+  </div>
+  <div class="screen">
+    <div class="hero">
+      <pre class="icon-art">))  ))  ((  ((
+  \\  |  //
+   \\ | //
+    \\|//
+   ┌──┴──┐
+   │ ▓▓▓ │
+   └─────┘</pre>
+      <div class="hero-text">
+        <h1>STREAM STARTET GLEICH</h1>
+        <div class="prompt">wafobitv@twich.tv:~$ ./stream_boot.sh --status<span class="cursor"></span></div>
+      </div>
+    </div>
+    <div class="log" id="log"></div>
+    <div class="progress">
+      <div class="progress-row">
+        <span id="spinnerLabel">⠋ sende Signal …</span>
+        <span id="pct">0%</span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var lines = [
+    ["INFO",  "info",  "Boote Stream-Overlay …"],
+    ["OK",    "ok",    "GPU erkannt: RX 9070 XT"],
+    ["INFO",  "info",  "Kalibriere Hype-Level …"],
+    ["OK",    "ok",    "Mikrofon: -12dB, sauber"],
+    ["WARN",  "warn",  "Kaffee-Tank: niedrig"],
+    ["INFO",  "info",  "Verbinde zu Twitch-Servern …"],
+    ["OK",    "ok",    "Chat-Bot online"],
+    ["DEBUG", "debug", "Lade Insider-Witze (37 geladen)"],
+    ["INFO",  "info",  "Prüfe Internetverbindung … 1337 Quettabit/s"],
+    ["OK",    "ok",    "Szenen-Übergänge geladen"],
+    ["WARN",  "warn",  "motivation.service reagiert nicht — neu gestartet"],
+    ["INFO",  "info",  "Suche Empfang …"],
+    ["OK",    "ok",    "Stream-Key validiert"],
+    ["INFO",  "info",  "Wecke Zuschauer aus dem Standby …"],
+    ["DEBUG", "debug", "git pull origin good-vibes"],
+    ["OK",    "ok",    "Alles bereit. Los geht's."],
+    ["INFO",  "info",  "Lade Overlay-Assets …"],
+    ["OK",    "ok",    "1440p @ 60fps bereit"],
+    ["DEBUG", "debug", "Cache geleert: 12.4 GB Meme-Reserve"],
+    ["WARN",  "warn",  "Zuschauererwartung: kritisch hoch"],
+    ["INFO",  "info",  "Synchronisiere PS5 via mpv …"],
+    ["OK",    "ok",    "Audio-Sync: 0ms Drift"],
+    ["ERROR", "error", "Ironie-Modul nicht gefunden — Fallback aktiv"],
+    ["INFO",  "info",  "Lade Chat-Emotes (128 geladen)"],
+    ["OK",    "ok",    "Backup-Encoder bereit"],
+    ["DEBUG", "debug", "sudo pacman -Syu vibes"],
+    ["WARN",  "warn",  "RAM-Auslastung: 14 Chrome-Tabs offen"],
+    ["INFO",  "info",  "Prüfe Discord-Verbindung …"],
+    ["OK",    "ok",    "Szenen-Kollektion geladen: 'Gaming'"],
+    ["INFO",  "info",  "Stimme das Mikro auf Optimismus …"]
+  ];
+
+  var log = document.getElementById("log");
+  var maxLines = 7;
+  var queue = [];
+  var lastShown = null;
+
+  function refillQueue() {
+    var shuffled = lines.slice();
+    for (var i = shuffled.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+    }
+    if (lastShown && shuffled[0] === lastShown && shuffled.length > 1) {
+      var k = 1 + Math.floor(Math.random() * (shuffled.length - 1));
+      var t = shuffled[0]; shuffled[0] = shuffled[k]; shuffled[k] = t;
+    }
+    queue = queue.concat(shuffled);
+  }
+
+  function nextEntry() {
+    if (queue.length === 0) refillQueue();
+    var entry = queue.shift();
+    lastShown = entry;
+    return entry;
+  }
+
+  function ts() {
+    var d = new Date();
+    function p(n) { return String(n).padStart(2, "0"); }
+    return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+
+  function addLine() {
+    var entry = nextEntry();
+    var row = document.createElement("div");
+    row.className = "log-line";
+    row.innerHTML =
+      '<span class="ts">[' + ts() + ']</span>' +
+      '<span class="lvl ' + entry[1] + '">' + entry[0] + "</span>" +
+      '<span class="msg"></span>';
+    log.appendChild(row);
+    while (log.children.length > maxLines) log.removeChild(log.firstChild);
+
+    if (window.__bootSound) {
+      if (entry[2] === "Alles bereit. Los geht's.") {
+        window.__bootSound.ready();
+      } else {
+        window.__bootSound.blip(entry[1]);
+      }
+    }
+
+    if (window.__bootGlitch) {
+      if (entry[1] === "error") {
+        window.__bootGlitch.trigger();
+      } else if (entry[1] === "warn" && Math.random() < 0.35) {
+        window.__bootGlitch.trigger();
+      }
+    }
+
+    var msgEl = row.querySelector(".msg");
+    var text = entry[2];
+    if (reduceMotion) { msgEl.textContent = text; return; }
+    var i = 0;
+    (function type() {
+      msgEl.textContent = text.slice(0, i);
+      i++;
+      if (i <= text.length) setTimeout(type, 14 + Math.random() * 10);
+    })();
+  }
+
+  function loop() { addLine(); setTimeout(loop, 1500 + Math.random() * 900); }
+  loop();
+
+  var frames = ["⠇","⠏","⠟","⠿","⠾","⠼","⠸","⠰","⠠","⠀"];
+  var fIdx = 0;
+  var spinnerLabel = document.getElementById("spinnerLabel");
+  if (!reduceMotion) {
+    setInterval(function () {
+      fIdx = (fIdx + 1) % frames.length;
+      spinnerLabel.textContent = frames[fIdx] + " sende Signal …";
+    }, 100);
+  } else {
+    spinnerLabel.textContent = "⠇ sende Signal …";
+  }
+
+  var barFill = document.getElementById("barFill");
+  var pct = document.getElementById("pct");
+  var current = 4;
+  function stepBar() {
+    var target = 94 + Math.random() * 5;
+    if (Math.random() < 0.12) target = 70 + Math.random() * 15;
+    current += (target - current) * 0.35;
+    var shown = Math.round(current);
+    barFill.style.width = shown + "%";
+    pct.textContent = shown + "%";
+    setTimeout(stepBar, 700 + Math.random() * 500);
+  }
+  stepBar();
+})();
+</script>
+
+<script>
+(function () {
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduceMotion) return;
+
+  var crt = document.querySelector(".crt");
+  var h1 = document.querySelector(".hero-text h1");
+  var originalTitle = h1.textContent;
+  var glyphs = "▓▒░#@%&$01";
+
+  function scrambleTitle() {
+    var chars = originalTitle.split("");
+    var count = 1 + Math.floor(Math.random() * 3);
+    for (var n = 0; n < count; n++) {
+      var idx = Math.floor(Math.random() * chars.length);
+      if (chars[idx] === " ") continue;
+      chars[idx] = glyphs[Math.floor(Math.random() * glyphs.length)];
+    }
+    h1.textContent = chars.join("");
+    setTimeout(function () { h1.textContent = originalTitle; }, 90 + Math.random() * 80);
+  }
+
+  function makeSliceBar() {
+    var bar = document.createElement("div");
+    bar.className = "glitch-slice";
+    var colors = ["rgba(255,176,0,.5)", "rgba(111,231,221,.45)", "rgba(255,95,109,.4)"];
+    bar.style.top = Math.random() * 90 + "%";
+    bar.style.height = (2 + Math.random() * 8) + "px";
+    bar.style.background = colors[Math.floor(Math.random() * colors.length)];
+    bar.style.transform = "translateX(" + (Math.random() * 16 - 8) + "px)";
+    return bar;
+  }
+
+  function triggerGlitch() {
+    crt.classList.add("glitching");
+    scrambleTitle();
+
+    var bars = [];
+    var barCount = 1 + Math.floor(Math.random() * 2);
+    for (var i = 0; i < barCount; i++) {
+      var bar = makeSliceBar();
+      crt.appendChild(bar);
+      bars.push(bar);
+      requestAnimationFrame((function (b) { return function () { b.classList.add("active"); }; })(bar));
+    }
+
+    if (window.__bootSound && window.__bootSound.glitch) window.__bootSound.glitch();
+
+    setTimeout(function () {
+      crt.classList.remove("glitching");
+      bars.forEach(function (b) { b.remove(); });
+    }, 300);
+  }
+
+  window.__bootGlitch = { trigger: triggerGlitch };
+
+  /* Sparse, irregular ambient glitches — most glitches should instead be
+     triggered by ERROR/WARN log lines (see addLine() below), not this timer. */
+  function scheduleAmbientGlitch() {
+    var delay = 15000 + Math.random() * 20000;
+    setTimeout(function () {
+      if (Math.random() < 0.3) triggerGlitch();
+      scheduleAmbientGlitch();
+    }, delay);
+  }
+  scheduleAmbientGlitch();
+})();
+</script>

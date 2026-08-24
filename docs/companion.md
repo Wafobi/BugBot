@@ -1,9 +1,9 @@
 # Companion
 
 A browser source with one small pet per eligible chatter, seeded from their name. Same reversed
-direction as [Overlay](overlay.md) and [Chat panel](chat_panel.md), and for the same reason: the
-page runs in OBS on the streamer's PC, the bot on a server. So the page *dials the bot*, and the
-bot pushes.
+direction as [Overlay](overlay.md) (stat bars and the chat mirrored alongside them), and for the
+same reason: the page runs in OBS on the streamer's PC, the bot on a server. So the page *dials
+the bot*, and the bot pushes.
 
 ```
 OBS machine                                     server
@@ -42,8 +42,9 @@ seeded from their name by default — the same seed the standalone
 own avatar (if they run vtubbi themselves) look the same creature until they pick something else
 (see `!companion set` below). Mods and the broadcaster get one too, everyone else's chat works
 exactly as before, they simply have nothing on screen. Presence itself is not persisted — who
-currently has a companion lives in RAM only, exactly like `features/chat_panel`'s history. A
-companion that has not chatted in `idle_minutes` (default 20) quietly leaves the pond.
+currently has a companion lives in RAM only, exactly like the chat mirrored in
+[Overlay](overlay.md#chat)'s history. A companion that has not chatted in `idle_minutes` (default
+20) quietly leaves the pond.
 
 **`!companion <text>`** makes that person's companion say something. What actually reaches the
 screen passes two more gates on top of the subscriber check:
@@ -118,16 +119,16 @@ change, the same shape `features/moderation` uses for its own violation tracking
 
 ## Setup
 
-**1. A token, and not the other three.**
+**1. A token, and not the other two.**
 
 ```bash
 openssl rand -hex 32        # → COMPANION_TOKEN in .env
 ```
 
-Same reasoning as `OVERLAY_TOKEN`/`CHAT_PANEL_TOKEN`: it ends up in the browser source URL and
-therefore in plaintext in the scene collection, because the browser's WebSocket API cannot set
-request headers. This one grants read access to who is currently chatting and what they typed
-into `!companion` — reuse none of the other three tokens.
+Same reasoning as `OVERLAY_TOKEN`: it ends up in the browser source URL and therefore in
+plaintext in the scene collection, because the browser's WebSocket API cannot set request
+headers. This one grants read access to who is currently chatting and what they typed into
+`!companion` — reuse neither of the other two tokens.
 
 Without `COMPANION_TOKEN` the bot opens no port — the commands still run, there is just nowhere
 to show what they produce.
@@ -138,13 +139,13 @@ to show what they produce.
 PublishPort=127.0.0.1:4459:4459
 ```
 
-**3. The tunnel**, on the OBS machine — the same one that already carries the other three:
+**3. The tunnel**, on the OBS machine — the same one that already carries the other two:
 
 ```bash
 platforms/obs/client/setup-tunnel.sh user@your-server
 ```
 
-That forwards all four ports (4456/4457/4458/4459) in one go — see [The SSH tunnel](tunnel.md).
+That forwards all three ports (4456/4457/4459) in one go — see [The SSH tunnel](tunnel.md).
 
 **4. The browser source.** Width/height to taste — like `chat.html`, this page is not a fixed
 canvas but fills whatever size the source is given. As URL:
@@ -204,7 +205,7 @@ anywhere else.
 
 ## See also
 
-- [Overlay](overlay.md) · [Chat panel](chat_panel.md) — the same push design, in more detail
+- [Overlay](overlay.md) — the same push design, and the chat mirrored alongside it, in more detail
 - [The SSH tunnel](tunnel.md) — how the listener is reached from the OBS machine
 - [Moderation](moderation.md) — what actually filters `!companion <text>`
 - [Database](database.md) — `companion_seeds`, the one table this feature persists

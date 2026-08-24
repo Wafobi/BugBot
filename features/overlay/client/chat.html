@@ -1,32 +1,42 @@
 <meta charset="utf-8">
-<title>BugBot Chat Panel</title>
+<title>BugBot Chat</title>
 
 <!--
   The browser source for the chat in the picture. Belongs on the OBS machine, not the server -
-  like features/overlay/client/bars.html it sits here because it belongs to its counterpart
-  (features/chat_panel/server.py), and runs elsewhere.
+  like bars.html next to it, it belongs to its counterpart (features/overlay/server.py) and
+  runs elsewhere. Deliberately its own file rather than a part of bars.html: as a separate
+  OBS source it can be shown or hidden live with the eye icon in the Sources dock (or a
+  hotkey bound to "Toggle Source Visibility") without touching a URL or reloading anything -
+  a ?chat= parameter could only ever take effect on the next load.
+
+  Same listener as bars.html (one token, one port - see features/overlay/feature.py), so both
+  can hang off the same OVERLAY_TOKEN as two sources in the same scene, or this one can run on
+  its own without the stat bars at all.
 
   Setup: add a "Browser" source, width/height to taste (e.g. 420x900 - unlike bars.html this
   page is not a fixed 2560x1440 canvas, it fills the source at whatever size it's given), and
   as URL the file with a token:
 
-    file:///path/to/bugbot/features/chat_panel/client/chat.html?token=YOUR_CHAT_PANEL_TOKEN
+    file:///path/to/bugbot/features/overlay/client/chat.html?token=YOUR_OVERLAY_TOKEN
 
-  To see it without OBS: open preview.html next to it, or append ?demo=1 to this file.
+  To see it without OBS: open chat_preview.html next to it, or append ?demo=1 to this file.
 
   Parameters (all optional):
-    token=   the CHAT_PANEL_TOKEN from the bot's .env. Without it, no data.
+    token=   the OVERLAY_TOKEN from the bot's .env. Without it, no data.
     host=    default 127.0.0.1 - the tunnel ends here, not at the server
-    port=    port of the tunnel on this machine (default 4458)
+    port=    port of the tunnel on this machine (default 4457)
     source=  which chat source(s) this instance shows, comma-separated: source=twitch
              or source=twitch,discord. Empty = everything the bot sends (default). This
-             lets several browser sources hang off the same CHAT_PANEL_TOKEN and still show
-             different things - one Twitch-only, one Discord-only - without chat_panel.json
+             lets several browser sources hang off the same OVERLAY_TOKEN and still show
+             different things - one Twitch-only, one Discord-only - without overlay.json
              having to say anything about it; the filtering happens here, not at the bot,
              which keeps sending everything to every connected source.
     max=     how many lines stay visible, older ones scroll out (default 12)
     badge=0  hide the platform badge in front of the name
     accent=  accent color, URL-encoded: %23FFE100 for #FFE100
+    theme=   load themes/<name>.css from the same folder bars.html reads it from - the two
+             share one theme file per look, so switching one switches both. See
+             features/overlay/README.md#themes.
     t.NAME=  override any single design token, e.g. t.msg-size=30px
     link=1   show the connection lamp, top right (default off)
     linewidth=  from how many characters a message gets split into several chat lines
@@ -137,6 +147,19 @@
   }
   #link.ok { background: var(--dot-ok); }
 </style>
+
+<!-- ?theme=<name> loads themes/<name>.css - same file bars.html loads, and the same
+     precedence: after :root above, before every script below, so ?t.<token>= still wins. -->
+<script>
+(function () {
+  var theme = new URLSearchParams(location.search).get("theme");
+  if (!theme) return;
+  var link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "themes/" + encodeURIComponent(theme) + ".css";
+  document.currentScript.insertAdjacentElement("afterend", link);
+})();
+</script>
 
 <div id="feed"></div>
 <div id="link"></div>
@@ -249,11 +272,13 @@ function addMessage(entry) {
 
 // --- Connection ------------------------------------------------------------------------
 // The bot sends, we listen - like bars.html. If the connection drops, it reconnects on its
-// own, without anyone having to touch the source.
+// own, without anyone having to touch the source. This socket also carries bars.html's
+// "state"/"patch" frames when both sources share the same feed (they are the same
+// listener now) - this page simply ignores the types it does not know.
 function connect() {
   const token = params.get("token") || "";
   const host = params.get("host") || "127.0.0.1";
-  const port = params.get("port") || "4458";
+  const port = params.get("port") || "4457";
   if (!token) { console.warn("Kein ?token= in der URL - keine Verbindung."); return; }
 
   const socket = new WebSocket(`ws://${host}:${port}/?token=${encodeURIComponent(token)}`);

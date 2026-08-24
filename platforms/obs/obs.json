@@ -2,7 +2,7 @@
   "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Die Quellennamen müssen genau so in OBS heißen; wo sie liegen (Szene oder Gruppe), sucht der Bot selbst.",
   "ad_break": {
     "_comment": "Twitch meldet den Beginn einer Werbepause, OBS blendet diese Quelle für deren Dauer ein. Leer (Default) = aus, solange keine passende Quelle existiert - Name hier erst eintragen, wenn eine Quelle mit exakt diesem Namen in einer Szene liegt.",
-    "source": "",
+    "source": "Werbepause",
     "extra_seconds": 0
   },
   "announce": {

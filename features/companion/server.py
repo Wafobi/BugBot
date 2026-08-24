@@ -1,16 +1,15 @@
 """The listener the companion browser source hangs on.
 
-The same reversed direction as the OBS relay, the overlay and the chat panel, and for the
-same reason: the browser source runs in OBS on the streamer's machine, the bot on a server.
-So it does not *fetch* who is in chat but dials in and gets it sent - a companion appears
-the moment its person writes their first message, not at the next poll.
+The same reversed direction as the OBS relay and the overlay (which also carries the chat),
+and for the same reason: the browser source runs in OBS on the streamer's machine, the bot
+on a server. So it does not *fetch* who is in chat but dials in and gets it sent - a
+companion appears the moment its person writes their first message, not at the next poll.
 
-The token check is deliberately the same shape as platforms/obs/link.py,
-features/overlay/server.py and features/chat_panel/server.py: same header, same query
-parameter, same compare_digest. Four small copies of it are cheaper than a shared
-abstraction none of them may ever need to diverge from - see features/overlay/server.py for
-why the query parameter exists at all (the browser's WebSocket API cannot set headers of its
-own).
+The token check is deliberately the same shape as platforms/obs/link.py and
+features/overlay/server.py: same header, same query parameter, same compare_digest. Small
+copies of it are cheaper than a shared abstraction none of them may ever need to diverge
+from - see features/overlay/server.py for why the query parameter exists at all (the
+browser's WebSocket API cannot set headers of its own).
 
 This file knows only connections and JSON frames. What goes into them is decided by
 features/companion/feature.py.

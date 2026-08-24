@@ -1,0 +1,405 @@
+<title>Stream Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!--
+  Parameters (all optional), same convention/names as bugbot's own
+  features/overlay/client/chat.html - this page is a reskin of that one, wired to the
+  same listener:
+
+    token=   the bot's OVERLAY_TOKEN. Without it, no connection - the card stays
+             on "PREVIEW" and empty (no more random mock lines).
+    host=    default 127.0.0.1 - the tunnel ends here, not at the server
+    port=    default 4457 - same listener as the real bars.html/chat.html,
+             stat bars and chat both go through it
+    source=  which platform(s) to show, comma-separated: source=twitch or
+             source=twitch,discord. Empty = everything the bot sends (default)
+    demo=1   the old mock/randomized lines, no connection - for judging the
+             layout without a bot running
+    theme=   load themes/<name>.css - see themes/README.md
+
+    t.NAME=  override any single design token from :root below, e.g.
+             ?t.bar-h-bottom=180px
+             lands as an inline style on the root element, so it wins over
+             every rule in the stylesheet regardless of load order.
+
+  No spaces in values (rgba(4,5,14,1) survives a URL, "rgba(4, 5, 14, 1)"
+  tears the query apart).
+-->
+
+<style>
+  /*
+    Design plan
+    Split out of overlay.html so the chat card is its own OBS browser
+    source and can be moved/resized/toggled independently of the letterbox
+    chrome and the Vtubbi frame. Same fixed 2560x1440 stage/position as
+    overlay.html so it lines up when stacked on top of it. Docked near the
+    bottom bar but allowed to poke up a bit into the game area, kept
+    compact like the real chat_panel (max lines visible) rather than a
+    tall log.
+    Chat    wired to bugbot's real overlay/chat_panel WebSocket (one listener,
+            both bars.html's stat frames and this chat's history/message/clear
+            frames) - see the connect() script below. ?demo=1 still gives the
+            old random lines for judging the layout without a bot running.
+  */
+
+  :root {
+    --ink: #15100a;
+    --ink-deep: #0d0904;
+    --ink-line: #2a1f10;
+    --amber: #ffb000;
+    --amber-soft: #d99a3d;
+    --amber-dim: #8a6a34;
+    --cyan: #6fe7dd;
+    --green: #7cffb2;
+    --red: #ff5f6d;
+    --glow: rgba(255, 176, 0, 0.35);
+    --font-display: "VT323", ui-monospace, "Courier New", monospace;
+    --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent; /* composited over Game Capture + overlay.html in OBS */
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+
+  /* Fixed 2560x1440 internal coordinate system (matches the OBS canvas),
+     auto-scaled to fit whatever window this actually opens in — see the
+     fitStage() script at the bottom. */
+  .stage {
+    position: absolute;
+    top: 0; left: 0;
+    width: 2560px;
+    height: 1440px;
+    transform-origin: top left;
+  }
+
+  /* ---------- shared terminal chrome (titlebar) ---------- */
+
+  .titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #1c140a;
+    border-bottom: 1px solid var(--ink-line);
+    flex-shrink: 0;
+  }
+  .dots { display: flex; gap: 5px; flex-shrink: 0; }
+  .dots span {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--amber-dim);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.3);
+  }
+  .dots span:nth-child(1) { opacity: .55; }
+  .dots span:nth-child(2) { opacity: .75; }
+  .dots span:nth-child(3) { opacity: 1; background: var(--amber-soft); }
+  .filename {
+    flex: 1;
+    font-size: 11px;
+    color: var(--amber-dim);
+    letter-spacing: .02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---------- chat frame ---------- */
+
+  .chat-frame {
+    position: absolute;
+    left: 40px;
+    bottom: 30px;
+    width: 460px;
+    height: 270px;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, var(--ink) 0%, var(--ink-deep) 100%);
+    border: 1px solid var(--ink-line);
+    border-radius: 6px;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.4),
+      0 14px 40px rgba(0, 0, 0, 0.5),
+      0 0 30px var(--glow);
+    overflow: hidden;
+  }
+
+  .chat-screen {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px 9px;
+  }
+  .chat-screen::before {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, rgba(255,176,0,.05) 0px, rgba(255,176,0,.05) 1px, transparent 1px, transparent 3px
+    );
+    mix-blend-mode: overlay;
+    z-index: 2;
+  }
+  .chat-screen::after {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 40px rgba(0,0,0,.6);
+    z-index: 2;
+  }
+
+  .chat-log {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 5px;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+  .chat-line { display: flex; flex-wrap: wrap; gap: 0 5px; }
+  .chat-user { font-weight: 600; flex-shrink: 0; }
+  .chat-user::after { content: ":"; opacity: .6; }
+  .chat-text { color: #e9d9b8; word-break: break-word; }
+  .chat-line.system {
+    color: var(--amber-dim);
+    font-style: italic;
+    justify-content: center;
+    text-align: center;
+    font-size: 10.5px;
+  }
+
+  .chat-input {
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: 1px solid var(--ink-line);
+    font-size: 10px;
+    color: var(--amber-soft);
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+  }
+</style>
+
+<!-- ?theme=<name> loads themes/<name>.css - the same file overlay.html and tubbi.html in
+     this folder load for the same ?theme=. See themes/README.md. -->
+<script>
+(function () {
+  var theme = new URLSearchParams(location.search).get("theme");
+  if (!theme) return;
+  var link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "themes/" + encodeURIComponent(theme) + ".css";
+  document.currentScript.insertAdjacentElement("afterend", link);
+})();
+</script>
+
+<script>
+(function () {
+  /* ?t.<token>=<value> -> inline style on <html>, beats every stylesheet
+     rule regardless of load order. Same convention as bars.html/chat.html.
+     Runs before the stage below paints, so there's no flash of the
+     un-overridden default. */
+  var params = new URLSearchParams(location.search);
+  var root = document.documentElement;
+  params.forEach(function (value, key) {
+    if (key.indexOf("t.") === 0) root.style.setProperty("--" + key.slice(2), value);
+  });
+})();
+</script>
+
+<div class="stage">
+  <div class="chat-frame">
+    <div class="titlebar">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="filename">chat.log — #wafobitv</div>
+    </div>
+    <div class="chat-screen">
+      <div class="chat-log" id="chatLog"></div>
+      <div class="chat-input">wafobitv@twich.tv:~$ tail -f chat.log</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var colors = ["var(--cyan)", "var(--green)", "var(--amber)", "var(--red)", "var(--amber-soft)"];
+
+  var chatLog = document.getElementById("chatLog");
+  var maxLines = 8;
+
+  function hash(str) {
+    var h = 0;
+    for (var i = 0; i < str.length; i++) h = (h << 5) - h + str.charCodeAt(i);
+    return h;
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // One renderer for both the demo loop and the real connection - a name, a line of text,
+  // and whether it should type itself out (a live arrival) or appear instantly (the history
+  // batch on connect, or a demo line).
+  function addLine(name, text, animate) {
+    var row = document.createElement("div");
+    row.className = "chat-line";
+    var colorIdx = Math.abs(hash(name)) % colors.length;
+    row.innerHTML =
+      '<span class="chat-user" style="color:' + colors[colorIdx] + '">' + escapeHtml(name) + '</span>' +
+      '<span class="chat-text"></span>';
+    chatLog.appendChild(row);
+    while (chatLog.children.length > maxLines) chatLog.removeChild(chatLog.firstChild);
+
+    var textEl = row.querySelector(".chat-text");
+    if (reduceMotion || !animate) { textEl.textContent = text; return; }
+    var i = 0;
+    (function type() {
+      textEl.textContent = text.slice(0, i);
+      i++;
+      if (i <= text.length) setTimeout(type, 10 + Math.random() * 8);
+    })();
+  }
+
+  function addSystemLine(text) {
+    var row = document.createElement("div");
+    row.className = "chat-line system";
+    row.textContent = text;
+    chatLog.appendChild(row);
+    while (chatLog.children.length > maxLines) chatLog.removeChild(chatLog.firstChild);
+  }
+
+  // --- Demo: the old mock/randomized lines, for judging the layout without a bot running ---
+  function startDemo() {
+    var entries = [
+      { user: "teekesselchen",   text: "hackt sich grad durch die pacman deps" },
+      { user: "null_pointer",    text: "F" },
+      { user: "catgirl_dev",     text: "uwu bin da" },
+      { user: "LurkerSupreme",   text: "erster" },
+      { user: "glitch_witch",    text: "das terminal ist so cozy" },
+      { user: "byte_sized",      text: "Kappa" },
+      { user: "ctrl_alt_defeat", text: "W stream" },
+      { user: "quantum_qwertz",  text: "sudo hype" },
+      { user: "0x1A2B3C",        text: "⠋⠙⠹ lädt Hype-Level" },
+      { user: "vim_over_emacs",  text: ":wq und bin dabei" },
+      { user: "segfault_simone", text: "core dumped vor lachen" },
+      { user: "root_toor",       text: "kann ich root werden?" },
+      { user: "daemon_dana",     text: "läuft brav im Hintergrund mit" },
+      { user: "pixel_pia",       text: "1440p sieht mega aus heute" },
+      { user: "kernel_kalle",    text: "endlich Feierabend, passt perfekt" },
+      { user: "async_anna",      text: "PogChamp" },
+      { type: "system", text: "wafobitv ist jetzt live" },
+      { type: "system", text: "kernel_kalle folgt jetzt" }
+    ];
+    var queue = [];
+    var lastShown = null;
+
+    function refillQueue() {
+      var shuffled = entries.slice();
+      for (var i = shuffled.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = shuffled[i]; shuffled[i] = shuffled[j]; shuffled[j] = tmp;
+      }
+      if (lastShown && shuffled[0] === lastShown && shuffled.length > 1) {
+        var k = 1 + Math.floor(Math.random() * (shuffled.length - 1));
+        var t = shuffled[0]; shuffled[0] = shuffled[k]; shuffled[k] = t;
+      }
+      queue = queue.concat(shuffled);
+    }
+
+    function nextEntry() {
+      if (queue.length === 0) refillQueue();
+      var entry = queue.shift();
+      lastShown = entry;
+      return entry;
+    }
+
+    function tick() {
+      var entry = nextEntry();
+      if (entry.type === "system") addSystemLine(entry.text);
+      else addLine(entry.user, entry.text, true);
+      setTimeout(tick, 900 + Math.random() * 1700);
+    }
+    tick();
+  }
+
+  // --- Real connection: bugbot's overlay/chat_panel listener - one socket also carries
+  // bars.html's/tubbi.html's own frames, this page just ignores the types it doesn't render. ---
+  function connect() {
+    var token = params.get("token") || "";
+    var host = params.get("host") || "127.0.0.1";
+    var port = params.get("port") || "4457";
+    var sources = (params.get("source") || "")
+      .split(",").map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+    if (!token) { console.warn("Kein ?token= in der URL - keine Verbindung."); return; }
+
+    function inScope(entry) {
+      return !sources.length || sources.indexOf((entry.platform || "").toLowerCase()) !== -1;
+    }
+
+    var socket = new WebSocket("ws://" + host + ":" + port + "/?token=" + encodeURIComponent(token));
+    socket.onclose = function () { setTimeout(connect, 3000); };
+    socket.onerror = function () { socket.close(); };
+    socket.onmessage = function (message) {
+      var frame;
+      try { frame = JSON.parse(message.data); } catch (e) { return; }
+      if (frame.type === "history") {
+        chatLog.innerHTML = "";
+        (frame.data || []).forEach(function (entry) {
+          if (inScope(entry)) addLine(entry.user_name || "", entry.text || "", false);
+        });
+      } else if (frame.type === "message") {
+        if (inScope(frame.data)) addLine(frame.data.user_name || "", frame.data.text || "", true);
+      } else if (frame.type === "clear") {
+        chatLog.innerHTML = "";
+        addSystemLine("chat cleared");
+      }
+      // "state"/"patch" - bars.html's/tubbi.html's half of the same socket - not rendered here.
+    };
+  }
+
+  if (params.get("demo") === "1") startDemo();
+  else connect();
+})();
+</script>
+
+<script>
+(function () {
+  /* Scales the fixed 2560x1440 stage to fit whatever window this opens in.
+     In OBS with the Browser Source set to exactly 2560x1440 this comes out
+     to scale 1 and changes nothing. Opened directly in a normal browser it
+     shrinks (and centers) the whole thing so the chat card isn't clipped
+     by the viewport, since html/body deliberately don't scroll. */
+  var stage = document.querySelector(".stage");
+  function fit() {
+    var scale = Math.min(window.innerWidth / 2560, window.innerHeight / 1440);
+    var offsetX = (window.innerWidth - 2560 * scale) / 2;
+    var offsetY = (window.innerHeight - 1440 * scale) / 2;
+    stage.style.transform = "translate(" + offsetX + "px," + offsetY + "px) scale(" + scale + ")";
+  }
+  window.addEventListener("resize", fit);
+  fit();
+})();
+</script>

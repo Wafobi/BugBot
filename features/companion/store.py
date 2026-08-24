@@ -1,7 +1,7 @@
 """Persisted per-user state for the companion feature: custom seeds and spent bits.
 
 Everything else about presence (features/companion/feature.py's self._companions) lives in
-RAM only, like features/chat_panel's history - it says who is around right now. What lives
+RAM only, like the overlay's chat history - it says who is around right now. What lives
 here does not, because both rows track something bits were actually spent on, and losing
 that on a restart would mean charging for it twice:
 

@@ -1,4 +1,4 @@
-"""The listener the overlays hang on.
+"""The listener the overlays - and the chat mirrored alongside them - hang on.
 
 The same reversed direction as with the OBS relay, and for the same reason: the browser
 source runs in OBS on the streamer's machine, the bot on a server. So an overlay does not
@@ -9,6 +9,12 @@ The port belongs in the open network as little as the relay's does: an SSH tunne
 from the OBS machine (see docs/overlay.md). The only hurdle in front of it is the same token
 comparison as in platforms/obs/link.py - deliberately kept identical, so there is nothing
 new to check here.
+
+One listener now carries both halves of what used to be two features (overlay and
+chat_panel): the state/patch frames for the numbers, and the history/message/clear frames
+for the chat, all through the one connection a browser source opens. A client that only
+understands one half simply ignores the frame types it does not recognise - see
+features/overlay/client/chat.html.
 
 This file knows only connections and JSON frames. What goes into the frames is decided by
 features/overlay/feature.py.
@@ -48,7 +54,7 @@ class OverlayServer:
     """WebSocket server for the overlays. Holds the open connections and sends each of them
     the same thing: a complete state on connect, only changes afterwards."""
 
-    def __init__(self, token, bind="0.0.0.0", port=4457, snapshot=None, on_error=None):
+    def __init__(self, token, bind="0.0.0.0", port=4457, snapshot=None, history=None, on_error=None):
         self._token = token
         self._bind = bind
         self._port = port
@@ -56,6 +62,9 @@ class OverlayServer:
         # new connection - an overlay reloading mid-stream then sees the same as one that
         # was there from the start.
         self._snapshot = snapshot or (lambda: {})
+        # Same idea, for the chat: the recent messages as a list. A client that only shows
+        # the stat bars simply never looks at the frame this fills.
+        self._history = history or (lambda: [])
         self._on_error = on_error or (lambda message: None)
         self._server = None
         self._clients = set()
@@ -114,6 +123,7 @@ class OverlayServer:
         log.info(f"Overlay connected: {peer} ({len(self._clients)} open)")
         try:
             await connection.send(json.dumps({"type": "state", "data": self._snapshot()}))
+            await connection.send(json.dumps({"type": "history", "data": self._history()}))
             # We expect nothing from the far side. Reading runs anyway, because it is the
             # route by which a dropped connection arrives here.
             async for _ in connection:

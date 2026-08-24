@@ -1,0 +1,9 @@
+/* Theme "aurora" - cyan and magenta together, echoing the hairline on bars.html's own
+   default look. Same file as features/overlay/client/terminal/themes/aurora.css - see
+   matrix.css here for why it is its own copy rather than a shared one. */
+:root {
+  --amber: #5FEAF5;
+  --amber-soft: #F22A80;
+  --amber-dim: #6B4A6E;
+  --glow: rgba(95, 234, 245, 0.35);
+}
