@@ -50,6 +50,10 @@ TOKEN_HEADER = "X-BugBot-Token"
 TOKEN_QUERY = "token"
 
 
+async def _empty_snapshot():
+    return {}
+
+
 class OverlayServer:
     """WebSocket server for the overlays. Holds the open connections and sends each of them
     the same thing: a complete state on connect, only changes afterwards."""
@@ -58,10 +62,12 @@ class OverlayServer:
         self._token = token
         self._bind = bind
         self._port = port
-        # Callback without arguments returning the initial state as a dict. Asked on every
-        # new connection - an overlay reloading mid-stream then sees the same as one that
-        # was there from the start.
-        self._snapshot = snapshot or (lambda: {})
+        # Async callback without arguments returning the initial state as a dict. Asked on
+        # every new connection - an overlay reloading mid-stream then sees the same as one
+        # that was there from the start. Async rather than a plain callable so that a fresh
+        # connection can itself be the moment something is looked up (see OverlayFeature.
+        # snapshot(): a stream_recap query, only while live).
+        self._snapshot = snapshot or _empty_snapshot
         # Same idea, for the chat: the recent messages as a list. A client that only shows
         # the stat bars simply never looks at the frame this fills.
         self._history = history or (lambda: [])
@@ -122,7 +128,7 @@ class OverlayServer:
         peer = f"{connection.remote_address[0]}:{connection.remote_address[1]}"
         log.info(f"Overlay connected: {peer} ({len(self._clients)} open)")
         try:
-            await connection.send(json.dumps({"type": "state", "data": self._snapshot()}))
+            await connection.send(json.dumps({"type": "state", "data": await self._snapshot()}))
             await connection.send(json.dumps({"type": "history", "data": self._history()}))
             # We expect nothing from the far side. Reading runs anyway, because it is the
             # route by which a dropped connection arrives here.

@@ -54,15 +54,43 @@ the on-screen alerts are Twitch's own alertbox as a separate browser source, and
 announcing the same thing would be one too many.
 
 The fields: `live`, `started_at` (unix seconds — the page computes uptime itself), `title`,
-`game`, `viewers`, `last_follower`, `last_sub`, `last_raid`, `deaths`. `commands` carries the
-commands a normal viewer may use; `mod_only` ones are dropped before sending, because what a
-viewer cannot use they need not read.
+`game`, `viewers`, `last_follower`, `last_sub`, `last_raid`, `deaths`, `ad_break_started_at`/
+`ad_break_seconds` (see [`platforms/obs/client/terminal/ad-break.html`](../platforms/obs/client/terminal/ad-break.html)),
+`stream_recap` (see below). `commands` carries the commands a normal viewer may use; `mod_only`
+ones are dropped before sending, because what a viewer cannot use they need not read.
 
 Everything comes from bus topics — `STREAM_START`, `STREAM_SEGMENT`, `VIEWERS`,
-`PLATFORM_EVENT`, `STREAM_END`. The feature asks nobody anything and names no platform: a follow
-arrives as `PLATFORM_EVENT` with `event_type="follow"`, and a second service reporting the same
-would work unchanged. Which event type fills which field is a line in `overlay.json`
-(`event_slots`), not a line of code.
+`PLATFORM_EVENT`, `STREAM_END`, `AD_BREAK`, `SESSION_ENDED`. The feature asks nobody anything and
+names no platform: a follow arrives as `PLATFORM_EVENT` with `event_type="follow"`, and a second
+service reporting the same would work unchanged. Which event type fills which field is a line in
+`overlay.json` (`event_slots`), not a line of code.
+
+### `stream_recap`
+
+The running stream's figures so far, re-read from `STATS` (the bot's own persistent count -
+`features/stats`, backed by SQLite, not a second tally kept here) every time a browser source
+connects — see `snapshot()`/`_refresh_recap` in `features/overlay/feature.py`. A follow, sub,
+raid or cheer only ever updates `STATS` itself (it subscribes to `PLATFORM_EVENT`
+independently); there is nothing for this feature to do in that moment, only when the answer
+is actually about to be shown does it need to be current. `null` until the first connection
+while live, and until a `STATS` feature and a running session both exist — without either, it
+just never arrives, and nothing else about the overlay is affected.
+
+Deliberately **not** tied to `STREAM_END`/`SESSION_ENDED` either: those fire once the stream
+has actually stopped, and a recap that only appears then is a recap neither the audience nor
+the VOD recording ever sees. Refreshing on connect instead means whichever browser source
+shows it - typically switched to right before the stream actually ends, as a live outro -
+always triggers its own fresh read the moment it (re)connects, with nothing needed to trigger
+it beforehand.
+
+A dict: the totals — `follows`, `subs`, `resubs`, `gift_subs`, `bits`, `raids`, `raid_viewers`,
+`chat_messages` — plus `events`, the individual follows/subs/resubs/gift subs/raids/cheers
+behind those totals, oldest first (`[{type, user_name, amount}, ...]` — `type` one of
+`follow`/`sub`/`resub`/`gift_sub`/`raid`/`cheer`; anonymous cheers/gifts are counted in the
+totals but left out of `events`, nothing to name). Consumed by
+[`platforms/obs/client/terminal/stream-end.html`](../platforms/obs/client/terminal/stream-end.html),
+a recap screen that shows this while live and falls back to sample data otherwise — see its own
+comment and [`platforms/obs/client/terminal/README.md`](../platforms/obs/client/terminal/README.md).
 
 ---
 

@@ -84,16 +84,18 @@ class OverlayFeature(feature_api.Feature):
     # Offers nothing: nobody else should build on what is on screen.
     provides = frozenset()
 
-    # Both taken along if present - neither is needed in order to send. Without STORAGE the
-    # death counter lives only until the restart; without SESSIONS the start time of an
-    # already running session is missing (the next STREAM_START makes up for it).
-    optional = frozenset({feature_api.STORAGE, feature_api.SESSIONS})
+    # All three taken along if present - none is needed in order to send. Without STORAGE
+    # the death counter lives only until the restart; without SESSIONS the start time of an
+    # already running session is missing (the next STREAM_START makes up for it); without
+    # STATS there is no recap (stream_recap stays None - see _refresh_recap).
+    optional = frozenset({feature_api.STORAGE, feature_api.SESSIONS, feature_api.STATS})
 
     def __init__(self):
         self.config = runtime_config.for_package(__file__, DEFAULTS)
         self.store = None
         self._server = None
         self._bus = None
+        self._stats = None
         # Substitute storage without STORAGE: {key: value}, only until the restart.
         self._memory = {}
         self._state = {
@@ -108,6 +110,7 @@ class OverlayFeature(feature_api.Feature):
             "deaths": 0,
             "ad_break_started_at": None,  # unix seconds; the page computes the countdown itself
             "ad_break_seconds": 0,
+            "stream_recap": None,  # this stream's figures so far, from STATS - see _refresh_recap
         }
         # The chat history - see class docstring.
         self._chat_history = deque(maxlen=self._max_messages())
@@ -126,6 +129,8 @@ class OverlayFeature(feature_api.Feature):
             self._state["deaths"] = await self._read_deaths(self._deaths_key())
         else:
             log.warning("Overlay without STORAGE: the death counter starts over on every start.")
+
+        self._stats = bus.feature_with(feature_api.STATS)
 
         bus.subscribe(events.STREAM_START, self.on_stream_start)
         bus.subscribe(events.STREAM_END, self.on_stream_end)
@@ -156,12 +161,22 @@ class OverlayFeature(feature_api.Feature):
 
     # --- State ----------------------------------------------------------------------
 
-    def snapshot(self):
+    async def snapshot(self):
         """The complete state for a freshly connected browser source.
 
         The command list is part of it and is fetched fresh here rather than remembered at
         startup: commands can be renamed at runtime, and an overlay reloading afterwards
-        should show the new names."""
+        should show the new names.
+
+        stream_recap is fetched fresh here too, while live - see _refresh_recap. A follow/
+        sub/raid/cheer coming in only updates STATS (features/stats already subscribes to
+        PLATFORM_EVENT on its own); this is the one place stream_recap itself gets pulled
+        from it, on demand, exactly when a browser source connects (an OBS scene switch to
+        wherever features/overlay/client/terminal/stream-end.html lives, in particular) -
+        not on a timer, not on every event, and not on STREAM_END/SESSION_ENDED (those fire
+        once the stream has already stopped - see stream-end.html's own comment)."""
+        if self._state["live"]:
+            await self._refresh_recap()
         return {**self._state, "commands": self._public_commands()}
 
     def _public_commands(self):
@@ -232,6 +247,46 @@ class OverlayFeature(feature_api.Feature):
         slot = (self.config.section("event_slots") or {}).get(event_type)
         if slot:
             await self._patch(**{slot: user_name})
+
+    async def _refresh_recap(self):
+        """Re-reads stream_recap from STATS - the bot's own persistent count (features/stats,
+        backed by SQLite), not a second one kept here. Called from snapshot() - i.e. exactly
+        when a browser source connects, an OBS scene switch to wherever platforms/obs/client/
+        terminal/stream-end.html lives being the point of it - rather than on every follow/
+        sub/raid/cheer: those already land in STATS on their own (it subscribes to
+        PLATFORM_EVENT independently), so there is nothing for this feature to do in the
+        moment one happens - only when the answer is actually about to be shown does it need
+        to be current.
+
+        Deliberately not tied to STREAM_END/SESSION_ENDED either: those fire once the stream
+        has actually stopped, by which point neither the audience nor the VOD recording can
+        see a recap shown afterwards."""
+        if self._stats is None:
+            return
+        stats = await self._stats.stream_stats(None)  # None = the running session
+        if not stats:
+            return
+        session_id = stats.get("session_id")
+        recap_events = await self._stats.session_events(session_id)
+        await self._patch(stream_recap={
+            "follows": stats.get("follows_gained") or 0,
+            "subs": stats.get("subs_gained") or 0,
+            "resubs": stats.get("resubs") or 0,
+            "gift_subs": stats.get("gift_subs") or 0,
+            "bits": stats.get("bits_cheered") or 0,
+            "raids": stats.get("raids_in") or 0,
+            "raid_viewers": stats.get("raid_viewers_in") or 0,
+            "chat_messages": stats.get("chat_messages") or 0,
+            # Already part of the same stream_stats() answer, so free to pass on - not
+            # this feature's own figures (title/game already sit at the top level of this
+            # same state, unduplicated here; see snapshot()).
+            "peak_viewers": stats.get("peak_viewers") or 0,
+            "avg_viewers": stats.get("avg_viewers") or 0,
+            "unique_chatters": stats.get("unique_chatters") or 0,
+            # Individual follows/subs/raids/cheers, oldest first - the names behind the
+            # totals above.
+            "events": recap_events,
+        })
 
     async def on_ad_break(self, platform=None, duration_seconds=0, **_):
         """Twitch reported an ad break starting - same shape as started_at/live: one

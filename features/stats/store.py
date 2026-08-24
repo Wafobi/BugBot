@@ -262,6 +262,29 @@ class StatsStore:
             ).fetchall()
         return [(user_name, total) for user_name, total in rows]
 
+    # The kinds worth naming individually in a recap - follows/subs/raids/cheers, not the
+    # hype train (its own running total, not a per-person event) or anonymous donations
+    # (nothing to name).
+    NAMEABLE_EVENT_TYPES = ("follow", "sub", "resub", "gift_sub", "raid", "cheer")
+
+    def get_session_events(self, session_id, event_types=NAMEABLE_EVENT_TYPES):
+        """Every event of one stream, oldest first, as the individual rows behind
+        session_metrics()'s totals - who exactly followed/subbed/raided/cheered, not just how
+        many. event_types narrows which kinds come back; None means all of them, anonymous
+        donations included."""
+        if session_id is None:
+            return []
+        where_sql, params = "WHERE stream_session_id = ?", [session_id]
+        if event_types is not None:
+            where_sql += f" AND event_type IN ({','.join('?' * len(event_types))})"
+            params.extend(event_types)
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                f"SELECT event_type, user_name, amount FROM events {where_sql} ORDER BY id",
+                params,
+            ).fetchall()
+        return [{"type": t, "user_name": u, "amount": a} for t, u, a in rows]
+
     def _event_metrics(self, conn, session_id=None):
         """Computes the event figures (follows, subs, bits, raids, hype train) - with
         session_id for exactly one stream, without it for everything since the beginning.

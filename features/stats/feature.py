@@ -132,6 +132,12 @@ class StatsFeature(feature_api.Feature):
         summary["total_chat_logged"] = await self._chat_log.total_logged() if self._chat_log is not None else 0
         return summary
 
+    async def session_events(self, session_id):
+        """Every follow/sub/resub/gift_sub/raid/cheer of one stream, oldest first - who
+        exactly, not just how many. Public for the same reason as user_event_total: callers
+        reach this capability, not the store underneath it."""
+        return await self._run(self.store.get_session_events, session_id)
+
     async def user_event_total(self, event_type, user_name):
         """One user's summed amount for one event type, all-time - e.g. bits cheered. Public
         so other features can gate something on it (features/companion: only show a

@@ -1,10 +1,10 @@
 # Themes
 
-`?theme=<name>` loads `<name>.css` from this folder. All three pages here build on the same
+`?theme=<name>` loads `<name>.css` from this folder. All four pages here build on the same
 four tokens for everything that isn't plain ink/background — `--amber`, `--amber-soft`,
 `--amber-dim`, `--glow` — so one theme file recolours titlebars, badges, dots, glow and (in
-`stream-boot.html`) the rain canvas across all three at once, as long as the same `?theme=` is
-on all three source URLs.
+`stream-boot.html`/`stream-end.html`) the rain canvas across all four at once, as long as the
+same `?theme=` is on every source URL.
 
 Shipped:
 
@@ -13,8 +13,9 @@ Shipped:
 | *(none)* | the shipped look — amber CRT |
 | `matrix` | green phosphor terminal |
 | `cyan` | cool cyan, tying back to bugbot's own default accent |
+| `aurora` | cyan and magenta together, echoing the hairline on `bars.html`'s own default look |
 
-The same two files exist under
+The same three files exist under
 [`features/overlay/client/terminal/themes/`](../../../../features/overlay/client/terminal/themes/)
 for the overlay/chat/tubbi trio — kept as separate copies rather than one shared location, since
 nothing in this repo imports across a feature/platform boundary (see `docs/architecture.md`) and

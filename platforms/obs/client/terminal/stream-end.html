@@ -1,0 +1,674 @@
+<title>Stream End</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!--
+  Parameters (all optional), same convention as bugbot's bars.html/chat.html:
+
+    token=   the bot's OVERLAY_TOKEN. Without it, a sample recap plays - see
+             demo= below, same content, just without a bot to wait on.
+    host=    default 127.0.0.1 - the tunnel ends here, not at the server
+    port=    default 4457
+    theme=   load themes/<name>.css - see themes/README.md
+    demo=1   the sample recap regardless of connection state - for judging
+             the layout without touching a live setup
+
+  No dedicated "the streamer switched to this scene" trigger to wire up: whether the bot is
+  live is already the first thing every connection learns (the "state" frame, sent right on
+  connect) - and connecting is also the moment features/overlay reads "stream_recap" fresh
+  from STATS for the running session (see snapshot()/_refresh_recap in
+  features/overlay/feature.py - deliberately not on STREAM_END/SESSION_ENDED, both of which
+  fire only once the stream has already stopped). Live - wait for that real "stream_recap";
+  not live - whichever browser source ends up switched to this scene while nothing is
+  streaming just gets the sample recap instead of an empty card. No progress bar, no
+  boot-style wait-for-live gate: the recap (real or sample) reveals itself once, one line at
+  a time, the moment it is known.
+
+  Same listener as ../../../../features/overlay/client/bars.html - same OVERLAY_TOKEN. Tubbi
+  (features/overlay/client/terminal/tubbi.html) and the chat (
+  features/overlay/client/terminal/chat.html) are meant to sit in the same OBS scene as this
+  page, as their own sources - not reproduced here, see platforms/obs/client/terminal/README.md.
+-->
+
+<style>
+  /*
+    Design plan
+    Same CRT-terminal system as stream-boot.html (this file started as a copy of it), minus
+    the parts that were specific to booting: no progress bar ("keine Balken"), no
+    wait-for-live gate or typed prompt (there is nothing left to wait for once this scene is
+    switched to), no ambient glitches. What is left: the card, the log, and real numbers
+    instead of a random boot-up simulation.
+  */
+
+  :root {
+    --ink: #15100a;
+    --ink-deep: #0d0904;
+    --ink-line: #2a1f10;
+    --amber: #ffb000;
+    --amber-soft: #d99a3d;
+    --amber-dim: #8a6a34;
+    --cyan: #6fe7dd;
+    --green: #7cffb2;
+    --red: #ff5f6d;
+    --glow: rgba(255, 176, 0, 0.35);
+    --font-display: "VT323", ui-monospace, "Courier New", monospace;
+    --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--ink-deep);
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  #rain {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .vignette {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 0%, transparent 38%, rgba(13, 9, 4, 0.9) 100%);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .crt { animation: flicker 6.5s infinite steps(60); }
+  }
+  @keyframes flicker {
+    0%, 96%, 100% { opacity: 1; }
+    97% { opacity: 0.86; }
+    98% { opacity: 1; }
+    98.5% { opacity: 0.9; }
+  }
+  @keyframes blink { 50% { opacity: .15; } }
+
+  .crt {
+    position: relative;
+    width: min(600px, 92vw);
+    background: linear-gradient(180deg, var(--ink) 0%, var(--ink-deep) 100%);
+    border: 1px solid var(--ink-line);
+    border-radius: 6px;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.4),
+      0 20px 60px rgba(0, 0, 0, 0.55),
+      0 0 40px var(--glow);
+    overflow: hidden;
+  }
+
+  .titlebar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #1c140a;
+    border-bottom: 1px solid var(--ink-line);
+  }
+  .dots { display: flex; gap: 6px; flex-shrink: 0; }
+  .dots span {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--amber-dim);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.3);
+  }
+  .dots span:nth-child(1) { opacity: .55; }
+  .dots span:nth-child(2) { opacity: .75; }
+  .dots span:nth-child(3) { opacity: 1; background: var(--amber-soft); }
+  .filename {
+    flex: 1;
+    font-size: 12px;
+    color: var(--amber-dim);
+    letter-spacing: .02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    color: var(--amber-dim);
+    flex-shrink: 0;
+  }
+  .badge .pip { width: 7px; height: 7px; border-radius: 50%; background: var(--amber-dim); }
+
+  .screen { position: relative; padding: 18px 20px 20px; }
+  .screen::before {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, rgba(255,176,0,.05) 0px, rgba(255,176,0,.05) 1px, transparent 1px, transparent 3px
+    );
+    mix-blend-mode: overlay;
+    z-index: 3;
+  }
+  .screen::after {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 60px rgba(0,0,0,.65);
+    z-index: 3;
+  }
+
+  .hero { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .icon-art {
+    font-family: var(--font-body);
+    font-size: 9px;
+    line-height: 1.05;
+    color: var(--amber-dim);
+    white-space: pre;
+    flex-shrink: 0;
+  }
+
+  .hero-text h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(26px, 5.4vw, 38px);
+    line-height: 1;
+    letter-spacing: .03em;
+    color: var(--amber);
+    text-shadow: 0 0 10px var(--glow), 2px 0 0 rgba(111,231,221,.25), -2px 0 0 rgba(255,95,109,.15);
+    text-wrap: balance;
+  }
+  .hero-text .sub { margin-top: 4px; font-size: 13px; color: var(--amber-soft); }
+  .hero-text .sub .cursor {
+    display: inline-block;
+    width: 8px; height: 14px;
+    background: var(--amber);
+    vertical-align: -2px;
+    margin-left: 2px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-text .sub .cursor { animation: blink 1s steps(1) infinite; }
+  }
+
+  .log {
+    height: 230px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 2px;
+    padding: 10px 12px;
+    background: rgba(0,0,0,.28);
+    border: 1px solid var(--ink-line);
+    border-radius: 3px;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .log-line { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .log-line .ts { color: var(--amber-dim); flex-shrink: 0; }
+  .log-line .lvl {
+    flex-shrink: 0; font-weight: 600; width: 58px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .log-line .msg { color: #e9d9b8; overflow: hidden; text-overflow: ellipsis; }
+  .lvl.info { color: var(--cyan); }
+  .lvl.ok   { color: var(--green); }
+  .lvl.warn { color: var(--amber); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+  }
+</style>
+
+<!-- ?theme=<name> loads themes/<name>.css - the same file ad-break.html/stream-boot.html/
+     stream-pause.html in this folder load for the same ?theme=. See themes/README.md. -->
+<script>
+(function () {
+  var theme = new URLSearchParams(location.search).get("theme");
+  if (!theme) return;
+  var link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "themes/" + encodeURIComponent(theme) + ".css";
+  document.currentScript.insertAdjacentElement("afterend", link);
+})();
+</script>
+
+<canvas id="rain"></canvas>
+<div class="vignette"></div>
+
+<script>
+(function () {
+  var canvas = document.getElementById("rain");
+  var ctx = canvas.getContext("2d");
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var chars = "01010101010101ABCDEF01010101░▒▓01".split("");
+  var fontSize = 15;
+  var columns, drops;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    columns = Math.floor(canvas.width / fontSize);
+    drops = new Array(columns).fill(0).map(function () { return Math.random() * -50; });
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  function themeColor(token, fallback) {
+    var value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    return value || fallback;
+  }
+
+  function draw() {
+    var bg = themeColor("--ink-deep", "#0d0904");
+    var bright = themeColor("--amber-dim", "#8a6a34");
+    var dim = themeColor("--amber-dim", "#8a6a34");
+
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+    ctx.font = fontSize + "px 'IBM Plex Mono', monospace";
+    for (var i = 0; i < columns; i++) {
+      var char = chars[Math.floor(Math.random() * chars.length)];
+      var x = i * fontSize;
+      var y = drops[i] * fontSize;
+      var hit = Math.random() < 0.05;
+      ctx.globalAlpha = hit ? 0.7 : 0.25;
+      ctx.fillStyle = hit ? bright : dim;
+      ctx.fillText(char, x, y);
+      if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Slower and dimmer than stream-boot.html's rain - this screen is meant to read as
+  // settled/wound-down, not mid-boot.
+  if (reduceMotion) {
+    ctx.fillStyle = themeColor("--ink-deep", "#0d0904");
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else {
+    setInterval(draw, 90);
+  }
+})();
+</script>
+
+<script>
+(function () {
+  /* Synthesized, royalty-free - same sounds as stream-boot.html's key/plotter/blip/ready,
+     copied rather than shared (see platforms/obs/client/terminal/themes/README.md for why a
+     small copy beats a cross-file dependency in this repo). No boot chime: nothing here is
+     a machine booting, just the command someone types plus the recap printing out. */
+  var AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) {
+    var noop = function () {};
+    window.__endSound = { blip: noop, ready: noop, plotter: noop, key: noop };
+    return;
+  }
+  var ctx = new AudioCtx();
+
+  function resume() { if (ctx.state === "suspended") ctx.resume(); }
+  resume();
+  ["click", "keydown", "pointerdown"].forEach(function (evt) {
+    window.addEventListener(evt, resume, { once: true });
+  });
+
+  function tone(freq, start, duration, type, gainPeak) {
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = type || "square";
+    osc.frequency.setValueAtTime(freq, start);
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(gainPeak || 0.08, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + duration + 0.02);
+  }
+
+  function playKeyClick(backspace) {
+    var t = ctx.currentTime;
+    var bufferSize = Math.floor(ctx.sampleRate * 0.035);
+    var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    var data = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    var noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    var filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = backspace ? 1400 : 2600;
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.16, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
+    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.start(t);
+  }
+
+  function playPlotterTick() {
+    var t = ctx.currentTime;
+    var bufferSize = Math.floor(ctx.sampleRate * 0.03);
+    var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    var data = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    var noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    var filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 850 + Math.random() * 900;
+    filter.Q.value = 2.5 + Math.random() * 3.5;
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.03, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.start(t);
+  }
+
+  var blipFreq = { info: 1046.5, ok: 1318.5, warn: 392 };
+  function playBlip(level) {
+    var t = ctx.currentTime;
+    tone(blipFreq[level] || 800, t, 0.06, "square", 0.025);
+  }
+
+  function playReadyChime() {
+    var t = ctx.currentTime;
+    [392, 329.63, 261.63].forEach(function (f, i) {
+      tone(f, t + i * 0.09, 0.24, "triangle", 0.06);
+    });
+  }
+
+  window.__endSound = { blip: playBlip, ready: playReadyChime, plotter: playPlotterTick, key: playKeyClick };
+})();
+</script>
+
+<div class="crt">
+  <div class="titlebar">
+    <div class="dots"><span></span><span></span><span></span></div>
+    <div class="filename">stream_end.sh — PID 0000</div>
+    <div class="badge"><span class="pip"></span>OFFLINE</div>
+  </div>
+  <div class="screen">
+    <div class="hero">
+      <pre class="icon-art">   .  .  .
+  \  |  /
+ ── ● ──
+  /  |  \
+   .  .  .</pre>
+      <div class="hero-text">
+        <h1>STREAM VORBEI</h1>
+        <div class="sub">wafobitv@twich.tv:~$ <span id="promptText"></span><span class="cursor"></span></div>
+      </div>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var log = document.getElementById("log");
+  var maxLines = 8;
+  // title/game/started_at come from the same "state"/"patch" frames as stream_recap (see
+  // the connect() below) - not duplicated into stream_recap itself, since they already sit
+  // at the top level of the overlay's state. Duration is computed from started_at the same
+  // way bars.html computes uptime, not sent as a number of its own.
+  var liveState = {};
+
+  function ts() {
+    var d = new Date();
+    function p(n) { return String(n).padStart(2, "0"); }
+    return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+
+  // One line at a time, same principle as stream-boot.html's typingLock - just simpler,
+  // since there is only ever one source of lines here (the recap), not a simulated feed and
+  // real chat competing for the same box.
+  function renderLine(label, cssClass, text, onDone) {
+    var row = document.createElement("div");
+    row.className = "log-line";
+    row.innerHTML =
+      '<span class="ts">[' + ts() + ']</span>' +
+      '<span class="lvl ' + cssClass + '">' + label + "</span>" +
+      '<span class="msg"></span>';
+    log.appendChild(row);
+    while (log.children.length > maxLines) log.removeChild(log.firstChild);
+
+    var msgEl = row.querySelector(".msg");
+    if (reduceMotion) { msgEl.textContent = text; if (onDone) onDone(); return; }
+    var i = 0;
+    (function type() {
+      msgEl.textContent = text.slice(0, i);
+      if (i > 0 && window.__endSound && text[i - 1] !== " ") window.__endSound.plotter();
+      i++;
+      if (i <= text.length) setTimeout(type, 35 + Math.random() * 45);
+      else if (onDone) onDone();
+    })();
+  }
+
+  // The command after the shell prompt, typed out the same way stream-boot.html's is -
+  // keystroke sounds, an occasional typo backspaced and corrected, wide timing variance so
+  // it doesn't read as a metronome. Runs once, right before the recap itself - see
+  // showRecap below - the same "person types a command, then its output prints" shape as
+  // the boot sequence, just without ten seconds to budget the typing against.
+  var promptFull = "./stream_end.sh --recap";
+  var TYPO_CHARS = "qwertzuiopasdfghjklyxcvbnm";
+  var promptStarted = false;
+  var CHAR_DELAY = 130;
+  // A beat of just the blinking cursor before typing starts - same as stream-boot.html's
+  // PROMPT_START_DELAY_MS, so the card doesn't feel like it's already mid-thought the
+  // instant the scene appears.
+  var PROMPT_START_DELAY_MS = 3000;
+
+  function playKey(backspace) {
+    if (window.__endSound) window.__endSound.key(backspace);
+  }
+
+  function nextCharDelay() {
+    var delay = CHAR_DELAY * (0.4 + Math.random() * 1.2);
+    if (Math.random() < 0.125) delay += CHAR_DELAY * (1.5 + Math.random() * 3);
+    return delay;
+  }
+
+  function startPrompt(onDone) {
+    if (promptStarted) { if (onDone) onDone(); return; }
+    promptStarted = true;
+    var promptText = document.getElementById("promptText");
+    if (reduceMotion) { promptText.textContent = promptFull; if (onDone) onDone(); return; }
+
+    var i = 0;
+    function step() {
+      if (i >= promptFull.length) {
+        if (onDone) setTimeout(onDone, 400 + Math.random() * 300);
+        return;
+      }
+      var next = promptFull[i];
+      if (next !== " " && Math.random() < 0.08) {
+        var wrong = TYPO_CHARS[Math.floor(Math.random() * TYPO_CHARS.length)];
+        promptText.textContent = promptFull.slice(0, i) + wrong;
+        playKey(false);
+        setTimeout(function () {
+          promptText.textContent = promptFull.slice(0, i);
+          playKey(true);
+          setTimeout(function () {
+            i++;
+            promptText.textContent = promptFull.slice(0, i);
+            playKey(false);
+            setTimeout(step, nextCharDelay());
+          }, CHAR_DELAY * (1.2 + Math.random()));
+        }, CHAR_DELAY * (1.8 + Math.random() * 1.5));
+        return;
+      }
+      i++;
+      promptText.textContent = promptFull.slice(0, i);
+      playKey(false);
+      setTimeout(step, nextCharDelay());
+    }
+    step();
+  }
+
+  function playLevelSound(level) {
+    if (!window.__endSound) return;
+    if (level === "ready") window.__endSound.ready();
+    else window.__endSound.blip(level);
+  }
+
+  function revealLines(entries) {
+    var i = 0;
+    (function next() {
+      if (i >= entries.length) return;
+      var entry = entries[i++];
+      playLevelSound(entry[1]);
+      renderLine(entry[0], entry[1], entry[2], function () {
+        setTimeout(next, 550 + Math.random() * 450);
+      });
+    })();
+  }
+
+  function formatDuration(minutes) {
+    minutes = Math.max(0, Math.round(minutes || 0));
+    var h = Math.floor(minutes / 60), m = minutes % 60;
+    return h > 0 ? h + "h " + m + "m" : m + "m";
+  }
+
+  // The recap as a short printout, real numbers standing in for what stream-boot.html fills
+  // with a random boot-up simulation - see features/overlay/feature.py:_refresh_recap for
+  // where every field comes from.
+  var EVENT_LABEL = { follow: "FOLLOW", sub: "SUB", resub: "RESUB", gift_sub: "GIFT", raid: "RAID", cheer: "CHEER" };
+
+  function formatEventText(ev) {
+    var name = ev.user_name || "?";
+    switch (ev.type) {
+      case "follow": return name + " ist jetzt Follower";
+      case "sub":    return name + " hat abonniert";
+      case "resub":  return name + " hat verlängert";
+      case "gift_sub": return name + " hat einen Sub verschenkt";
+      case "raid":   return "Raid von " + name + " (" + (ev.amount || 0) + " Zuschauer)";
+      case "cheer":  return name + " cheerte " + (ev.amount || 0) + " Bits";
+      default:       return name;
+    }
+  }
+
+  // Header (what/how long/how many watching), then every individual follow/sub/raid/cheer
+  // by name, oldest first - see features/overlay/feature.py:_refresh_recap for where
+  // recap.events comes from - then how the chat did overall, then a sign-off. Counts alone
+  // (follows_gained etc.) are still in `recap` and used as a fallback when a category had
+  // no named events at all (STATS running, but nobody from it this stream), so the line
+  // does not just silently disappear.
+  function buildRecapLines(recap) {
+    var out = [];
+    out.push(["INFO", "info", "Archiviere Session „" + (liveState.title || "Stream") + "“ …"]);
+    if (liveState.game) out.push(["INFO", "info", "Kategorie: " + liveState.game]);
+    if (liveState.started_at) {
+      var minutes = Math.max(0, (Date.now() / 1000 - liveState.started_at) / 60);
+      out.push(["OK", "ok", "Laufzeit: " + formatDuration(minutes)]);
+    }
+    out.push(["OK", "ok", "Zuschauer: Peak " + (recap.peak_viewers || 0) + ", Ø " + (recap.avg_viewers || 0)]);
+
+    // Totals first, for the quick overview...
+    if (recap.follows) out.push(["OK", "ok", "+" + recap.follows + " neue Follower"]);
+    if (recap.subs || recap.resubs) {
+      var subLine = "+" + (recap.subs || 0) + " neue Subs";
+      if (recap.resubs) subLine += " (" + recap.resubs + " Resubs)";
+      out.push(["OK", "ok", subLine]);
+    }
+    if (recap.gift_subs) out.push(["OK", "ok", recap.gift_subs + " verschenkte Subs"]);
+    if (recap.bits) out.push(["OK", "ok", recap.bits + " Bits gecheert"]);
+    if (recap.raids) out.push(["OK", "ok", recap.raids + " Raid(s) reinbekommen (" + (recap.raid_viewers || 0) + " Zuschauer)"]);
+
+    // ...then who exactly, oldest first - see features/overlay/feature.py:_refresh_recap
+    // for where recap.events comes from.
+    (recap.events || []).forEach(function (ev) {
+      out.push([EVENT_LABEL[ev.type] || "EVENT", "ok", formatEventText(ev)]);
+    });
+
+    out.push(["INFO", "info", (recap.chat_messages || 0) + " Nachrichten von " + (recap.unique_chatters || 0) + " Leuten"]);
+    out.push(["OK", "ready", "Alles gesichert. Danke fürs Einschalten!"]);
+    return out;
+  }
+
+  var shown = false;
+  function showRecap(recap) {
+    if (shown || !recap) return;
+    shown = true;
+    setTimeout(function () {
+      startPrompt(function () { revealLines(buildRecapLines(recap)); });
+    }, PROMPT_START_DELAY_MS);
+  }
+
+  // title/game/started_at aren't part of stream_recap (see liveState above) - filled in here
+  // too, so the demo card reads the same as the real thing rather than "Stream"/no duration.
+  liveState.title = "Ultrawide-Test";
+  liveState.game = "Elden Ring";
+  liveState.started_at = Date.now() / 1000 - 187 * 60;
+
+  var DEMO_RECAP = {
+    peak_viewers: 128, avg_viewers: 94, follows: 12, subs: 5, resubs: 2, gift_subs: 3,
+    bits: 1340, raids: 2, raid_viewers: 41, chat_messages: 842, unique_chatters: 67,
+    events: [
+      { type: "follow", user_name: "teekesselchen" },
+      { type: "sub", user_name: "catgirl_dev" },
+      { type: "cheer", user_name: "Kevin", amount: 500 },
+      { type: "follow", user_name: "null_pointer" },
+      { type: "raid", user_name: "glitch_witch", amount: 41 },
+      { type: "resub", user_name: "byte_sized" },
+      { type: "gift_sub", user_name: "ModDoro" },
+      { type: "follow", user_name: "quantum_qwertz" },
+      { type: "cheer", user_name: "0x1A2B3C", amount: 100 },
+    ],
+  };
+
+  // No dedicated "switch to this scene" trigger to wire up: whether the bot is live is
+  // already the first thing every connection learns (the "state" frame, sent right on
+  // connect - see features/overlay/server.py). Live -> wait for the real stream_recap
+  // (arrives on SESSION_ENDED, see features/overlay/feature.py); not live - whether that's
+  // genuinely offline or just this source being set up/previewed - the sample recap plays
+  // instead, so the card never just sits there empty. ?demo=1 still forces it regardless of
+  // connection state, for previewing the layout without touching a live setup.
+  if (params.get("demo") === "1") {
+    showRecap(DEMO_RECAP);
+  } else {
+    var token = params.get("token") || "";
+    var host = params.get("host") || "127.0.0.1";
+    var port = params.get("port") || "4457";
+    if (!token) {
+      console.warn("Kein ?token= in der URL - zeige Demo-Recap.");
+      showRecap(DEMO_RECAP);
+    } else {
+      var liveKnown = false;
+      (function connect() {
+        var socket = new WebSocket("ws://" + host + ":" + port + "/?token=" + encodeURIComponent(token));
+        socket.onclose = function () { setTimeout(connect, 3000); };
+        socket.onerror = function () { socket.close(); };
+        socket.onmessage = function (message) {
+          var frame;
+          try { frame = JSON.parse(message.data); } catch (e) { return; }
+          if (frame.type !== "state" && frame.type !== "patch") return;
+          var data = frame.data || {};
+          Object.assign(liveState, data);
+          if (!liveKnown && "live" in data) {
+            liveKnown = true;
+            if (!data.live) showRecap(DEMO_RECAP);
+          }
+          if (data.stream_recap) showRecap(data.stream_recap);
+        };
+      })();
+    }
+  }
+})();
+</script>
+

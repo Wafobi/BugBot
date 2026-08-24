@@ -19,6 +19,25 @@ class FakeServer:
         self.broadcasts.append((type_, data))
 
 
+class FakeStats(feature_api.Feature):
+    """Stands in for the STATS feature - stream_stats()/session_events() return whatever
+    the test hands it, so on_platform_event's recap refresh (features/overlay/feature.py)
+    can be exercised without a real database."""
+
+    name = "stats"
+    provides = frozenset({feature_api.STATS})
+
+    def __init__(self, stats, events):
+        self._stats = stats
+        self._events = events
+
+    async def stream_stats(self, session_id=None):
+        return self._stats
+
+    async def session_events(self, session_id):
+        return self._events
+
+
 class FakePlatform(platform_api.Platform):
     def __init__(self, name):
         self.name = name
@@ -161,3 +180,57 @@ async def test_ad_break_patches_started_at_and_seconds(overlay):
     assert type_ == "patch"
     assert data["ad_break_seconds"] == 90
     assert before <= data["ad_break_started_at"] <= time.time()
+
+
+# --- stream_recap: re-read from STATS on snapshot() - i.e. when a browser source connects
+# - not on every follow/sub/raid/cheer (those only ever update STATS, which subscribes to
+# PLATFORM_EVENT on its own) and not on STREAM_END/SESSION_ENDED (those fire after the
+# stream has already stopped) -----------------------------------------------------------
+
+async def test_snapshot_refreshes_recap_from_stats_while_live(overlay):
+    overlay._state["live"] = True
+    overlay._stats = FakeStats(
+        stats={
+            "session_id": 1, "follows_gained": 3, "subs_gained": 1, "resubs": 0,
+            "gift_subs": 0, "bits_cheered": 50, "raids_in": 0, "raid_viewers_in": 0,
+            "chat_messages": 12,
+        },
+        events=[{"type": "follow", "user_name": "Kevin", "amount": 0}],
+    )
+    snapshot = await overlay.snapshot()
+    assert snapshot["stream_recap"]["follows"] == 3
+    assert snapshot["stream_recap"]["bits"] == 50
+    assert snapshot["stream_recap"]["events"] == [{"type": "follow", "user_name": "Kevin", "amount": 0}]
+
+
+async def test_snapshot_does_not_refresh_recap_while_offline(overlay):
+    # live defaults to False - a database read for a source that isn't even connecting to
+    # show a recap (bars.html, chat.html, ...) would be one on every single connection.
+    overlay._stats = FakeStats(stats={"session_id": 1, "follows_gained": 3}, events=[])
+    await overlay.snapshot()
+    assert overlay._state["stream_recap"] is None
+
+
+async def test_platform_event_does_not_touch_recap(overlay):
+    # The one thing on_platform_event does for a recap-worthy event is nothing: STATS
+    # already recorded it on its own. Regression guard for exactly the design this replaced
+    # (a refresh from inside on_platform_event, which meant every single connection saw
+    # stale numbers unless a follow/sub/raid/cheer happened to have just come in).
+    overlay._state["live"] = True
+    overlay._stats = FakeStats(stats={"session_id": 1, "follows_gained": 3}, events=[])
+    await overlay.on_platform_event(platform="twitch", event_type="follow", user_name="Kevin")
+    assert overlay._state["stream_recap"] is None
+
+
+async def test_snapshot_recap_refresh_without_stats_is_a_no_op(overlay):
+    # overlay fixture never sets _stats - stays None, same as a bot without STATS loaded.
+    overlay._state["live"] = True
+    await overlay.snapshot()
+    assert overlay._state["stream_recap"] is None
+
+
+async def test_snapshot_recap_refresh_without_a_running_session_is_a_no_op(overlay):
+    overlay._state["live"] = True
+    overlay._stats = FakeStats(stats=None, events=[])
+    await overlay.snapshot()
+    assert overlay._state["stream_recap"] is None
