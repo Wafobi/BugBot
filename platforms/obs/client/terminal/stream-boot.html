@@ -3,12 +3,42 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
+<!--
+  Parameters (all optional), same convention as bugbot's bars.html/chat.html:
+
+    token=   the bot's OVERLAY_TOKEN. Without it, the page sits in its quiet
+             standby look forever - rain, CRT flicker, nothing else - since
+             it has no "live" to wait for. See the boot gate below.
+    host=    default 127.0.0.1 - the tunnel ends here, not at the server
+    port=    default 4457
+    source=  which chat platform(s) get mixed into the log, comma-separated:
+             source=twitch or source=twitch,discord. Empty = everything the
+             bot sends (default) - see window.__bootChat below
+    theme=   load themes/<name>.css - see themes/README.md
+    demo=1   the same sequence and timing as the real thing, just without a
+             bot to wait on - for judging the layout, chat mixing included
+             (sample messages, see DEMO_CHAT below, not ?source= filtered)
+
+  The boot sequence (log lines, chime/blips, progress bar, ambient glitches) does not start
+  on page load: it waits for features/overlay's "live" to turn true (or ?demo=1), then three
+  seconds of just the blinking cursor, then the command after the shell prompt types itself
+  out - keystroke sounds, the occasional typo (backspaced and corrected) - and fire()s the
+  rest right after that finishes, not on a fixed timer running in parallel that could land
+  either side of it. See window.__bootGate below, which every script that makes sound or
+  shows a message waits on, and startPrompt() for the typing. Real chat mixes into the log
+  alongside the simulated lines once the gate has fired (pink "CHAT" tag) - see
+  window.__bootChat and the WebSocket in the boot gate script. The matrix rain and the CRT's
+  own flicker are not gated - those are the idle/standby look, not "booting", and keep
+  running regardless of connection state.
+-->
+
 <style>
   /*
     Design plan
     Color   ink #15100a / ink-deep #0d0904 (warm near-black terminal body),
             amber #ffb000 (phosphor primary), amber-soft #d99a3d, amber-dim #7a5a26,
-            cyan #6fe7dd (info), green #7cffb2 (ok), red #ff5f6d (error/warn)
+            cyan #6fe7dd (info), green #7cffb2 (ok), red #ff5f6d (error/warn),
+            pink #ff8fd6 (real chat, mixed into the log - see window.__bootChat)
     Type    VT323 for the hero line (authentic pixel-terminal face),
             IBM Plex Mono for log & prompt text (readable monospace, tabular figures)
     Layout  a single CRT terminal card showing a boot log: "getting ready to go
@@ -28,6 +58,7 @@
     --cyan: #6fe7dd;
     --green: #7cffb2;
     --red: #ff5f6d;
+    --pink: #ff8fd6;
     --glow: rgba(255, 176, 0, 0.35);
     --font-display: "VT323", ui-monospace, "Courier New", monospace;
     --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
@@ -230,13 +261,22 @@
   }
   .log-line { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
   .log-line .ts { color: var(--amber-dim); flex-shrink: 0; }
-  .log-line .lvl { flex-shrink: 0; font-weight: 600; width: 58px; }
+  .log-line .lvl {
+    flex-shrink: 0; font-weight: 600; width: 58px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Usernames, unlike the fixed system labels (INFO/OK/...), have no predictable length -
+     58px was fine for "DEBUG" but overlapped .msg the moment a name ran past it. Wider and
+     flexible, with the same ellipsis as a backstop for the rare name that still doesn't
+     fit. */
+  .log-line .lvl.chat { width: auto; max-width: 150px; }
   .log-line .msg { color: #e9d9b8; overflow: hidden; text-overflow: ellipsis; }
   .lvl.info  { color: var(--cyan); }
   .lvl.ok    { color: var(--green); }
   .lvl.warn  { color: var(--amber); }
   .lvl.error { color: var(--red); }
   .lvl.debug { color: var(--amber-dim); }
+  .lvl.chat  { color: var(--pink); }
 
   .progress { margin-top: 14px; font-size: 12px; color: var(--amber-soft); }
   .progress-row {
@@ -271,6 +311,192 @@
   link.rel = "stylesheet";
   link.href = "themes/" + encodeURIComponent(theme) + ".css";
   document.currentScript.insertAdjacentElement("afterend", link);
+})();
+</script>
+
+<!-- The boot gate: nothing that makes sound or shows a message runs until this fires.
+     Every such script below registers with window.__bootGate.onReady() instead of starting
+     itself directly. Fires once features/overlay first reports "live" (the same listener
+     bars.html/chat.html use - see docs/overlay.md - or ?demo=1), PROMPT_START_DELAY_MS has
+     passed, and the typed command in startPrompt() below has finished - see its onDone.
+     Reconnecting mid-standby is harmless: the gate only ever fires once, so a
+     dropped/restored connection cannot restart an already-running boot sequence. -->
+<script>
+(function () {
+  var GATE_DELAY_MS = 10000;
+  var PROMPT_START_DELAY_MS = 3000;
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var armed = [];
+  var fired = false;
+  window.__bootGate = {
+    onReady: function (fn) { if (fired) fn(); else armed.push(fn); },
+  };
+  function fire() {
+    if (fired) return;
+    fired = true;
+    document.getElementById("statusBadge").textContent = "LIVE";
+    armed.forEach(function (fn) { fn(); });
+    armed = [];
+  }
+
+  // --- The prompt, typed out - with the occasional typo, backspaced and corrected, same
+  // way an actual person types. Starts PROMPT_START_DELAY_MS after "live" is first seen (or
+  // after ?demo=1 loads) - a beat of just the blinking cursor first, same as someone
+  // pausing before they start typing, rather than the cursor and the first keystroke
+  // landing in the same instant. Not gated behind fire() itself: it is what fills the wait,
+  // not part of what it leads to. window.__bootSound may not exist yet the instant this
+  // starts (it is defined by a later script) - every call is guarded the same way addLine()
+  // below guards its own sound calls. ---
+  // Only the command types itself out - "wafobitv@twich.tv:~$ " is the shell's own prompt
+  // (static markup, see below), never something a person types.
+  var promptFull = "./stream_boot.sh --status";
+  var TYPO_CHARS = "qwertzuiopasdfghjklyxcvbnm";
+  var promptStarted = false;
+
+  function playKey(backspace) {
+    if (window.__bootSound) window.__bootSound.key(backspace);
+  }
+
+  // onDone fires fire() itself - the status flips to LIVE and the rest of the sequence
+  // starts right after the line is cleanly finished (typo corrected, no half-typed
+  // command), not on a fixed timer running in parallel that could land either side of it.
+  function startPrompt(onDone) {
+    if (promptStarted) return;
+    promptStarted = true;
+    // Looked up here, not cached at the top of this script: that runs before <div
+    // class="crt"> further down the page even exists yet, and getElementById would just
+    // return null. By the time anything actually calls startPrompt() - a WS message or a
+    // demo timeout, both asynchronous - the whole document has long since parsed.
+    var promptText = document.getElementById("promptText");
+    if (reduceMotion) { promptText.textContent = promptFull; if (onDone) onDone(); return; }
+
+    // Paced to use roughly the time budgeted for it (GATE_DELAY_MS minus the pause before
+    // typing starts) rather than typing at a natural, much faster speed and finishing early
+    // - the wait is the point, the prompt is what fills it. Typos cost extra time on top
+    // (hold + backspace pause below), so the per-character delay is budgeted a bit under
+    // the even split to leave room for a couple of them.
+    var TYPE_BUDGET_MS = Math.max(1000, GATE_DELAY_MS - PROMPT_START_DELAY_MS);
+    var CHAR_DELAY = (TYPE_BUDGET_MS * 0.85) / promptFull.length;
+
+    // Real typing is not a metronome: short bursts, and every so often a beat where a
+    // person's hands just aren't moving. A wide 0.4x-1.6x spread on every character plus an
+    // occasional (1 in 8) longer hesitation on top of that reads far less mechanical than a
+    // narrow band would.
+    function nextCharDelay() {
+      var delay = CHAR_DELAY * (0.4 + Math.random() * 1.2);
+      if (Math.random() < 0.125) delay += CHAR_DELAY * (1.5 + Math.random() * 3);
+      return delay;
+    }
+
+    var i = 0;
+    function step() {
+      if (i >= promptFull.length) {
+        // A short settle before the badge flips and the rest kicks in - finishing a
+        // command and the terminal reacting in the same instant reads as instantaneous,
+        // not as one thing causing the other.
+        if (onDone) setTimeout(onDone, 400 + Math.random() * 300);
+        return;
+      }
+      var next = promptFull[i];
+      // No typo on a space - backspacing across a word boundary reads as a stutter, not a
+      // typo.
+      if (next !== " " && Math.random() < 0.06) {
+        var wrong = TYPO_CHARS[Math.floor(Math.random() * TYPO_CHARS.length)];
+        promptText.textContent = promptFull.slice(0, i) + wrong;
+        playKey(false);
+        setTimeout(function () {
+          promptText.textContent = promptFull.slice(0, i);
+          playKey(true);
+          setTimeout(function () {
+            i++;
+            promptText.textContent = promptFull.slice(0, i);
+            playKey(false);
+            setTimeout(step, nextCharDelay());
+          }, CHAR_DELAY * (1.2 + Math.random()));
+        }, CHAR_DELAY * (1.8 + Math.random() * 1.5));
+        return;
+      }
+      i++;
+      promptText.textContent = promptFull.slice(0, i);
+      playKey(false);
+      setTimeout(step, nextCharDelay());
+    }
+    step();
+  }
+
+  // Sample chat for ?demo=1, since there is no bot to pull real messages from - routed
+  // through window.__bootChat exactly like the real thing (defined by the log-line script;
+  // always ready by DOMContentLoaded, since that script runs unconditionally, not only once
+  // a connection exists), so it exercises the same code path a real message would.
+  var DEMO_CHAT = [
+    { platform: "twitch", user_name: "Kevin", text: "moin moin! 👋" },
+    { platform: "twitch", user_name: "ModDoro", text: "willkommen im Stream", is_privileged: true },
+    { platform: "discord", user_name: "Lenaa", text: "das overlay sieht mega aus", is_subscriber: true },
+    { platform: "twitch", user_name: "xX_Gamer_Xx", text: "wie heißt der boss nochmal?" },
+    { platform: "twitch", user_name: "quantum_qwertz", text: "PogChamp" },
+  ];
+  function startDemoChat() {
+    var i = 0;
+    (function tick() {
+      window.__bootChat.push(DEMO_CHAT[i % DEMO_CHAT.length]);
+      i++;
+      setTimeout(tick, 3000 + Math.random() * 4000);
+    })();
+  }
+
+  // Everything below touches #statusBadge/#promptText, both further down the page than
+  // this script - waiting for DOMContentLoaded is what makes calling fire()/startPrompt()
+  // synchronously (the ?demo=1 branch) safe rather than a race against the parser.
+  document.addEventListener("DOMContentLoaded", function () {
+    var params = new URLSearchParams(location.search);
+    if (params.get("demo") === "1") {
+      // Same pacing as the real thing (three-second pause, typed command, fire() once it's
+      // done) rather than firing instantly - now that fire() waits on the typing actually
+      // finishing instead of a fixed timer, "instant" would just mean skipping the part
+      // that is the point of the layout being previewed.
+      setTimeout(function () { startPrompt(fire); }, PROMPT_START_DELAY_MS);
+      startDemoChat();
+      return;
+    }
+
+    var token = params.get("token") || "";
+    if (!token) { console.warn("Kein ?token= in der URL - Boot-Sequenz startet nicht."); return; }
+    var host = params.get("host") || "127.0.0.1";
+    var port = params.get("port") || "4457";
+    var sources = (params.get("source") || "")
+      .split(",").map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+    var live = false;
+    var promptTimer = null;
+
+    function connect() {
+      var socket = new WebSocket("ws://" + host + ":" + port + "/?token=" + encodeURIComponent(token));
+      socket.onclose = function () { setTimeout(connect, 3000); };
+      socket.onerror = function () { socket.close(); };
+      socket.onmessage = function (message) {
+        var frame;
+        try { frame = JSON.parse(message.data); } catch (e) { return; }
+        if (frame.type === "message") {
+          // Real chat, mixed into the boot log alongside the simulated lines - see
+          // window.__bootChat in the log-line script below. Same listener as
+          // ../../../../features/overlay/client/chat.html, same "history"/"message"/"clear"
+          // frames; only "message" (live arrivals) is used here, not the backlog.
+          var entry = frame.data || {};
+          if (!sources.length || sources.indexOf((entry.platform || "").toLowerCase()) !== -1) {
+            if (window.__bootChat) window.__bootChat.push(entry);
+          }
+          return;
+        }
+        if (frame.type !== "state" && frame.type !== "patch") return;
+        var data = frame.data || {};
+        if ("live" in data) live = !!data.live;
+        if (live && !promptTimer) {
+          promptTimer = setTimeout(function () { startPrompt(fire); }, PROMPT_START_DELAY_MS);
+        }
+      };
+    }
+    connect();
+  });
 })();
 </script>
 
@@ -342,7 +568,11 @@
 (function () {
   /* Synthesized, royalty-free sci-fi terminal sound — no samples, no modem noises. */
   var AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if (!AudioCtx) { window.__bootSound = { blip: function () {}, ready: function () {} }; return; }
+  if (!AudioCtx) {
+    var noop = function () {};
+    window.__bootSound = { blip: noop, ready: noop, glitch: noop, key: noop, plotter: noop };
+    return;
+  }
   var ctx = new AudioCtx();
 
   function resume() { if (ctx.state === "suspended") ctx.resume(); }
@@ -362,6 +592,54 @@
     osc.connect(gain).connect(ctx.destination);
     osc.start(start);
     osc.stop(start + duration + 0.02);
+  }
+
+  function playKeyClick(backspace, quiet) {
+    var t = ctx.currentTime;
+    var bufferSize = Math.floor(ctx.sampleRate * 0.035);
+    var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    var data = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    var noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    var filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = backspace ? 1400 : 2600;
+    var gain = ctx.createGain();
+    // Loud enough to actually read as a keystroke next to the rest of the boot sequence's
+    // sounds (chime peaks around 0.05-0.08, the glitch zap 0.05) - a click this short needs
+    // more headroom than a sustained tone to be perceived as anything at all.
+    gain.gain.setValueAtTime(quiet ? 0.06 : 0.16, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
+    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.start(t);
+  }
+
+  // A stepper-motor "zip" rather than a keystroke click - a short square wave sliding down
+  // in pitch, the way a pen plotter (or dot-matrix printer) sounds stepping across a line.
+  // Used for the log lines below, not the prompt - that one is a person at a keyboard, this
+  // is the machine printing its own output.
+  function playPlotterTick() {
+    // Filtered noise, not a tone: a repeated square-wave beep at this rate reads as an
+    // alarm and wears thin fast. A noise burst has no fixed pitch for the ear to lock onto,
+    // so it stays in the background the way an actual print head stepping across a line
+    // would - random per tick, which is what keeps a fast, repetitive sound from grating.
+    var t = ctx.currentTime;
+    var bufferSize = Math.floor(ctx.sampleRate * 0.03);
+    var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    var data = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    var noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    var filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 850 + Math.random() * 900;
+    filter.Q.value = 2.5 + Math.random() * 3.5;
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.03, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    noise.connect(filter).connect(gain).connect(ctx.destination);
+    noise.start(t);
   }
 
   function playBootChime() {
@@ -392,7 +670,7 @@
     var t = ctx.currentTime;
     var wave = (level === "warn" || level === "error") ? "sawtooth" : "square";
     var dur = level === "error" ? 0.18 : 0.06;
-    var peak = level === "debug" ? 0.02 : 0.045;
+    var peak = level === "debug" ? 0.01 : 0.025;
     tone(blipFreq[level] || 800, t, dur, wave, peak);
   }
 
@@ -432,8 +710,10 @@
     osc.stop(t + 0.1);
   }
 
-  playBootChime();
-  window.__bootSound = { blip: playBlip, ready: playReadyChime, glitch: playGlitchZap };
+  window.__bootSound = {
+    blip: playBlip, ready: playReadyChime, glitch: playGlitchZap, key: playKeyClick, plotter: playPlotterTick,
+  };
+  window.__bootGate.onReady(playBootChime);
 })();
 </script>
 
@@ -441,7 +721,7 @@
   <div class="titlebar">
     <div class="dots"><span></span><span></span><span></span></div>
     <div class="filename">stream_boot.sh — PID 0001</div>
-    <div class="badge"><span class="pip"></span>STANDBY</div>
+    <div class="badge"><span class="pip"></span><span id="statusBadge">STANDBY</span></div>
   </div>
   <div class="screen">
     <div class="hero">
@@ -454,7 +734,7 @@
    └─────┘</pre>
       <div class="hero-text">
         <h1>STREAM STARTET GLEICH</h1>
-        <div class="prompt">wafobitv@twich.tv:~$ ./stream_boot.sh --status<span class="cursor"></span></div>
+        <div class="prompt">wafobitv@twich.tv:~$ <span id="promptText"></span><span class="cursor"></span></div>
       </div>
     </div>
     <div class="log" id="log"></div>
@@ -471,6 +751,12 @@
 <script>
 (function () {
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Off for now - chat mixed into the log needs another look (lines were still landing
+  // on top of each other) before it goes back on. The rest of the plumbing
+  // (window.__bootChat, the WebSocket forwarding in the boot gate script, ?source=) stays
+  // in place; flipping this back to true is the whole re-enable.
+  var CHAT_IN_LOG_ENABLED = false;
 
   var lines = [
     ["INFO",  "info",  "Boote Stream-Overlay …"],
@@ -536,16 +822,65 @@
     return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
   }
 
-  function addLine() {
-    var entry = nextEntry();
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // One row-builder for both the simulated boot lines and real chat (see addChatLine
+  // below) - label/cssClass is a name already known to be safe (a fixed string, never user
+  // input, even for chat: see there), text is typed out via textContent so it needs no
+  // escaping of its own. isChat marks the row so eviction below can tell the two apart.
+  // onDone, if given, fires once the typewriter reaches the end - not on a fixed delay -
+  // which is what lets callers serialize on "actually finished" instead of "probably done
+  // by now" (see typingLock below: a message longer than the old fixed pause was enough to
+  // start a second line typing before the first had finished).
+  function renderLine(label, cssClass, text, isChat, onDone) {
     var row = document.createElement("div");
-    row.className = "log-line";
+    row.className = "log-line" + (isChat ? " log-line--chat" : "");
     row.innerHTML =
       '<span class="ts">[' + ts() + ']</span>' +
-      '<span class="lvl ' + entry[1] + '">' + entry[0] + "</span>" +
+      '<span class="lvl ' + cssClass + '">' + label + "</span>" +
       '<span class="msg"></span>';
     log.appendChild(row);
-    while (log.children.length > maxLines) log.removeChild(log.firstChild);
+    // Chat outranks the simulated lines: past maxLines, the oldest *simulated* line goes
+    // first, and only once none are left does a chat line get pushed out - a chat message
+    // scrolling away to make room for another "sudo pacman -Syu vibes" would be backwards.
+    while (log.children.length > maxLines) {
+      var victim = null;
+      for (var c = 0; c < log.children.length; c++) {
+        if (!log.children[c].classList.contains("log-line--chat")) { victim = log.children[c]; break; }
+      }
+      log.removeChild(victim || log.firstElementChild);
+    }
+
+    var msgEl = row.querySelector(".msg");
+    if (reduceMotion) { msgEl.textContent = text; if (onDone) onDone(); return; }
+    var i = 0;
+    (function type() {
+      msgEl.textContent = text.slice(0, i);
+      if (i > 0 && window.__bootSound && text[i - 1] !== " ") window.__bootSound.plotter();
+      i++;
+      if (i <= text.length) setTimeout(type, 35 + Math.random() * 45);
+      else if (onDone) onDone();
+    })();
+  }
+
+  // Only one line ever types at a time, fake or chat - addLine()/addChatLine() both hold
+  // this for the length of their own typewriter and release it (via releaseTypingLock) the
+  // moment it finishes, not on a guessed delay. loop() below checks it before starting a
+  // simulated line; drainChatQueue() checks it before starting a chat one - whichever asks
+  // first while it's free gets it, but see releaseTypingLock for why chat effectively wins
+  // ties.
+  var typingLock = false;
+  function releaseTypingLock() {
+    typingLock = false;
+    drainChatQueue(); // chat gets first refusal on the newly free slot, same priority as the eviction order above
+  }
+
+  function addLine() {
+    var entry = nextEntry();
 
     if (window.__bootSound) {
       if (entry[2] === "Alles bereit. Los geht's.") {
@@ -563,45 +898,90 @@
       }
     }
 
-    var msgEl = row.querySelector(".msg");
-    var text = entry[2];
-    if (reduceMotion) { msgEl.textContent = text; return; }
-    var i = 0;
-    (function type() {
-      msgEl.textContent = text.slice(0, i);
-      i++;
-      if (i <= text.length) setTimeout(type, 14 + Math.random() * 10);
-    })();
+    typingLock = true;
+    renderLine(entry[0], entry[1], entry[2], false, releaseTypingLock);
   }
 
-  function loop() { addLine(); setTimeout(loop, 1500 + Math.random() * 900); }
-  loop();
+  // Real chat mixed into the log - see window.__bootChat below and the WebSocket in the
+  // boot gate script above, which forwards MESSAGE_ACCEPTED-derived "message" frames here.
+  // The label is a real username - escaped, unlike the fake lines' hard-coded labels.
+  function addChatLine(entry, onDone) {
+    var name = escapeHtml(entry.user_name || "?");
+    typingLock = true;
+    renderLine(name + ":", "chat", entry.text || "", true, function () {
+      releaseTypingLock();
+      if (onDone) onDone();
+    });
+  }
+
+  // Chat gets its own queue rather than going through window.__bootGate.onReady() directly
+  // like everything else: onReady() runs every registered callback in one synchronous
+  // batch, which - with several messages queued up over the three-second pause and the
+  // prompt typing - meant all of them starting to render at the same instant. Here onReady
+  // only unlocks the drain; typingLock (not a fixed delay) is what actually paces it, both
+  // before and after that point.
+  var chatQueue = [];
+  var chatReady = false;
+  var chatDraining = false;
+  function drainChatQueue() {
+    if (!chatReady || chatDraining || typingLock || !chatQueue.length) return;
+    chatDraining = true;
+    addChatLine(chatQueue.shift(), function () {
+      setTimeout(function () { chatDraining = false; }, 700 + Math.random() * 900);
+    });
+  }
+  window.__bootGate.onReady(function () { chatReady = true; drainChatQueue(); });
+  window.__bootChat = {
+    push: function (entry) {
+      if (!CHAT_IN_LOG_ENABLED) return; // see the flag at the top of this script
+      chatQueue.push(entry);
+      drainChatQueue();
+    },
+  };
+
+  var loopTimer = null;
+  function loop() {
+    if (typingLock || chatQueue.length) {
+      // Something is already typing, or chat is waiting for its turn (which wins ties) -
+      // don't start a simulated line on top of it, just check back shortly.
+      loopTimer = setTimeout(loop, 400 + Math.random() * 400);
+      return;
+    }
+    addLine();
+    loopTimer = setTimeout(loop, 2200 + Math.random() * 1600);
+  }
 
   var frames = ["⠇","⠏","⠟","⠿","⠾","⠼","⠸","⠰","⠠","⠀"];
   var fIdx = 0;
   var spinnerLabel = document.getElementById("spinnerLabel");
-  if (!reduceMotion) {
+  function startSpinner() {
+    if (reduceMotion) { spinnerLabel.textContent = "⠇ sende Signal …"; return; }
     setInterval(function () {
       fIdx = (fIdx + 1) % frames.length;
       spinnerLabel.textContent = frames[fIdx] + " sende Signal …";
     }, 100);
-  } else {
-    spinnerLabel.textContent = "⠇ sende Signal …";
   }
 
   var barFill = document.getElementById("barFill");
   var pct = document.getElementById("pct");
   var current = 4;
   function stepBar() {
-    var target = 94 + Math.random() * 5;
-    if (Math.random() < 0.12) target = 70 + Math.random() * 15;
-    current += (target - current) * 0.35;
+    // Slower, and less of a straight climb to a near-perfect number - a weak signal
+    // struggling to lock on reads better than cruising smoothly to 94-99%.
+    var target = 88 + Math.random() * 8;
+    if (Math.random() < 0.22) target = 45 + Math.random() * 25;
+    current += (target - current) * 0.1;
     var shown = Math.round(current);
     barFill.style.width = shown + "%";
     pct.textContent = shown + "%";
-    setTimeout(stepBar, 700 + Math.random() * 500);
+    setTimeout(stepBar, 1100 + Math.random() * 900);
   }
-  stepBar();
+
+  window.__bootGate.onReady(function () {
+    loop();
+    startSpinner();
+    stepBar();
+  });
 })();
 </script>
 
@@ -662,7 +1042,9 @@
   window.__bootGlitch = { trigger: triggerGlitch };
 
   /* Sparse, irregular ambient glitches — most glitches should instead be
-     triggered by ERROR/WARN log lines (see addLine() below), not this timer. */
+     triggered by ERROR/WARN log lines (see addLine() below), not this timer.
+     Gated like everything else that makes sound (triggerGlitch plays one via
+     window.__bootSound.glitch) - no zaps during the quiet standby look. */
   function scheduleAmbientGlitch() {
     var delay = 15000 + Math.random() * 20000;
     setTimeout(function () {
@@ -670,6 +1052,6 @@
       scheduleAmbientGlitch();
     }, delay);
   }
-  scheduleAmbientGlitch();
+  window.__bootGate.onReady(scheduleAmbientGlitch);
 })();
 </script>
