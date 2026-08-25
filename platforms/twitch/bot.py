@@ -1215,13 +1215,22 @@ async def _send_command_reply(reply):
     """Send a command's reply into the chat. Feature commands may return an Announcement too
     (Discord builds an embed from it) - on IRC that becomes a single line. Line breaks have to
     go in the process: an IRC message is single-line, and multi-line replies (e.g. !top) would
-    otherwise arrive truncated."""
+    otherwise arrive truncated.
+
+    Also published as MESSAGE_ACCEPTED so features/overlay's chat panel shows it - a command
+    reply never goes through _handle_privmsg (it's the bot's own outgoing message, not
+    something Twitch delivered back to us), so without this it would go out on Twitch chat but
+    never appear on the overlay."""
     if not reply:
         return
     if isinstance(reply, platform_api.Announcement):
         reply = reply.as_text(max_fields=3)
     separator = text("reply.separator")
-    await send_twitch_chat(separator.join(part.strip() for part in reply.splitlines() if part.strip()))
+    reply_text = separator.join(part.strip() for part in reply.splitlines() if part.strip())
+    if await send_twitch_chat(reply_text):
+        await events.bus.publish(events.MESSAGE_ACCEPTED, message=feature_api.Message(
+            platform=NAME, user_name=config.TWITCH_CHANNEL, text=reply_text, is_privileged=True,
+        ))
 
 
 async def _record_command(name, user_name):
@@ -1360,7 +1369,7 @@ async def _handle_privmsg(line):
         await _send_command_reply(await own_mod[command_word](ctx, user_name, arg_text))
     elif msg_lower in mod_commands:
         await _record_command(msg_lower, user_name)
-        await send_twitch_chat(await _render(mod_commands[msg_lower], user_name))
+        await _send_command_reply(await _render(mod_commands[msg_lower], user_name))
     elif command_word in dynamic:
         await _record_command(command_word, user_name)
         await _send_command_reply(await dynamic[command_word](ctx, user_name, arg_text))
@@ -1372,4 +1381,4 @@ async def _handle_privmsg(line):
         await _send_command_reply(await feature_command.handler(msg))
     elif msg_lower in commands_map:
         await _record_command(msg_lower, user_name)
-        await send_twitch_chat(await _render(commands_map[msg_lower], user_name))
+        await _send_command_reply(await _render(commands_map[msg_lower], user_name))

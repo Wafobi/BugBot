@@ -310,14 +310,15 @@
 
 <script>
 (function () {
-  /* Synthesized, royalty-free - same sounds as stream-boot.html's key/plotter/blip/ready,
-     copied rather than shared (see platforms/obs/client/terminal/themes/README.md for why a
-     small copy beats a cross-file dependency in this repo). No boot chime: nothing here is
-     a machine booting, just the command someone types plus the recap printing out. */
+  /* Synthesized, royalty-free - key/plotter/blip copied from stream-boot.html's sounds
+     rather than shared (see platforms/obs/client/terminal/themes/README.md for why a small
+     copy beats a cross-file dependency in this repo). ready is its own longer fanfare here,
+     not stream-boot.html's short chime - see playReadyChime below. No boot chime: nothing
+     here is a machine booting, just the command someone types plus the recap printing out. */
   var AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) {
     var noop = function () {};
-    window.__endSound = { blip: noop, ready: noop, plotter: noop, key: noop };
+    window.__endSound = { blip: noop, ready: noop, plotter: noop, key: noop, bgm: noop };
     return;
   }
   var ctx = new AudioCtx();
@@ -385,13 +386,53 @@
   }
 
   function playReadyChime() {
+    // Original 8-bit "quest complete" fanfare for the final recap line - hand-picked notes,
+    // no existing melody quoted, so it's nerdy without being anyone's copyrighted jingle.
+    // Ascending arpeggio, an accented flourish an octave up, then a held landing chord.
     var t = ctx.currentTime;
-    [392, 329.63, 261.63].forEach(function (f, i) {
-      tone(f, t + i * 0.09, 0.24, "triangle", 0.06);
+    var run = [523.25, 659.25, 783.99, 1046.50]; // C5 E5 G5 C6
+    run.forEach(function (f, i) {
+      tone(f, t + i * 0.075, 0.12, "square", 0.05);
+    });
+    var flourishStart = t + run.length * 0.075 + 0.02;
+    var flourish = [783.99, 1046.50, 1318.51]; // G5 C6 E6
+    flourish.forEach(function (f, i) {
+      tone(f, flourishStart + i * 0.09, 0.16, "square", 0.055);
+    });
+    var chordStart = flourishStart + flourish.length * 0.09 + 0.05;
+    [523.25, 659.25, 783.99, 1046.50].forEach(function (f) { // C5 E5 G5 C6 landing chord
+      tone(f, chordStart, 0.5, "triangle", 0.05);
     });
   }
 
-  window.__endSound = { blip: playBlip, ready: playReadyChime, plotter: playPlotterTick, key: playKeyClick };
+  // Looping background ambience - an original 8-step A-minor arpeggio (two bars, repeated),
+  // hand-written like playReadyChime above, not quoting any existing tune. Quiet triangle
+  // notes, low register - meant to sit under the typing/blip/plotter sounds, not compete with
+  // them. Starts once (see startPrompt() in the script below, which calls this exactly when
+  // the recap starts typing) and just keeps looping via setTimeout for as long as the page
+  // stays open - there is no natural "stop" moment on a screen meant to sit there until OBS
+  // switches away from it.
+  var BGM_STEP_MS = 260;
+  var BGM_PATTERN = [
+    110.00, null, 164.81, null, 130.81, null, 164.81, null, // A2 . E3 . C3 . E3 .
+    110.00, null, 174.61, null, 130.81, null, 146.83, null, // A2 . F3 . C3 . D3 .
+  ];
+  var bgmStarted = false;
+  function playBGM() {
+    if (bgmStarted) return;
+    bgmStarted = true;
+    var step = 0;
+    (function nextStep() {
+      var freq = BGM_PATTERN[step % BGM_PATTERN.length];
+      if (freq) tone(freq, ctx.currentTime, (BGM_STEP_MS / 1000) * 0.9, "triangle", 0.02);
+      step++;
+      setTimeout(nextStep, BGM_STEP_MS);
+    })();
+  }
+
+  window.__endSound = {
+    blip: playBlip, ready: playReadyChime, plotter: playPlotterTick, key: playKeyClick, bgm: playBGM,
+  };
 })();
 </script>
 
@@ -487,6 +528,7 @@
   function startPrompt(onDone) {
     if (promptStarted) { if (onDone) onDone(); return; }
     promptStarted = true;
+    if (window.__endSound) window.__endSound.bgm();
     var promptText = document.getElementById("promptText");
     if (reduceMotion) { promptText.textContent = promptFull; if (onDone) onDone(); return; }
 

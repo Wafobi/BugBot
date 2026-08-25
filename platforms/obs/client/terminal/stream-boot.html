@@ -323,7 +323,7 @@
      dropped/restored connection cannot restart an already-running boot sequence. -->
 <script>
 (function () {
-  var GATE_DELAY_MS = 10000;
+  var GATE_DELAY_MS = 5000;
   var PROMPT_START_DELAY_MS = 3000;
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -364,6 +364,7 @@
   function startPrompt(onDone) {
     if (promptStarted) return;
     promptStarted = true;
+    if (window.__bootSound) window.__bootSound.bgm();
     // Looked up here, not cached at the top of this script: that runs before <div
     // class="crt"> further down the page even exists yet, and getElementById would just
     // return null. By the time anything actually calls startPrompt() - a WS message or a
@@ -570,7 +571,7 @@
   var AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) {
     var noop = function () {};
-    window.__bootSound = { blip: noop, ready: noop, glitch: noop, key: noop, plotter: noop };
+    window.__bootSound = { blip: noop, ready: noop, glitch: noop, key: noop, plotter: noop, bgm: noop };
     return;
   }
   var ctx = new AudioCtx();
@@ -710,8 +711,31 @@
     osc.stop(t + 0.1);
   }
 
+  // Looping background ambience - same original A-minor arpeggio as stream-end.html's (see
+  // that file for why it's this pattern), copied rather than shared for the same reason as
+  // every other sound here. Starts once the prompt actually begins typing (see startPrompt()
+  // above) and keeps looping via setTimeout for as long as the page stays open.
+  var BGM_STEP_MS = 260;
+  var BGM_PATTERN = [
+    110.00, null, 164.81, null, 130.81, null, 164.81, null, // A2 . E3 . C3 . E3 .
+    110.00, null, 174.61, null, 130.81, null, 146.83, null, // A2 . F3 . C3 . D3 .
+  ];
+  var bgmStarted = false;
+  function playBGM() {
+    if (bgmStarted) return;
+    bgmStarted = true;
+    var step = 0;
+    (function nextStep() {
+      var freq = BGM_PATTERN[step % BGM_PATTERN.length];
+      if (freq) tone(freq, ctx.currentTime, (BGM_STEP_MS / 1000) * 0.9, "triangle", 0.02);
+      step++;
+      setTimeout(nextStep, BGM_STEP_MS);
+    })();
+  }
+
   window.__bootSound = {
     blip: playBlip, ready: playReadyChime, glitch: playGlitchZap, key: playKeyClick, plotter: playPlotterTick,
+    bgm: playBGM,
   };
   window.__bootGate.onReady(playBootChime);
 })();
