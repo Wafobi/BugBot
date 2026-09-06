@@ -1,0 +1,290 @@
+<title>Video Frame</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!--
+  The window frame tubbi.html puts around the avatar, put around a video
+  instead. Nothing else: no token, no connection, no data.
+
+  The frame fills the whole browser source, so its size and position are
+  set in OBS, not in here - drop the source over the video capture and
+  scale it. The picture shows through the transparent middle; the capture
+  belongs *under* this source in the scene list.
+
+  How far the cut-out sits inside the source, if you want to place the
+  capture by numbers rather than by eye:
+
+      left/right   1px          (the border)
+      top          1px + 40px   (border + titlebar, --tb-h)
+      bottom       1px + 34px   (border + footer, --ft-h)
+
+  With ?footer=0 the bottom inset is 1px, with ?titlebar=0 the top one is.
+
+  Parameters (all optional), same convention as chat.html/tubbi.html next
+  to this file:
+
+    theme=     load themes/<name>.css - see themes/README.md. The same
+               file chat.html and tubbi.html load, so one parameter
+               restyles all of them at once
+    title=     titlebar text (default "video.feed")
+    now=       footer text, e.g. now=Die%20Ringe%20der%20Macht%20S02E05
+    badge=     text at the top right of the titlebar. Nothing by default -
+               ?badge=▶%20LIVE puts one there
+    titlebar=0 drop the titlebar, footer=0 drop the footer
+    crt=1      scanlines and a vignette over the picture too. Off by
+               default - legibility of the picture beats the CRT bit
+    demo=1     colour bars in the cut-out and the cut-out's pixel size in
+               the footer, for setting it up without a capture behind it
+    t.NAME=    override any single design token from :root below, e.g.
+               ?t.tb-h=56px for a taller titlebar or ?t.frame-radius=0px
+               for square corners
+
+  No spaces in values (rgba(4,5,14,1) survives a URL, "rgba(4, 5, 14, 1)"
+  tears the query apart).
+-->
+
+<style>
+  :root {
+    --ink-line: #2a1f10;
+    --amber: #ffb000;
+    --amber-dim: #8a6a34;
+    --amber-soft: #d99a3d;
+    --glow: rgba(255, 176, 0, 0.35);
+    --font-display: "VT323", ui-monospace, "Courier New", monospace;
+    --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+
+    --tb-h: 40px;          /* titlebar */
+    --ft-h: 34px;          /* footer */
+    --frame-radius: 6px;
+    --titlebar-bg: #1c140a;
+    --footer-bg: #161007;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent; /* the capture underneath is the picture */
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* Fills the browser source. Only the titlebar and the footer are opaque;
+     everything between them is a hole. */
+  .frame {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--ink-line);
+    border-radius: var(--frame-radius);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.4),
+      0 14px 40px rgba(0, 0, 0, 0.5),
+      0 0 30px var(--glow);
+    overflow: hidden;
+  }
+
+  .titlebar {
+    height: var(--tb-h);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    background: var(--titlebar-bg);
+    border-bottom: 1px solid var(--ink-line);
+  }
+  .dots { display: flex; gap: 6px; flex-shrink: 0; }
+  .dots span {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--amber-dim);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.3);
+  }
+  .dots span:nth-child(1) { opacity: .55; }
+  .dots span:nth-child(2) { opacity: .75; }
+  .dots span:nth-child(3) { opacity: 1; background: var(--amber-soft); }
+  .filename {
+    flex: 1;
+    min-width: 0;
+    font-size: 15px;
+    color: var(--amber-dim);
+    letter-spacing: .02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .badge {
+    flex-shrink: 0;
+    font-family: var(--font-display);
+    font-size: 17px;
+    letter-spacing: .14em;
+    color: var(--amber);
+    text-shadow: 0 0 12px var(--glow);
+  }
+
+  .cutout {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    background: transparent;
+  }
+  /* ?crt=1 - both of these sit *over* the picture, which is why they are
+     off unless asked for. */
+  .cutout.crt::before {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, rgba(255,176,0,.05) 0px, rgba(255,176,0,.05) 1px, transparent 1px, transparent 3px);
+  }
+  .cutout.crt::after {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 40px rgba(0,0,0,.55);
+  }
+
+  .footer {
+    height: var(--ft-h);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 16px;
+    background: var(--footer-bg);
+    border-top: 1px solid var(--ink-line);
+    font-size: 13px;
+    color: var(--amber-soft);
+    font-variant-numeric: tabular-nums;
+  }
+  .footer .now { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .footer .now b { color: var(--amber); font-weight: 500; }
+  .footer .geom { flex-shrink: 0; color: var(--amber-dim); }
+
+  /* ?demo=1 - a stand-in picture, so the frame can be judged with nothing
+     behind it. Colour bars rather than a flat fill: their edges make the
+     cut-out's real bounds obvious. */
+  .bars {
+    position: absolute; inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(90deg,
+      #c0c0c0 0 14.28%, #c0c000 14.28% 28.57%, #00c0c0 28.57% 42.85%,
+      #00c000 42.85% 57.14%, #c000c0 57.14% 71.42%, #c00000 71.42% 85.71%,
+      #0000c0 85.71% 100%);
+    opacity: .72;
+  }
+  .bars span {
+    padding: 10px 26px;
+    background: rgba(8,6,3,.82);
+    box-shadow: 0 0 30px var(--glow);
+    font-family: var(--font-display);
+    font-size: 34px;
+    letter-spacing: .18em;
+    color: var(--amber);
+  }
+  :root[data-demo="1"] .bars { display: flex; }
+
+  :root[data-titlebar="0"] .titlebar { display: none; }
+  :root[data-footer="0"] .footer { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+  }
+</style>
+
+<!-- ?theme=<name> loads themes/<name>.css - the same file chat.html and tubbi.html in this
+     folder load. See themes/README.md. -->
+<script>
+(function () {
+  var theme = new URLSearchParams(location.search).get("theme");
+  if (!theme) return;
+  var link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "themes/" + encodeURIComponent(theme) + ".css";
+  document.currentScript.insertAdjacentElement("afterend", link);
+})();
+</script>
+
+<script>
+(function () {
+  /* Switches land as data-* on the root element and ?t.<token>= as an
+     inline style - both before the frame below paints, so nothing flashes
+     up that was meant to be off. Inline style beats every stylesheet rule
+     regardless of load order, which is what makes ?t.tb-h= win over a
+     ?theme= file too. */
+  var params = new URLSearchParams(location.search);
+  var root = document.documentElement;
+
+  if (params.get("demo") === "1") root.setAttribute("data-demo", "1");
+  if (params.get("titlebar") === "0") root.setAttribute("data-titlebar", "0");
+  if (params.get("footer") === "0") root.setAttribute("data-footer", "0");
+
+  params.forEach(function (value, key) {
+    if (key.indexOf("t.") === 0) root.style.setProperty("--" + key.slice(2), value);
+  });
+})();
+</script>
+
+<div class="frame">
+  <div class="titlebar">
+    <div class="dots"><span></span><span></span><span></span></div>
+    <div class="filename" id="title">video.feed</div>
+    <div class="badge" id="badge" hidden></div>
+  </div>
+  <div class="cutout" id="cutout">
+    <div class="bars"><span>VIDEO SOURCE</span></div>
+  </div>
+  <div class="footer">
+    <div class="now" id="now">▶ PLAYING</div>
+    <div class="geom" id="geom"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  var title = params.get("title");
+  if (title) document.getElementById("title").textContent = title;
+
+  var badge = params.get("badge");
+  if (badge) {
+    var badgeEl = document.getElementById("badge");
+    badgeEl.textContent = badge;
+    badgeEl.hidden = false;
+  }
+
+  var now = params.get("now");
+  if (now) document.getElementById("now").innerHTML = "▶ <b>" + escapeHtml(now) + "</b>";
+
+  if (params.get("crt") === "1") document.getElementById("cutout").classList.add("crt");
+
+  /* The cut-out's own pixel size, so the capture underneath can be matched
+     to it without measuring. Only in demo: a readout that keeps updating
+     has no business being on air. */
+  if (params.get("demo") === "1") {
+    var cutout = document.getElementById("cutout");
+    var geom = document.getElementById("geom");
+    function report() {
+      geom.textContent = Math.round(cutout.clientWidth) + "×" + Math.round(cutout.clientHeight);
+    }
+    window.addEventListener("resize", report);
+    report();
+  }
+})();
+</script>

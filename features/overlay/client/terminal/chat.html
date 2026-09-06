@@ -17,6 +17,11 @@
              source=twitch,discord. Empty = everything the bot sends (default)
     demo=1   the old mock/randomized lines, no connection - for judging the
              layout without a bot running
+    frame=0  drop the window around the chat: no titlebar, no border, no
+             card background, no CRT overlay, no shell prompt. Only the
+             chat lines are left, floating over whatever is behind them.
+             They get a text shadow in exchange, because without the dark
+             card the log has to stay readable over a bright picture too
     theme=   load themes/<name>.css - see themes/README.md
 
     t.NAME=  override any single design token from :root below, e.g.
@@ -194,6 +199,29 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* ?frame=0 - the window goes, the log stays. Everything that made the
+     card an object is switched off in one place rather than being spread
+     over the rules above, so the framed look stays the untouched default. */
+  :root[data-frame="0"] .chat-frame {
+    background: none;
+    border-color: transparent;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  :root[data-frame="0"] .titlebar { display: none; }
+  :root[data-frame="0"] .chat-screen { padding: 0; }
+  :root[data-frame="0"] .chat-screen::before,
+  :root[data-frame="0"] .chat-screen::after { display: none; }
+  /* The shell prompt goes with the window: it is part of the terminal
+     fiction, and a prompt with no terminal around it reads as a leftover.
+     Wanted back? Drop this one rule. */
+  :root[data-frame="0"] .chat-input { display: none; }
+  /* Without the dark card behind it, the shadow is what carries legibility -
+     a bright picture underneath would otherwise swallow the text. */
+  :root[data-frame="0"] .chat-log {
+    text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.8);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
   }
@@ -220,6 +248,7 @@
      un-overridden default. */
   var params = new URLSearchParams(location.search);
   var root = document.documentElement;
+  if (params.get("frame") === "0") root.setAttribute("data-frame", "0");
   params.forEach(function (value, key) {
     if (key.indexOf("t.") === 0) root.style.setProperty("--" + key.slice(2), value);
   });

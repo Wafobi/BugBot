@@ -1,0 +1,405 @@
+<title>Video Frame und Background</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!--
+  Die Übersicht zu video.html daneben: wofür die vier Layouts gedacht sind,
+  wie die Ultrawide-Rechnung aufgeht, und jeder Parameter in einer Tabelle.
+  Im Browser öffnen, nicht in OBS:
+
+    file:///pfad/zu/bugbot/features/overlay/client/terminal/video_preview.html
+
+  Die Kacheln sind keine Screenshots, sondern video.html selbst in einem
+  skalierten iframe (?demo=1) - gleiche Idee wie ../preview.html und
+  ../chat_preview.html eine Ebene höher. Ändert sich video.html, ändert sich
+  diese Seite mit, und es liegt kein eingebackenes Bild daneben, das
+  irgendwann nicht mehr stimmt.
+-->
+
+<style>
+  :root {
+    --ground: #0a0705;
+    --panel: #14100b;
+    --line: #2e2312;
+    --amber: #ffb000;
+    --amber-soft: #d99a3d;
+    --dim: #8a6a34;
+    --cream: #f0e3c8;
+    --body: #cbbc9d;
+    --font-display: "VT323", ui-monospace, "Courier New", monospace;
+    --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+  }
+
+  /* Eine festgelegte Welt statt light/dark: die Seite ist die Anleitung zu
+     einem Bernstein-CRT-Overlay und trägt dessen Phosphor. Deshalb sind
+     Hintergrund und jede Farbe explizit gesetzt. */
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--cream);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px 96px; }
+
+  a { color: var(--amber); }
+  a:focus-visible, .tile a:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+
+  /* ---------- Kopf ---------- */
+
+  .masthead { position: relative; padding: 64px 0 40px; overflow: hidden; }
+  .masthead::after {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, rgba(255,176,0,.045) 0px, rgba(255,176,0,.045) 1px, transparent 1px, transparent 4px);
+  }
+  .path { font-size: 12.5px; letter-spacing: .06em; color: var(--dim); margin: 0 0 14px; }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(46px, 8vw, 82px);
+    font-weight: 400;
+    line-height: .95;
+    letter-spacing: .02em;
+    margin: 0;
+    color: var(--amber);
+    text-shadow: 0 0 26px rgba(255,176,0,.28);
+    text-wrap: balance;
+  }
+  .lede { max-width: 60ch; margin: 20px 0 0; color: #d8caab; }
+  .lede strong { color: var(--cream); font-weight: 600; }
+
+  /* ---------- Abschnitte ---------- */
+
+  section { padding-top: 56px; }
+  h2 {
+    font-family: var(--font-display);
+    font-size: 34px;
+    font-weight: 400;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--amber-soft);
+    margin: 0 0 6px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .sub { max-width: 66ch; margin: 14px 0 26px; color: var(--body); }
+
+  /* ---------- Szenenkacheln ----------
+     Jede Kachel ist video.html selbst, 2560x1440 gerendert und per
+     transform auf die Kachelbreite geschrumpft - siehe fitTiles() unten. */
+
+  .scenes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
+    gap: 26px;
+  }
+  .scene { display: flex; flex-direction: column; gap: 12px; }
+
+  .tile {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #0b0b0e;
+  }
+  .tile iframe {
+    position: absolute;
+    top: 0; left: 0;
+    width: 2560px;
+    height: 1440px;
+    border: 0;
+    transform-origin: top left;
+  }
+
+  .scene-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .scene-head h3 {
+    font-family: var(--font-display);
+    font-size: 27px;
+    font-weight: 400;
+    letter-spacing: .1em;
+    color: var(--amber);
+    margin: 0;
+  }
+  .chip {
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--dim);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 9px;
+  }
+  .scene-head .open { margin-left: auto; font-size: 12.5px; }
+  .scene p { margin: 0; color: var(--body); }
+
+  /* ---------- Code ---------- */
+
+  code, .code { font-family: var(--font-body); font-variant-ligatures: none; }
+  .code {
+    display: block;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber-soft);
+    padding: 11px 14px;
+    font-size: 13px;
+    color: var(--cream);
+  }
+  .code .q { color: var(--amber); }
+  p code, td code, li code {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 1px 5px;
+    font-size: 13px;
+    color: var(--amber-soft);
+  }
+
+  /* ---------- Einrichtung ---------- */
+
+  .setup {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 34px;
+    align-items: start;
+  }
+  ol.steps {
+    list-style: none;
+    counter-reset: step;
+    margin: 0; padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  ol.steps li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 14px;
+  }
+  ol.steps li::before {
+    content: counter(step);
+    font-family: var(--font-display);
+    font-size: 30px;
+    line-height: 1;
+    color: var(--amber);
+    border-top: 2px solid var(--amber);
+    padding-top: 6px;
+  }
+  ol.steps h4 { margin: 0 0 4px; font-size: 15px; font-weight: 600; color: var(--cream); }
+  ol.steps p { margin: 0 0 8px; color: var(--body); font-size: 14px; }
+
+  /* Der Guide-Ausschnitt: dasselbe iframe, nur größer skaliert und auf die
+     obere linke Ecke beschnitten, wo die Tabelle steht. */
+  .guide-window {
+    position: relative;
+    width: 100%;
+    height: 132px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: #0b0b0e;
+  }
+  .guide-window iframe {
+    position: absolute;
+    top: -18px; left: -18px;
+    width: 2560px; height: 1440px;
+    border: 0;
+    transform: scale(.5);
+    transform-origin: top left;
+  }
+  .cap { margin: 10px 0 0; font-size: 12.5px; color: var(--dim); }
+
+  /* ---------- Parameter ---------- */
+
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td {
+    text-align: left;
+    padding: 9px 16px 9px 0;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--dim);
+    font-weight: 600;
+    border-bottom-color: var(--amber-soft);
+  }
+  td:first-child { white-space: nowrap; color: var(--amber); font-weight: 500; }
+  td:nth-child(2) { white-space: nowrap; color: var(--dim); }
+  td:last-child { color: var(--body); }
+
+  /* ---------- Themes ---------- */
+
+  .themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .swatch { border: 1px solid var(--line); background: var(--panel); padding: 14px 16px; }
+  .swatch .bar { display: flex; gap: 6px; margin-bottom: 10px; }
+  .swatch .bar i { width: 26px; height: 10px; border-radius: 2px; }
+  .swatch b {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: .08em;
+    color: var(--cream);
+  }
+  .swatch span { font-size: 12.5px; color: var(--dim); }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--dim);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+  }
+
+  @media (max-width: 760px) {
+    .setup, .scenes { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="path">features/overlay/client/terminal/video.html · background.html</p>
+    <h1>Rahmen und Grund</h1>
+    <p class="lede">
+      Ein Video läuft irgendwo auf dem Desktop — OBS zeigt es im selben Fensterrahmen, den
+      <code>tubbi.html</code> um den Avatar legt. Zwei Quellen, absichtlich getrennt:
+      <strong>der Rahmen</strong> mit transparenter Mitte, und <strong>der Grund</strong>
+      darunter. Zusammengesetzt wird in OBS, nicht in der URL. Kein Token, keine Verbindung,
+      keine Daten.
+    </p>
+  </header>
+
+  <section>
+    <h2>Zwei Quellen</h2>
+    <p class="sub">
+      Der Rahmen füllt seine Browser-Quelle aus — wo er sitzt und wie groß er ist, entscheidet
+      OBS, nicht die URL. Der Hintergrund ist eine eigene Quelle ganz unten im Stapel. Dazwischen
+      liegt das Video als Fenster- oder Bildschirmaufnahme. Die Kacheln sind keine Screenshots,
+      sondern die Seiten selbst.
+    </p>
+
+    <div class="scenes">
+
+      <article class="scene">
+        <div class="tile">
+          <iframe title="video.html, Rahmen mit Demo-Balken" scrolling="no" loading="lazy"
+                  src="video.html?demo=1&amp;now=Watch%20Party"></iframe>
+        </div>
+        <div class="scene-head">
+          <h3>video.html</h3>
+          <span class="chip">demo=1</span>
+          <a class="open" href="video.html?demo=1&amp;now=Watch%20Party" target="_blank" rel="noopener">groß öffnen →</a>
+        </div>
+        <p>Titelleiste, Aussparung, Fußzeile — sonst nichts. Die Farbbalken sind
+          <code>?demo=1</code>, im Betrieb liegt da die Capture-Quelle darunter. Rechts unten
+          steht die Pixelgröße der Aussparung, damit die Capture ohne Messen dazu passt.</p>
+      </article>
+
+      <article class="scene">
+        <div class="tile">
+          <iframe title="background.html, Raster" scrolling="no" loading="lazy"
+                  src="background.html"></iframe>
+        </div>
+        <div class="scene-head">
+          <h3>background.html</h3>
+          <span class="chip">pattern=grid</span>
+          <a class="open" href="background.html" target="_blank" rel="noopener">groß öffnen →</a>
+        </div>
+        <p>Der Grund darunter: Verlauf, Glühen, Raster, Scanlines, Vignette — alles aus
+          Gradients, keine Bilddatei. Färbt sich mit <code>?theme=</code> um.</p>
+      </article>
+
+      <article class="scene">
+        <div class="tile">
+          <iframe title="background.html, Punkte in Cyan" scrolling="no" loading="lazy"
+                  src="background.html?pattern=dots&amp;theme=cyan"></iframe>
+        </div>
+        <div class="scene-head">
+          <h3>pattern=dots</h3>
+          <span class="chip">theme=cyan</span>
+          <a class="open" href="background.html?pattern=dots&amp;theme=cyan" target="_blank" rel="noopener">groß öffnen →</a>
+        </div>
+        <p>Dasselbe mit Punktraster und dem Cyan-Theme. <code>?t.grid=96px</code> zieht das
+          Raster auseinander, <code>?t.pattern-alpha=.28</code> macht es kräftiger.</p>
+      </article>
+
+      <article class="scene">
+        <div class="tile">
+          <iframe title="background.html, Schräglinien in Aurora" scrolling="no" loading="lazy"
+                  src="background.html?pattern=lines&amp;theme=aurora&amp;t.grid=28px"></iframe>
+        </div>
+        <div class="scene-head">
+          <h3>pattern=lines</h3>
+          <span class="chip">theme=aurora</span>
+          <a class="open" href="background.html?pattern=lines&amp;theme=aurora&amp;t.grid=28px" target="_blank" rel="noopener">groß öffnen →</a>
+        </div>
+        <p>Schräge Hachur, hier eng gestellt. <code>?pattern=plain</code> lässt nur Verlauf und
+          Glühen stehen.</p>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>In OBS</h2>
+    <p class="sub">
+      Drei Quellen, von oben nach unten in der Quellenliste. Die Aussparung des Rahmens sitzt
+      innen <code>1px</code> links und rechts, <code>1px&nbsp;+&nbsp;40px</code> oben
+      (Rand plus Titelleiste) und <code>1px&nbsp;+&nbsp;34px</code> unten (Rand plus Fußzeile).
+      <code>?titlebar=0</code> und <code>?footer=0</code> nehmen die jeweilige Leiste — und den
+      Abstand — wieder weg.
+    </p>
+    <span class="code">video.html        ← Rahmen, transparente Mitte
+Fenster-/Bildschirmaufnahme  ← das Video
+background.html   ← Grund, ganz unten</span>
+  </section>
+
+  <footer>
+    <span>video.html · background.html · video_preview.html (diese Seite)</span>
+    <span>Details: terminal/README.md · themes/README.md</span>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  /* Jede Kachel zeigt video.html in seinem eigenen 2560x1440-Koordinaten-
+     system - hier nur heruntergerechnet auf die Kachelbreite. Das iframe
+     behält 2560x1440, damit die fitStage()-Rechnung darin auf Skalierung 1
+     kommt und die Kachel wirklich zeigt, was in OBS ankommt. */
+  var tiles = document.querySelectorAll(".tile");
+  function fit() {
+    tiles.forEach(function (tile) {
+      var frame = tile.querySelector("iframe");
+      if (frame) frame.style.transform = "scale(" + tile.clientWidth / 2560 + ")";
+    });
+  }
+  window.addEventListener("resize", fit);
+  fit();
+})();
+</script>

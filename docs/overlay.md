@@ -36,6 +36,9 @@ features/overlay/
     preview.html       the same page in a scaled frame, for looking at it in a browser
     chat.html          the chat, as its own browser source — see Chat below
     chat_preview.html  chat.html in a stage with a stand-in gameplay background
+    terminal/          an alternate skin on the same listener — chat card and avatar
+                        frame, plus video.html/background.html, which need no
+                        connection at all, see terminal/README.md
 ```
 
 ---
