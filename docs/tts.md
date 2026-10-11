@@ -48,12 +48,6 @@ Create a custom variable `tts_count`, add a trigger (event *Time interval*, 2 s)
 `$(custom:tts_count)` into a button's text — optionally with an internal *Check boolean
 expression* feedback `$(custom:tts_count) > 0` to colour it while something waits.
 
-### OBS dock
-
-`http://127.0.0.1:4457/tts/dock?token=<TTS_TOKEN>` as a custom browser dock (Docks → Custom
-Browser Docks): the queue with each waiting sentence, ▶ play and ⏭ skip, and whether a player is
-connected.
-
 ## Where it runs
 
 Everything happens on the server, inside the bot's container: Piper makes the speech there.
