@@ -658,7 +658,8 @@
     });
 
     out.push(["INFO", "info", (recap.chat_messages || 0) + " Nachrichten von " + (recap.unique_chatters || 0) + " Leuten"]);
-    if (recap.tts_queued) out.push(["OK", "ok", "TTS: " + (recap.tts_played || 0) + " von " + recap.tts_queued + " vorgelesen"]);
+    // Lines other modules add to the report (STREAM_REPORT, e.g. TTS) - shown as they come.
+    (recap.extra || []).forEach(function (line) { out.push(["OK", "ok", String(line)]); });
     out.push(["OK", "ready", "Alles gesichert. Danke fürs Einschalten!"]);
     return out;
   }
@@ -681,7 +682,7 @@
   var DEMO_RECAP = {
     peak_viewers: 128, avg_viewers: 94, follows: 12, subs: 5, resubs: 2, gift_subs: 3,
     bits: 1340, raids: 2, raid_viewers: 41, chat_messages: 842, unique_chatters: 67,
-    tts_queued: 9, tts_played: 7,
+    extra: ["TTS: 7 von 9 vorgelesen"],
     events: [
       { type: "follow", user_name: "teekesselchen" },
       { type: "sub", user_name: "catgirl_dev" },

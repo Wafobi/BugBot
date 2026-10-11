@@ -86,10 +86,6 @@ _EVENT_COUNT_METRICS = {
     "sub": "subs_gained",
     "resub": "resubs",
     "raid": "raids_in",
-    # Reported by platforms/twitch/features/tts: queued = every message that went into the
-    # read-out queue, played = the ones actually released and spoken.
-    "tts_queued": "tts_queued",
-    "tts_played": "tts_played",
 }
 _EVENT_SUM_METRICS = {
     "cheer": "bits_cheered",
@@ -302,7 +298,12 @@ class StatsStore:
 
         metrics = dict.fromkeys(set(_EVENT_COUNT_METRICS.values()) | set(_EVENT_SUM_METRICS.values()), 0)
         metrics["hypetrain_level"] = 0
+        # Every event type with its count, named or not - what a STREAM_REPORT contributor
+        # (another feature reporting its own events, e.g. TTS) reads its figures from,
+        # without this feature knowing any of them.
+        metrics["event_counts"] = {}
         for event_type, count, total, highest in rows:
+            metrics["event_counts"][event_type] = count
             if event_type in _EVENT_COUNT_METRICS:
                 metrics[_EVENT_COUNT_METRICS[event_type]] += count
             if event_type in _EVENT_SUM_METRICS:

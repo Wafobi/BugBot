@@ -118,6 +118,9 @@
     "http.no_client": "keine TTS-Browserquelle verbunden",
     "http.error": "Fehler beim Erzeugen - nochmal versuchen oder /skip",
     "nothing_to_say": "Da bleibt nichts zum Vorlesen übrig (nur Emojis oder Links?) - es wurde nichts abgebucht.",
-    "offline": "TTS gibt es nur während des Streams - es wurde nichts abgebucht."
+    "offline": "TTS gibt es nur während des Streams - es wurde nichts abgebucht.",
+    "report.name": "🔊 TTS",
+    "report.value": "`{played}` von `{queued}` vorgelesen",
+    "report.line": "TTS: {played} von {queued} vorgelesen"
   }
 }

@@ -106,8 +106,9 @@ class TtsFeature(feature_api.Feature):
         feature_api.STORAGE, feature_api.SESSIONS,
     })
 
-    # Its page on the settings website (voices, pool, speech, record) - see settings_tool.
-    provides = frozenset({feature_api.SETTINGS_TOOL})
+    # Its page on the settings website (voices, pool, speech, record) - see settings_tool -
+    # and its own line in the stream report (stream_report).
+    provides = frozenset({feature_api.SETTINGS_TOOL, feature_api.STREAM_REPORT})
 
     def __init__(self):
         self.config = runtime_config.for_package(__file__, DEFAULTS)
@@ -185,6 +186,25 @@ class TtsFeature(feature_api.Feature):
             # admin page lives on the settings website now (settings_tool).
             for path, handler in TtsAdmin(self).routes().items():
                 self._overlay.add_route(path, handler, env.TTS_TOKEN)
+
+    # --- Stream report (STREAM_REPORT) ------------------------------------------------
+
+    def stream_report(self, session_stats):
+        """Its own part of a stream's report (Discord report, !streamstats, the end screen):
+        how many messages were queued and how many played - read from the generic per-type
+        event counts features/stats keeps (tts_queued/tts_played, see _report). Nothing for
+        a stream without TTS."""
+        counts = (session_stats or {}).get("event_counts") or {}
+        queued, played = int(counts.get("tts_queued", 0)), int(counts.get("tts_played", 0))
+        if not queued:
+            return {}
+        return {
+            "fields": (feature_api.Field(
+                self.config.text("report.name"), self.config.text("report.value", played=played, queued=queued),
+                inline=True,
+            ),),
+            "lines": [self.config.text("report.line", played=played, queued=queued)],
+        }
 
     # --- Settings website (SETTINGS_TOOL) ----------------------------------------------
 

@@ -39,8 +39,9 @@ class FakeStats(feature_api.Feature):
 
 
 class FakePlatform(platform_api.Platform):
-    def __init__(self, name):
+    def __init__(self, name, capabilities=frozenset()):
         self.name = name
+        self.capabilities = frozenset(capabilities)
 
     async def start(self):
         return
@@ -58,8 +59,10 @@ def make_bus():
     # comment) - a real bus with both platforms registered is needed so the "chat.platforms"
     # config actually gets to filter, the same as it does in the running bot.
     bus = events.EventBus()
-    bus.register(FakePlatform("twitch"))
-    bus.register(FakePlatform("discord"))
+    # With their real capabilities: the chat's default scope is ["stream"] - the platform
+    # that streams, Twitch - not a name.
+    bus.register(FakePlatform("twitch", {platform_api.CHAT, platform_api.STREAM}))
+    bus.register(FakePlatform("discord", {platform_api.ANNOUNCE}))
     return bus
 
 

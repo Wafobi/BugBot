@@ -1,22 +1,19 @@
 {
   "_comment": "Hot-Reload: Änderungen greifen ohne Neustart (siehe core/runtime_config.py). Was hier steht, entscheidet, was im Bild landet - die Adresse und das Geheimnis des Lauschers stehen dagegen in der .env (OVERLAY_TOKEN, OVERLAY_PORT, OVERLAY_BIND), weil Geheimnisse in keiner Konfigurationsdatei etwas verloren haben.",
-
   "_comment_chat": "Der Chat, der über denselben Lauscher mitläuft (vormals das eigene Feature chat_panel, siehe client/chat.html) - eigenes Geheimnis/Port gibt es dafür nicht mehr, OVERLAY_TOKEN/-PORT/-BIND gelten für beides.",
   "chat": {
-    "_comment_platforms": "Von welchen Plattformen der Chat im Overlay mitläuft. Default: nur Twitch - das Overlay läuft sichtbar im Stream, Discord-Nachrichten sollen dort nicht ungefragt mit auftauchen. Leer = von allen, die Nachrichten melden.",
-    "platforms": ["twitch"],
-
+    "_comment_platforms": "Von welchen Plattformen der Chat im Overlay mitläuft. Default: [\"stream\"] = die Plattform, die streamt (hier Twitch) – als Fähigkeit statt als Name, damit es auch nach einem Dienstwechsel stimmt. Das Overlay läuft sichtbar im Stream, Discord-Nachrichten sollen dort nicht ungefragt mit auftauchen. Leer = von allen, die Nachrichten melden.",
+    "platforms": [
+      "stream"
+    ],
     "_comment_hide_commands": "Zeilen, die mit ! beginnen, landen nicht im Chat-Teil - sie sind an den Bot gerichtet, nicht ans Publikum.",
     "hide_commands": true,
-
     "_comment_max_messages": "Wie viele zuletzt gesendete Nachrichten eine neu verbindende (oder neu ladende) Browser-Quelle zum Aufholen bekommt.",
     "max_messages": 50
   },
-
   "command_names": {
     "_comment": "Befehle umbenennen, ihnen Aliase geben oder sie abschalten: \"!tod\": \"!death\" | \"!tod\": [\"!death\", \"!rip\"] | \"!tod\": false"
   },
-
   "_comment_event_slots": "Welcher Ereignistyp welches Feld im Bild füllt. Links steht der event_type, wie ihn die Plattform auf PLATFORM_EVENT publiziert, rechts der Name des Feldes im Overlay. Ein neuer Ereignistyp braucht damit keine Codeänderung, sondern eine Zeile hier - und ein Feld, das die HTML-Seite kennt (last_follower, last_sub, last_raid).",
   "event_slots": {
     "follow": "last_follower",
@@ -25,16 +22,12 @@
     "gift_sub": "last_sub",
     "raid": "last_raid"
   },
-
   "texts": {
     "_comment": "Alles, was der Bot im Chat sagt. Die Platzhalter in geschweiften Klammern füllt der Code - {count} ist überall der Stand des Zählers nach der Aktion.",
-
     "_comment_spiel": "Gezählt wird je Spiel: die Kategorie, die die Plattform meldet, ist der Schlüssel. Jede Meldung gibt es deshalb zweimal - mit {game}, wenn ein Spiel bekannt ist, und als '..._no_game' für alles außerhalb (offline, oder keine Kategorie gesetzt). Ein einzelner Text mit {game} ginge nicht: ohne Spiel stünde dort ein Platzhalterwort und der Satz läse sich schief.",
-
     "help.show": "zeigt den Todeszähler des laufenden Spiels",
     "help.add": "zählt einen Tod dazu",
     "help.set": "setzt den Todeszähler auf einen Wert",
-
     "deaths.show": "☠️ {game}: schon {count} mal gestorben.",
     "deaths.show_no_game": "☠️ Schon {count} mal gestorben.",
     "deaths.added": "☠️ Und tschüss. Das war Nummer {count} in {game}.",
@@ -43,7 +36,6 @@
     "deaths.set_no_game": "☠️ Todeszähler steht jetzt auf {count}.",
     "_comment_unknown": "Antwort auf '!tode <Spiel>' für ein Spiel ohne Zähler. Hier darf bewusst KEIN {game} hinein: der Name käme aus dem Chat, und was der Bot ausspricht, geht an der Moderation vorbei - '!tode <Schimpfwort>' wäre sonst ein Weg, ihn Beliebiges sagen zu lassen.",
     "deaths.unknown_game": "☠️ Zu dem Spiel habe ich keinen Zähler.",
-
     "deaths.usage": "So geht das: !todsetzen <Zahl>"
   }
 }

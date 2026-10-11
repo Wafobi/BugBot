@@ -29,11 +29,14 @@ Checked before anything is saved:
 """
 
 import asyncio
+import ast
 import json
 import logging
+import sys
 from pathlib import Path
 
 from core import feature as feature_api
+from core import registry
 from core import runtime_config
 
 from . import config as env
@@ -44,9 +47,6 @@ ROLE = "settings"
 ROUTE = "/settings"
 PAGE = Path(__file__).parent / "client" / "settings.html"
 
-# Files that must not be changed at runtime: where the database lives is decided once, at
-# startup - pointing it elsewhere mid-run would only split the data.
-READ_ONLY = {"sql_db.json"}
 
 
 def _type_name(value):
@@ -97,7 +97,7 @@ class SettingsFeature(feature_api.Feature):
             return
         overlay.add_route(ROUTE, self.page, env.SETTINGS_TOKEN)
         overlay.add_role(
-            ROLE, lambda: [("theme", self.config.get("theme", "aurora")), ("tools", self.tools()), ("files", self.files())],
+            ROLE, lambda: [("theme", self.config.get("theme", "aurora")), ("modules", self.modules()), ("files", self.files())],
             token=env.SETTINGS_TOKEN, on_message=self.handle,
         )
         log.info(f"Settings website on the overlay listener: {ROUTE}")
@@ -120,6 +120,100 @@ class SettingsFeature(feature_api.Feature):
     def tools(self):
         return [tool.settings_tool_info() for tool in self._tools.values()]
 
+    # --- Modules ---------------------------------------------------------------------------
+    # The website is laid out like the bot: platforms with the features they own, then the
+    # neutral features - read live from the bus and the registry, never listed here. Each
+    # module brings what it has: its JSON (found next to its code) and its tool pages.
+
+    @staticmethod
+    def _describe(obj):
+        """First paragraph of the module's docstring - or, for the files that open with a
+        comment block instead (# feature.py / # what it is ...), of that block."""
+        module = sys.modules.get(type(obj).__module__)
+        path = Path(getattr(module, "__file__", "") or "")
+        text = (module.__doc__ or "") if module else ""
+        if not text.strip() and path.is_file():
+            lines = []
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.startswith("#"):
+                    break
+                lines.append(line.lstrip("#").strip())
+            if lines and lines[0].endswith(".py"):
+                lines = lines[1:]
+            text = "\n".join(lines)
+        if not text.strip():
+            try:
+                text = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8"))) or ""
+            except (OSError, SyntaxError):
+                text = ""
+        paragraph = text.strip().split("\n\n")[0]
+        return " ".join(paragraph.split())
+
+    @staticmethod
+    def _package_dir(obj):
+        module = sys.modules.get(type(obj).__module__)
+        file = getattr(module, "__file__", None)
+        return Path(file).resolve().parent if file else None
+
+    def _module_entry(self, kind, obj, configs):
+        directory = self._package_dir(obj)
+        config = next((c for c in configs if directory is not None and c.path.resolve().parent == directory), None)
+        tools = [tool.settings_tool_info() for tool in self._tools.values() if tool is obj]
+        entry = {
+            "id": f"{kind}:{obj.name}",
+            "kind": kind,
+            "name": obj.name,
+            "loaded": True,
+            "description": self._describe(obj),
+            "path": directory.relative_to(runtime_config.ROOT).as_posix() if directory else "",
+            "config": self._id(config) if config is not None else None,
+            "overridden": bool(config.overrides) if config is not None else False,
+            "tools": tools,
+        }
+        if kind == "platform":
+            entry["capabilities"] = sorted(obj.capabilities)
+        else:
+            entry.update(owner=obj.owner, provides=sorted(obj.provides), requires=sorted(obj.requires),
+                         optional=sorted(obj.optional))
+        return entry
+
+    def modules(self):
+        """[platform, its features..., platform, ..., neutral features...] - each a dict
+        with what the module is (description, capabilities), whether it is loaded, its
+        settings file and its tool pages. Packages present but not loaded (BUGBOT_FEATURES /
+        BUGBOT_PLATFORMS, or a missing token) are listed too, marked as such."""
+        bus = self.bus
+        if bus is None:
+            return []
+        configs = runtime_config.all_configs()
+        platforms = [self._module_entry("platform", p, configs) for p in bus.platforms]
+        features = [self._module_entry("feature", f, configs) for f in bus.features]
+        loaded_platforms = {p["name"] for p in platforms}
+        loaded_features = {f["name"] for f in features}
+        for name in registry.platform_names():
+            if name not in loaded_platforms:
+                platforms.append({"id": f"platform:{name}", "kind": "platform", "name": name, "loaded": False,
+                                  "description": "", "config": None, "tools": [], "capabilities": []})
+        for package, name in registry.feature_sources():
+            if name not in loaded_features:
+                features.append({"id": f"feature:{name}", "kind": "feature", "name": name, "loaded": False,
+                                 "owner": registry.owner_of(package), "description": "", "config": None,
+                                 "tools": [], "provides": [], "requires": [], "optional": []})
+        ordered = []
+        for platform in sorted(platforms, key=lambda p: p["name"]):
+            ordered.append(platform)
+            ordered.extend(sorted((f for f in features if f.get("owner") == platform["name"]), key=lambda f: f["name"]))
+        ordered.extend(sorted((f for f in features if not f.get("owner")), key=lambda f: f["name"]))
+        return ordered
+
+    @staticmethod
+    def _read_only(config):
+        """A module declares it itself, in its own JSON: "_settings": {"read_only": true}
+        (sql_db.json does - where the database lives is decided at startup). This website
+        names no module."""
+        meta = config.base.get("_settings")
+        return isinstance(meta, dict) and meta.get("read_only") is True
+
     def files(self):
         """Every editable file: id (path in the repo), group, and whether it is overridden."""
         result = []
@@ -132,7 +226,7 @@ class SettingsFeature(feature_api.Feature):
                 "group": "Plattformen" if parts[0] == "platforms" and parts[2] != "features" else "Features",
                 "owner": parts[1] if parts[0] == "platforms" else "",
                 "overridden": bool(config.overrides),
-                "read_only": config.path.name in READ_ONLY,
+                "read_only": self._read_only(config),
             })
         return result
 
@@ -142,13 +236,13 @@ class SettingsFeature(feature_api.Feature):
             "base": config.base,
             "overrides": config.overrides,
             "history": config.history()[:20],
-            "read_only": config.path.name in READ_ONLY,
+            "read_only": self._read_only(config),
         }
 
     # --- Checks ---------------------------------------------------------------------------
 
     def _check(self, config, path, value):
-        if config.path.name in READ_ONLY:
+        if self._read_only(config):
             raise SettingsError(f"{config.path.name} ist nur lesbar")
         if not path or not all(isinstance(k, str) and k for k in path):
             raise SettingsError("ungültiger Pfad")
@@ -214,6 +308,8 @@ class SettingsFeature(feature_api.Feature):
         op = request.get("op")
         if op == "files":
             return self.files()
+        if op == "modules":
+            return self.modules()
         config = self._config(str(request.get("file") or ""))
         path = request.get("path") or []
         if op == "get":
@@ -224,7 +320,7 @@ class SettingsFeature(feature_api.Feature):
             config.set_override(path, value)
             log.info(f"Settings: {self._id(config)} {'.'.join(path)} changed")
         elif op == "reset":
-            if config.path.name in READ_ONLY:
+            if self._read_only(config):
                 raise SettingsError(f"{config.path.name} ist nur lesbar")
             config.reset_override(path)
             log.info(f"Settings: {self._id(config)} {'.'.join(path)} reset to default")

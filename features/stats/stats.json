@@ -38,8 +38,6 @@
     "session.chat.entry": "{platform} {messages}",
     "session.support.name": "💜 Support",
     "session.support.value": "⭐ `{subs}` Subs · 🎁 `{gift_subs}` Gift-Subs · 💎 `{bits}` Bits · ❤️ `{follows}` Follows",
-    "session.tts.name": "🔊 TTS",
-    "session.tts.value": "`{played}` von `{queued}` vorgelesen",
     "session.extras.name": "🚀 Sonstiges",
     "session.extras.value": "🚨 `{raids}` Raids (`{raid_viewers}` Zuschauer) · 🚂 Hype-Train Level `{hypetrain_level}`",
     "session.none": "📊 Noch keine Stream-Session erfasst.",

@@ -23,11 +23,14 @@
 # three were available on Twitch only.
 
 import asyncio
+import logging
 from dataclasses import replace
 
 from core import events, feature as feature_api, runtime_config
 
 from .store import HIGHSCORE_METRICS, StatsStore
+
+log = logging.getLogger(__name__)
 
 # Recorded only while a stream runs - offline chatter, commands, mod actions and events are
 # not counted (see _live). With one exception: cheers. Every viewer's spendable bits balance
@@ -246,10 +249,7 @@ class StatsFeature(feature_api.Feature):
                 bits=session_stats["bits_cheered"], follows=session_stats["follows_gained"],
             ),
         ]
-        if session_stats.get("tts_queued"):
-            fields.append(replace(self._field(
-                "session.tts", played=session_stats.get("tts_played", 0), queued=session_stats["tts_queued"],
-            ), inline=True))
+        fields.extend(self._contributions(session_stats).get("fields", ()))
         if session_stats["raids_in"] or session_stats["hypetrain_level"]:
             fields.append(self._field(
                 "session.extras",
@@ -257,6 +257,27 @@ class StatsFeature(feature_api.Feature):
                 hypetrain_level=session_stats["hypetrain_level"],
             ))
         return tuple(fields)
+
+    def _contributions(self, session_stats):
+        """What other features add to a stream's report (STREAM_REPORT capability): their
+        own fields and lines, from the same figures - e.g. TTS reading its counts out of
+        session_stats["event_counts"]. Collected, never named: this feature knows none of
+        them. A failing contributor costs only its own lines."""
+        fields, lines = [], []
+        for feature in (self.bus.features_with(feature_api.STREAM_REPORT) if self.bus is not None else ()):
+            try:
+                part = feature.stream_report(session_stats) or {}
+            except Exception as error:  # one broken contributor must not cost the report
+                log.warning(f"stream report of {feature.name} failed: {error}")
+                continue
+            fields.extend(part.get("fields") or ())
+            lines.extend(part.get("lines") or ())
+        return {"fields": tuple(fields), "lines": lines}
+
+    def report_lines(self, session_stats):
+        """The contributors' plain-text lines for a stream - the end screen's recap shows
+        them (features/overlay)."""
+        return self._contributions(session_stats)["lines"]
 
     def summary_fields(self, summary):
         """The all-time numbers as fields - usable from outside too, e.g. for the Discord

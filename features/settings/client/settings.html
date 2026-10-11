@@ -34,14 +34,14 @@
   nav .sub { color: var(--dim); font-size: 11px; margin-bottom: 14px; }
   nav h2 { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .12em; margin: 16px 6px 6px; }
   nav button {
-    display: flex; justify-content: space-between; align-items: center; gap: 6px; width: 100%;
+    display: flex; justify-content: flex-start; align-items: center; gap: 6px; width: 100%;
     text-align: left; font: inherit; color: var(--text); background: none; border: 1px solid transparent;
     border-radius: 4px; padding: 6px 8px; cursor: pointer;
   }
   nav button:hover { background: var(--ink-2); }
   nav button.active { border-color: var(--line-2); background: var(--ink-2); color: var(--cyan); }
   nav button .owner { color: var(--dim); font-size: 11px; }
-  nav button .dot { color: var(--magenta); }
+  nav button .dot { color: var(--magenta); margin-left: auto; }
   nav .links { margin-top: 20px; padding: 0 6px; font-size: 12px; line-height: 1.8; }
 
   main { flex: 1; height: 100%; overflow-y: auto; padding: 18px 26px 80px; }
@@ -87,6 +87,20 @@
   #toast { position: fixed; right: 20px; bottom: 20px; background: var(--ink-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 10px 14px; font-size: 13px; opacity: 0; transition: opacity .2s; }
   #toast.show { opacity: 1; } #toast.err { border-color: var(--red); color: var(--red); } #toast.ok { border-color: var(--green); color: var(--green); }
   .empty { color: var(--dim); padding: 40px 0; text-align: center; }
+  nav button.child { padding-left: 24px; font-size: 12.5px; }
+  nav button.child::before { content: "└"; color: var(--line-2); margin-right: 6px; }
+  nav button.off { opacity: .45; }
+  #module { margin: -4px 0 14px; }
+  #module .desc { color: var(--text); opacity: .85; line-height: 1.5; margin: 0 0 8px; max-width: 900px; }
+  #module .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .badge { font-size: 11px; border: 1px solid var(--line-2); border-radius: 10px; padding: 2px 8px; color: var(--dim); }
+  .badge.on { color: var(--green); border-color: rgba(124,255,178,.35); }
+  .badge.off { color: var(--red); border-color: rgba(255,95,109,.35); }
+  .badge b { color: var(--text); font-weight: normal; }
+  #tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+  #tabs button { font: inherit; color: var(--dim); background: none; border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; padding: 7px 14px; cursor: pointer; }
+  #tabs button.active { color: var(--cyan); border-color: var(--line); background: var(--ink); margin-bottom: -1px; }
+  #tabs button .dot { color: var(--magenta); }
   iframe.tool { width: 100%; height: calc(100vh - 110px); border: none; background: var(--ink-deep); }
   .toollink { display: inline-block; margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--ink); cursor: pointer; color: var(--cyan); }
 </style>
@@ -108,7 +122,9 @@
     <input type="search" id="search" placeholder="suchen … (Strg+K)">
     <button id="undo" title="Die vorherige Version dieser Datei wiederherstellen">↶ Rückgängig</button>
   </header>
-  <div id="content"><div class="empty">Datei links auswählen.</div></div>
+  <div id="module"></div>
+  <div id="tabs"></div>
+  <div id="content"><div class="empty">Modul links auswählen.</div></div>
 </main>
 <div id="toast"></div>
 
@@ -120,7 +136,10 @@
   var token = new URLSearchParams(location.search).get("token") || "";
   var $ = function (id) { return document.getElementById(id); };
 
-  var socket, nextId = 1, pending = {}, files = [], tools = [], current = null, state = null;
+  // current = the settings file being edited (its id, for get/set/reset), state = its data;
+  // modules = the bot's modules as the registry has them (see SettingsFeature.modules).
+  var socket, nextId = 1, pending = {}, files = [], modules = [], current = null, state = null;
+  var currentModule = null, currentTab = null;
 
   // --- Theme --------------------------------------------------------------------------------
   // The overlays' colour worlds (features/overlay/client/terminal/themes, client/themes). The
@@ -195,8 +214,14 @@
     socket.onmessage = function (message) {
       var frame = JSON.parse(message.data);
       if (frame.type === "theme") applyTheme(frame.data);
-      else if (frame.type === "tools") { tools = frame.data; renderFiles(); }
-      else if (frame.type === "files") { files = frame.data; renderFiles(); if (!current && files.length) open(location.hash.slice(1) || files[0].id); }
+      else if (frame.type === "modules") { modules = frame.data; renderNav(); }
+      else if (frame.type === "files") {
+        files = frame.data;
+        if (!currentModule && modules.length) {
+          var hash = decodeURIComponent(location.hash.slice(1)).split("/");
+          openModule(hash[0], hash[1]);
+        }
+      }
       else if (frame.type === "reply" && pending[frame.id]) {
         var p = pending[frame.id]; delete pending[frame.id];
         frame.ok ? p.resolve(frame.data) : p.reject(new Error(frame.error));
@@ -211,65 +236,104 @@
     });
   }
 
-  // --- File list -------------------------------------------------------------------------
-  function renderFiles() {
+  // --- Modules ------------------------------------------------------------------------------
+  // The navigation is the bot: each platform with the features it owns underneath, then the
+  // neutral features - exactly as the registry loaded them. A module's page has a tab for its
+  // settings file (if it has one) and one per tool page it brings along.
+  function moduleById(id) { return modules.find(function (m) { return m.id === id; }); }
+
+  function renderNav() {
     var box = $("files");
     box.innerHTML = "";
-    ["Plattformen", "Features"].forEach(function (group) {
-      var h = document.createElement("h2"); h.textContent = group; box.appendChild(h);
-      files.filter(function (f) { return f.group === group; }).forEach(function (f) {
-        var b = document.createElement("button");
-        b.dataset.id = f.id;
-        b.className = current === f.id ? "active" : "";
-        b.innerHTML = "<span></span>";
-        b.firstChild.textContent = f.name + (f.read_only ? " 🔒" : "");
-        if (f.owner && group === "Features") {
-          var o = document.createElement("span"); o.className = "owner"; o.textContent = f.owner; b.firstChild.appendChild(document.createTextNode(" ")); b.firstChild.appendChild(o);
-        }
-        if (f.overridden) { var d = document.createElement("span"); d.className = "dot"; d.textContent = "●"; d.title = "hat eigene Änderungen"; b.appendChild(d); }
-        b.addEventListener("click", function () { open(f.id); });
-        box.appendChild(b);
-      });
-    });
-    if (tools.length) {
-      var h = document.createElement("h2"); h.textContent = "Werkzeuge"; box.appendChild(h);
-      tools.forEach(function (t) {
-        var b = document.createElement("button");
-        b.className = current === "tool:" + t.id ? "active" : "";
-        b.textContent = (t.icon ? t.icon + " " : "") + t.title;
-        b.addEventListener("click", function () { open("tool:" + t.id); });
-        box.appendChild(b);
-      });
+    function button(m, child) {
+      var b = document.createElement("button");
+      b.className = (currentModule === m.id ? "active " : "") + (child ? "child " : "") + (m.loaded ? "" : "off");
+      var label = document.createElement("span"); label.textContent = m.name; b.appendChild(label);
+      if (!m.loaded) b.title = "nicht geladen";
+      if (m.overridden) { var d = document.createElement("span"); d.className = "dot"; d.textContent = "●"; d.title = "hat eigene Änderungen"; b.appendChild(d); }
+      b.addEventListener("click", function () { openModule(m.id); });
+      box.appendChild(b);
     }
+    var h = document.createElement("h2"); h.textContent = "Plattformen"; box.appendChild(h);
+    modules.forEach(function (m) {
+      if (m.kind === "platform") button(m, false);
+      else if (m.owner) button(m, true);
+    });
+    h = document.createElement("h2"); h.textContent = "Features"; box.appendChild(h);
+    modules.filter(function (m) { return m.kind === "feature" && !m.owner; }).forEach(function (m) { button(m, false); });
   }
 
-  function openTool(id) {
-    var tool = tools.find(function (t) { return t.id === id; });
-    if (!tool) return open(files[0].id);
-    current = "tool:" + id; state = null;
-    location.hash = current;
-    renderFiles();
-    $("title").textContent = (tool.icon ? tool.icon + " " : "") + tool.title;
-    $("path").textContent = "Werkzeug";
-    $("search").classList.add("hidden"); $("undo").classList.add("hidden");
+  function tabsOf(m) {
+    var tabs = [];
+    if (m.config) tabs.push({ id: "settings", label: "⚙ Einstellungen" });
+    (m.tools || []).forEach(function (t) { tabs.push({ id: "tool:" + t.id, label: (t.icon ? t.icon + " " : "") + t.title, tool: t }); });
+    return tabs;
+  }
+
+  function renderModuleInfo(m) {
+    var box = $("module");
+    box.innerHTML = "";
+    if (m.description) { var p = document.createElement("p"); p.className = "desc"; p.textContent = m.description; box.appendChild(p); }
+    var badges = document.createElement("div"); badges.className = "badges";
+    function badge(text, cls, strong) {
+      var b = document.createElement("span"); b.className = "badge " + (cls || "");
+      b.textContent = text;
+      if (strong) { var s = document.createElement("b"); s.textContent = " " + strong; b.appendChild(s); }
+      badges.appendChild(b);
+    }
+    badge(m.kind === "platform" ? "Plattform" : (m.owner ? "Feature von " + m.owner : "Feature"));
+    badge(m.loaded ? "geladen" : "nicht geladen", m.loaded ? "on" : "off");
+    if ((m.capabilities || []).length) badge("kann:", "", m.capabilities.join(", "));
+    if ((m.provides || []).length) badge("bietet:", "", m.provides.join(", "));
+    if ((m.requires || []).length) badge("braucht:", "", m.requires.join(", "));
+    if ((m.optional || []).length) badge("nutzt, wenn da:", "", m.optional.join(", "));
+    box.appendChild(badges);
+  }
+
+  function openModule(id, tabId) {
+    var m = moduleById(id) || modules[0];
+    if (!m) return;
+    currentModule = m.id;
+    renderNav();
+    $("title").textContent = m.name;
+    $("path").textContent = m.path || "";
+    renderModuleInfo(m);
+    var tabs = tabsOf(m);
+    var tab = tabs.find(function (t) { return t.id === tabId; }) || tabs[0];
+    currentTab = tab ? tab.id : null;
+    history.replaceState(null, "", location.pathname + location.search + "#" + m.id + (tab ? "/" + tab.id : ""));
+    var bar = $("tabs");
+    bar.innerHTML = "";
+    bar.classList.toggle("hidden", tabs.length < 2);
+    tabs.forEach(function (t) {
+      var b = document.createElement("button");
+      b.className = t.id === currentTab ? "active" : "";
+      b.textContent = t.label;
+      b.addEventListener("click", function () { openModule(m.id, t.id); });
+      bar.appendChild(b);
+    });
+    var editing = !!tab && tab.id === "settings";
+    $("search").classList.toggle("hidden", !editing); $("undo").classList.toggle("hidden", !editing);
+    current = null; state = null;
+    if (!tab) {
+      $("content").innerHTML = '<div class="empty">' + (m.loaded ? "Dieses Modul hat keine Einstellungen." : "Dieses Modul ist nicht geladen.") + "</div>";
+      return;
+    }
+    if (tab.tool) return openTool(tab.tool);
+    current = m.config;
     $("content").innerHTML = '<div class="empty">lade …</div>';
-    return call("tool", { tool: id, action: "page" }).then(function (data) {
+    return call("get", { file: m.config }).then(show).catch(function (e) { toast(e.message, "err"); });
+  }
+
+  function openTool(tool) {
+    $("content").innerHTML = '<div class="empty">lade …</div>';
+    return call("tool", { tool: tool.id, action: "page" }).then(function (data) {
       var frame = document.createElement("iframe");
       frame.className = "tool";
       frame.addEventListener("load", function () { setVars(frame.contentDocument, toolVars(THEMES[theme])); });
       frame.srcdoc = data.html;
       $("content").innerHTML = ""; $("content").appendChild(frame);
     }).catch(function (e) { $("content").innerHTML = ""; toast(e.message, "err"); });
-  }
-
-  function open(id) {
-    if (id.indexOf("tool:") === 0 && tools.some(function (t) { return "tool:" + t.id === id; })) return openTool(id.slice(5));
-    $("search").classList.remove("hidden"); $("undo").classList.remove("hidden");
-    if (!files.some(function (f) { return f.id === id; })) id = files[0].id;
-    current = id;
-    location.hash = id;
-    renderFiles();
-    return call("get", { file: id }).then(show).catch(function (e) { toast(e.message, "err"); });
   }
 
   function show(data) {
@@ -279,9 +343,12 @@
       var chosen = at(data.overrides, ["theme"]);
       applyTheme(chosen !== undefined ? chosen : data.base.theme);
     }
-    var f = files.find(function (x) { return x.id === data.file; });
-    if (f) { f.overridden = Object.keys(data.overrides).length > 0; renderFiles(); }
-    $("title").textContent = data.file.split("/").pop();
+    var owner = modules.find(function (m) { return m.config === data.file; });
+    if (owner) {
+      var was = owner.overridden;
+      owner.overridden = Object.keys(data.overrides).length > 0;
+      if (was !== owner.overridden) renderNav();
+    }
     $("path").textContent = data.file + (data.read_only ? "  · nur lesbar" : "") +
       (Object.keys(data.overrides).length ? "  · eigene Änderungen in settings/" + data.file.split("/").pop() : "");
     $("undo").disabled = !data.history.length;
@@ -289,13 +356,6 @@
     var scroll = document.querySelector("main").scrollTop;
     var openPaths = Array.from(content.querySelectorAll("details[open]")).map(function (d) { return d.dataset.path; });
     content.innerHTML = "";
-    // A file that has a tool page of its own (tts.json -> "TTS – Stimmen & Pool"): point to it.
-    tools.filter(function (t) { return t.config && data.file.split("/").pop() === t.config; }).forEach(function (t) {
-      var link = document.createElement("div"); link.className = "toollink";
-      link.textContent = (t.icon ? t.icon + " " : "") + t.title + " – Stimmen anhören, Pool & Sprechweise →";
-      link.addEventListener("click", function () { open("tool:" + t.id); });
-      content.appendChild(link);
-    });
     renderDict(data.base, data.overrides, [], content, openPaths, true);
     applySearch();
     document.querySelector("main").scrollTop = scroll;

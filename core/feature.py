@@ -59,6 +59,9 @@ VARIABLES = "variables"    # fills the {placeholders} of static commands (resolv
                            # the operator's timezone (zone) - see features/variables
 OVERLAY = "overlay"        # the listener the OBS browser sources hang on: push frames to a
                            # role, add an HTTP route - see features/overlay
+STREAM_REPORT = "stream_report"  # contributes its own lines to a stream's report (Discord report,
+                                 # !streamstats, the end screen): stream_report(session_stats)
+                                 # -> {"fields": (Field, ...), "lines": [str, ...]} - see features/stats
 SETTINGS_TOOL = "settings_tool"  # offers a tool page on the settings website (features/settings):
                                  # settings_tool_info() and settings_tool(action, args)
 BITS_LEDGER = "bits_ledger"  # a viewer's spendable bits balance (balance/spend) - see

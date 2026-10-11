@@ -64,10 +64,12 @@ DEFAULTS = {
     # The chat mirrored alongside the numbers - what used to be chat_panel.json's whole
     # file, now one section of overlay.json.
     "chat": {
-        # Which platforms' chat reaches the panel. Default: Twitch only - the panel is
-        # visible in the stream itself, so a Discord conversation must not show up there
-        # unasked. Empty = all that report a message - see EventBus.resolve_platforms.
-        "platforms": ["twitch"],
+        # Which platforms' chat reaches the panel. Default: the platform that streams (the
+        # STREAM capability, i.e. Twitch here) - the panel is visible in the stream itself, so
+        # a Discord conversation must not show up there unasked. Named by capability, not by
+        # service, so it stays right if the service changes. Empty = all that report a
+        # message - see EventBus.resolve_platforms.
+        "platforms": ["stream"],
         # Lines starting with "!" are usually meant for the bot, not for an audience reading
         # along.
         "hide_commands": True,
@@ -323,8 +325,9 @@ class OverlayFeature(feature_api.Feature):
             "peak_viewers": stats.get("peak_viewers") or 0,
             "avg_viewers": stats.get("avg_viewers") or 0,
             "unique_chatters": stats.get("unique_chatters") or 0,
-            "tts_queued": stats.get("tts_queued") or 0,
-            "tts_played": stats.get("tts_played") or 0,
+            # What other features add to the report (STREAM_REPORT, e.g. TTS) - plain lines,
+            # shown as they come; this feature does not know who sends them.
+            "extra": self._stats.report_lines(stats) if hasattr(self._stats, "report_lines") else [],
             # Individual follows/subs/raids/cheers, oldest first - the names behind the
             # totals above.
             "events": recap_events,

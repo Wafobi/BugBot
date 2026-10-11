@@ -415,3 +415,13 @@ async def test_settings_tool_serves_its_page_and_refuses_unknown_actions():
         await f.settings_tool("explode", {})
     with pytest.raises(ValueError):  # an action's own refusal comes back as ValueError too
         await f.settings_tool("speak", {"voice": "../x", "text": "hi"})
+
+
+# --- its own part of the stream report (STREAM_REPORT) -------------------------------------
+
+def test_stream_report_from_the_generic_event_counts():
+    f = make_feature()
+    report = f.stream_report({"event_counts": {"tts_queued": 9, "tts_played": 7}})
+    assert "7" in report["fields"][0].value and "9" in report["fields"][0].value
+    assert report["lines"] == ["TTS: 7 von 9 vorgelesen"]
+    assert f.stream_report({"event_counts": {}}) == {}

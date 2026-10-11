@@ -14,10 +14,27 @@ reloading and a bookmark work.
 
 ## How it works
 
-- **Built from the JSON files themselves.** Left the files (platforms, features), right a form:
-  a switch for true/false, a number field, a text field or box, one line per entry for lists, a
-  section per object. The `_comment` keys appear as help next to what they explain. A new setting
-  in any file shows up without anyone touching the website.
+**Laid out like the bot.** The navigation is the module tree, read live from the registry: each
+platform with the features it owns underneath (twitch → raw_log, stream_sessions, tts; discord →
+levels; obs → obs_control), then the neutral features. Packages present but not loaded are
+listed greyed out. The website names no module — a new feature appears on its own.
+
+Each module's page shows what the module says about itself — the first paragraph of its
+docstring, whether it is loaded, what it can (`provides`/platform capabilities), needs
+(`requires`) and uses if present (`optional`) — and has one tab per thing it brings along:
+
+- **⚙ Einstellungen** — its JSON file (found next to its code), if it has one;
+- one tab per **tool page** it offers (capability `SETTINGS_TOOL`) — e.g. tts →
+  **🔊 TTS – Stimmen & Pool**.
+
+The address remembers module and tab (`#feature:tts/tool:tts`), so reloading and bookmarks land
+where you were.
+
+**The settings tab**
+
+- **Built from the JSON file itself:** a switch for true/false, a number field, a text field or
+  box, one line per entry for lists, a section per object. The `_comment` keys appear as help next
+  to what they explain. A new setting shows up without anyone touching the website.
 - **Saves never touch the repository.** Every change goes into the override layer,
   `settings/<name>.json` ([Configuration → Overrides](configuration.md#overrides)), which lies
   on top of the shipped file. `git pull` never conflicts; new defaults from an update arrive
@@ -29,6 +46,8 @@ reloading and a bookmark work.
 - **New entries** (`＋ hinzufügen`) only where the bot accepts them: plain name → text tables
   such as `commands` (static commands) or TTS `replacements`. Shipped keys cannot be deleted —
   only overridden.
+- **Read-only** is declared by the module itself in its JSON, `"_settings": {"read_only": true}`
+  (`sql_db.json` does — where the database lives is decided at startup).
 
 ## Style
 
@@ -37,13 +56,13 @@ amber, cyan, matrix, sunset, mono. The choice is itself a setting
 (`features/settings/settings.json`, `theme`), so it is the same in every browser and can be reset
 or undone like any other; tool pages (TTS) follow it.
 
-## Tools
+## Tool pages
 
-Under **Werkzeuge** the website lists pages that features bring along (capability
-`SETTINGS_TOOL`): today **🔊 TTS – Stimmen & Pool** — try voices, build the pool, tune the speech,
-read the per-stream record. The website knows nothing about them: it shows the feature's page
-in a frame and hands its calls through its own connection (op `tool`), so they need no token of
-their own. A file with such a page (`tts.json`) shows a link to it at the top.
+A feature that brings a page of its own provides `SETTINGS_TOOL`: `settings_tool_info()` (id,
+title, icon) and `settings_tool(action, args)`, where action `page` returns its HTML. The website
+shows that page in a frame on the module's tab and relays its calls (`window.parent.bugbotTool`)
+through its own authenticated connection — the page needs no token and no connection of its own,
+and the website knows nothing about it.
 
 ## Checked before saving
 

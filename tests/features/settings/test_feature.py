@@ -122,3 +122,36 @@ async def test_tool_calls_are_handed_through(setup):
     assert reply["ok"] and reply["data"] == {"action": "speak", "args": {"text": "hi"}}
     assert (await ask(feature, op="tool", tool="fake", action="boom"))["error"] == "kaputt"
     assert not (await ask(feature, op="tool", tool="nope", action="x"))["ok"]
+
+
+# --- modules: the website laid out like the bot -------------------------------------------
+
+async def test_modules_follow_the_bus_with_owned_features_under_their_platform(setup):
+    from core import events
+    from features.overlay.feature import OverlayFeature
+    from platforms.twitch.features.tts.feature import TtsFeature
+    from platforms.twitch.platform import TwitchPlatform
+
+    bus = events.EventBus()
+    bus.register(TwitchPlatform())  # only registered, never started
+    tts = TtsFeature()
+    tts.owner = "twitch"
+    for feature in (OverlayFeature(), tts):
+        bus.register_feature(feature)
+    feature, *_ = setup
+    feature.bus = bus
+    feature._tools = {"tts": tts}
+    modules = feature.modules()
+    ids = [m["id"] for m in modules]
+    # the platform first, then its own features (tts among them) before the next platform /
+    # the neutral features; unloaded packages are listed too
+    twitch = ids.index("platform:twitch")
+    after = [m for m in modules[twitch + 1:]]
+    block = [m["id"] for m in after[:next((i for i, m in enumerate(after) if not m.get("owner")), len(after))]]
+    assert "feature:tts" in block and all(m.startswith("feature:") for m in block)
+    tts_entry = next(m for m in modules if m["id"] == "feature:tts")
+    assert tts_entry["config"] == "platforms/twitch/features/tts/tts.json"
+    assert [t["id"] for t in tts_entry["tools"]] == ["tts"]
+    assert "stream_report" in tts_entry["provides"] and tts_entry["description"]
+    assert next(m for m in modules if m["id"] == "platform:twitch")["config"] == "platforms/twitch/twitch.json"
+    assert any(m["id"] == "platform:discord" and m["loaded"] is False for m in modules)
