@@ -29,6 +29,12 @@ from core import events, feature as feature_api, runtime_config
 
 from .store import HIGHSCORE_METRICS, StatsStore
 
+# Recorded only while a stream runs - offline chatter, commands, mod actions and events are
+# not counted (see _live). With one exception: cheers. Every viewer's spendable bits balance
+# (features/companion's BITS_LEDGER, spent by !companion and !tts) is computed from all-time
+# cheers - a cheer that is not recorded is bits the viewer paid and then lost.
+ALWAYS_RECORDED_EVENTS = frozenset({"cheer", "cheer_anon"})
+
 # All labels, sentences and colours of this feature live in stats.json - not a second time
 # here. The shipped file is the default state: a deleted text falls back to its version (see
 # core/runtime_config.py, text()), everything else to the default at the call site.
@@ -82,28 +88,47 @@ class StatsFeature(feature_api.Feature):
         all."""
         return self._sessions.current_session_id if self._sessions is not None else None
 
+    @property
+    def _live(self):
+        """Whether to record at all: only while a stream runs. Without a SESSIONS feature
+        there is no telling, so everything is recorded, as before - an installation without
+        streams (Discord only) still counts."""
+        return self._sessions is None or self._session_id is not None
+
     # --- Recording (push) -----------------------------------------------------------
 
     async def on_message_accepted(self, message):
         """After moderation: the message counter, so that an offence does not count as a
         regular message. (The full text hangs on MESSAGE - see features/chat_log.)"""
+        if not self._live:
+            return
         await self._run(self.store.record_message, self._session_id, message.platform, message.user_name)
 
     async def on_command(self, platform, command, user_name):
+        if not self._live:
+            return
         await self._run(self.store.record_command, self._session_id, platform, command, user_name)
 
     async def on_mod_action(self, platform, user_name, reason, action):
+        if not self._live:
+            return
         await self._run(
             self.store.record_moderation_action, self._session_id, platform, user_name, reason, action
         )
 
     async def on_platform_event(self, platform, event_type, user_name, amount=0):
+        if not self._live and event_type not in ALWAYS_RECORDED_EVENTS:
+            return
         await self._run(self.store.record_event, self._session_id, platform, event_type, user_name, amount)
 
     async def on_viewers(self, platform, count):
+        if not self._live:
+            return
         await self._run(self.store.record_viewer_sample, self._session_id, count)
 
     async def on_ad_break(self, platform, duration_seconds):
+        if not self._live:
+            return
         await self._run(self.store.record_ad_break, self._session_id, duration_seconds)
 
     async def on_session_ended(self, session_id):

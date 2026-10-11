@@ -134,3 +134,32 @@ async def test_stop_marks_the_playing_message(db, monkeypatch):
     await f.release_next()
     await f.skip_next()
     assert f._store.history(1)[0]["status"] == "stopped"
+
+
+async def test_offline_tts_takes_nothing(db):
+    sessions = FakeSessions(current=None)
+    f = await make_feature(db, sessions)
+    await f.on_raw_event("twitch", "channel.cheer", {"bits": 100, "message": "Cheer100 Hallo", "user_id": "1", "user_name": "Viewer"})
+    from core import feature as feature_api
+    reply = await f.cmd_tts(feature_api.Message(platform="twitch", user_id="1", user_name="Viewer",
+                                                arg_text="Hallo", is_privileged=True))
+    assert "nur während des Streams" in reply
+    assert not f._queue and f._store.history() == []
+
+
+async def test_offline_tester_may_queue_but_nothing_is_recorded(db, fake_synth):
+    from core import feature as feature_api
+    sessions = FakeSessions(current=None)
+    f = await make_feature(db, sessions)
+    f.config.get = lambda key, default=None: ["WafobiTV"] if key == "offline_testers" else \
+        __import__("platforms.twitch.features.tts.feature", fromlist=["DEFAULTS"]).DEFAULTS.get(key, default)
+    f._overlay = FakeOverlay()
+    assert await f.cmd_tts(feature_api.Message(platform="twitch", user_id="9", user_name="wafobitv",
+                                               arg_text="Test", is_privileged=True)) is None
+    assert len(f._queue) == 1 and f._queue[0]["id"] is None
+    assert (await f.release_next())[0] == http.HTTPStatus.OK
+    assert f._store.history() == []
+    # a mod who is not on the list still gets the offline answer
+    reply = await f.cmd_tts(feature_api.Message(platform="twitch", user_id="8", user_name="SomeMod",
+                                                arg_text="Test", is_privileged=True))
+    assert "nur während des Streams" in reply

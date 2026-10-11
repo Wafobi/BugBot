@@ -87,6 +87,9 @@ Statuses: `queued`, `played`, `stopped` (cut off with skip), `expired`.
 The admin page's **Verlauf** lists every stream that had TTS and, per stream, each message with
 its stream time (`1:23:45`), sender, source, what was said and its status.
 
+**Only while a stream runs:** offline, nothing is queued, booked or recorded — a cheer then just
+stays in the balance, `!tts <text>` answers that TTS is stream-only. Exception: names in `offline_testers` (`tts.json`, default the broadcaster) may `!tts` offline to try things out — queued in memory only, never recorded, expired at the next stream start.
+
 **Every stream gets a clean queue:** once a different stream runs than the one the queue was
 filled in, whatever still waits is expired — kept in the record, never read out. A restart or
 update of the bot *during* a stream keeps that stream's queue (it is restored from the table).

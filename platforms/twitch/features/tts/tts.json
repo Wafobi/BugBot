@@ -3,6 +3,10 @@
   "min_bits": 100,
   "include_anonymous": false,
   "resub_messages": true,
+  "_offline_testers": "Wer !tts auch ohne laufenden Stream benutzen darf - zum Ausprobieren. Diese Tests landen nicht in der Datenbank und verfallen beim nächsten Streamstart. Alle anderen: TTS nur während des Streams.",
+  "offline_testers": [
+    "wafobitv"
+  ],
   "max_chars": 255,
   "max_queue": 50,
   "voice": "de_DE-thorsten-medium",
@@ -113,6 +117,7 @@
     "http.empty": "Warteschlange leer",
     "http.no_client": "keine TTS-Browserquelle verbunden",
     "http.error": "Fehler beim Erzeugen - nochmal versuchen oder /skip",
-    "nothing_to_say": "Da bleibt nichts zum Vorlesen übrig (nur Emojis oder Links?) - es wurde nichts abgebucht."
+    "nothing_to_say": "Da bleibt nichts zum Vorlesen übrig (nur Emojis oder Links?) - es wurde nichts abgebucht.",
+    "offline": "TTS gibt es nur während des Streams - es wurde nichts abgebucht."
   }
 }

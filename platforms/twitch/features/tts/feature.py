@@ -212,6 +212,19 @@ class TtsFeature(feature_api.Feature):
     def _current_session(self):
         return self._sessions.current_session_id if self._sessions is not None else None
 
+    @property
+    def _live(self):
+        """TTS only while a stream runs - nothing is queued, booked or recorded offline (a
+        cheer then simply stays in the balance). Without a SESSIONS feature there is no
+        telling, so it is always on."""
+        return self._sessions is None or self._current_session() is not None
+
+    def _offline_tester(self, message):
+        """Names in "offline_testers" (tts.json) may use !tts while offline - to try things
+        out. Their offline tests are queued in memory only, never recorded (see _enqueue)."""
+        testers = {str(name).strip().lower() for name in self.config.get("offline_testers", []) if str(name).strip()}
+        return message.user_name.lower() in testers
+
     async def _sync_session(self):
         """Every stream gets a clean queue: once a different stream runs than the one the
         queue was filled in, what still waits is expired (kept in tts_messages, never read
@@ -243,7 +256,9 @@ class TtsFeature(feature_api.Feature):
             return False
         session = self._current_session()
         entry_id = None
-        if self._store is not None:
+        # Offline (an offline tester's !tts) nothing is written - the database only records
+        # what happens while a stream runs.
+        if self._store is not None and self._live:
             entry_id = await asyncio.to_thread(
                 self._store.add, session, source, user_key, user_name, bits, message, sentence,
             )
@@ -278,7 +293,7 @@ class TtsFeature(feature_api.Feature):
     # --- Cheers (Push) ----------------------------------------------------------------
 
     async def on_raw_event(self, platform, event_type, payload):
-        if platform != self.owner:
+        if platform != self.owner or not self._live:
             return
         if event_type == "channel.subscription.message":
             return await self._on_resub(platform, payload or {})
@@ -359,6 +374,8 @@ class TtsFeature(feature_api.Feature):
         min_bits = int(self.config.get("min_bits", 100))
         key = self._key(message.platform, message.user_id, message.user_name)
         text = self._cap((message.arg_text or "").strip())
+        if text and not self._live and not self._offline_tester(message):
+            return self.config.text("offline")
         if not text:
             reply = self.config.text("help.tts", need=min_bits)
             if self._ledger is not None and not message.is_privileged:

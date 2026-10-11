@@ -49,6 +49,10 @@ class RawLogFeature(feature_api.Feature):
     # --- Aufzeichnung (Push) --------------------------------------------------------
 
     async def on_raw_event(self, platform, event_type, payload):
+        # Only while a stream runs - same rule as features/stats. Without a SESSIONS feature
+        # there is no telling, so everything is kept, as before.
+        if self._sessions is not None and self._session_id is None:
+            return
         await self._run(self.store.record, self._session_id, event_type, payload)
 
     # --- Abfragen (Pull) ------------------------------------------------------------

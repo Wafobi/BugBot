@@ -50,6 +50,14 @@ Session-scoped tables: `messages`, `command_usage`, `moderation_actions`, `event
 
 `viewer_samples` and `chat_log` declare it `NOT NULL` — neither means anything off-stream.
 
+**Recorded only while a stream runs** (since 2026-10-11): `features/stats`, `raw_log`, `chat_log`
+and the TTS record write nothing off-stream — with one exception, **cheers** in `events`, which
+are always kept because every viewer's spendable bits balance (`!companion`, `!tts`) is computed
+from all-time cheers. Older rows with `stream_session_id IS NULL` are from before that. Without
+a SESSIONS feature (no stream tracking at all, e.g. Discord only) everything is recorded as
+before. Not affected — they are state, not a record: `companion_*`, `overlay_counters`, Discord
+`levels`, `stream_sessions`, `highscores`.
+
 ---
 
 ## Tables
