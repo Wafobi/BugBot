@@ -289,6 +289,25 @@
     });
   }
 
+  // A wrapped message is taller than one row, so maxLines alone does not guarantee the
+  // lines fit - without this the box just clips at the top and leaves a half line hanging
+  // there. Drops the oldest whole lines until the rest fits, never `keep` (the line being
+  // typed). Checked on every typed character, because a line only wraps partway through
+  // typing. Same as platforms/obs/client/terminal/stream-boot.html/stream-end.html.
+  function fitLog(keep) {
+    var style = getComputedStyle(chatLog);
+    var room = chatLog.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    var gap = parseFloat(style.rowGap) || 0;
+    function used() {
+      var total = 0;
+      for (var k = 0; k < chatLog.children.length; k++) total += chatLog.children[k].offsetHeight + (k ? gap : 0);
+      return total;
+    }
+    while (chatLog.children.length > 1 && used() > room) {
+      chatLog.removeChild(chatLog.firstElementChild === keep ? chatLog.children[1] : chatLog.firstElementChild);
+    }
+  }
+
   // One renderer for both the demo loop and the real connection - a name, a line of text,
   // and whether it should type itself out (a live arrival) or appear instantly (the history
   // batch on connect, or a demo line).
@@ -303,10 +322,11 @@
     while (chatLog.children.length > maxLines) chatLog.removeChild(chatLog.firstChild);
 
     var textEl = row.querySelector(".chat-text");
-    if (reduceMotion || !animate) { textEl.textContent = text; return; }
+    if (reduceMotion || !animate) { textEl.textContent = text; fitLog(row); return; }
     var i = 0;
     (function type() {
       textEl.textContent = text.slice(0, i);
+      fitLog(row);
       i++;
       if (i <= text.length) setTimeout(type, 10 + Math.random() * 8);
     })();
@@ -318,6 +338,7 @@
     row.textContent = text;
     chatLog.appendChild(row);
     while (chatLog.children.length > maxLines) chatLog.removeChild(chatLog.firstChild);
+    fitLog(row);
   }
 
   // --- Demo: the old mock/randomized lines, for judging the layout without a bot running ---

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!--
+  Vergleichsseite, nur zum Anschauen: alte und neue Behandlung langer Zeilen in
+  stream-boot.html, stream-end.html und features/overlay/client/terminal/chat.html,
+  nebeneinander, mit denselben Beispielzeilen. Statisch (kein Tippen), damit man direkt
+  vergleichen kann. Nicht als OBS-Quelle gedacht.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Zeilenumbruch: alt vs. neu</title>
+<style>
+  :root {
+    --ink: #15100a; --ink-deep: #0d0904; --ink-line: #2a1f10;
+    --amber: #ffb000; --amber-soft: #d99a3d; --amber-dim: #8a6a34;
+    --cyan: #6fe7dd; --green: #7cffb2; --red: #ff5f6d; --pink: #ff8fd6;
+    --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--ink-deep); color: var(--amber-soft);
+    font-family: var(--font-body);
+  }
+  h1 { color: var(--amber); font-size: 20px; margin: 0 0 4px; }
+  p.lead { margin: 0 0 22px; font-size: 13px; color: var(--amber-dim); }
+  h2 { color: var(--amber); font-size: 15px; margin: 26px 0 8px; }
+  .pair { display: grid; grid-template-columns: repeat(2, 560px); gap: 24px; }
+  .card { background: var(--ink); border: 1px solid var(--ink-line); border-radius: 6px; padding: 12px; }
+  .card h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .08em; }
+  .card.old h3 { color: var(--red); }
+  .card.new h3 { color: var(--green); }
+  .note { font-size: 11px; color: var(--amber-dim); margin-top: 8px; min-height: 2.6em; }
+
+  /* --- Log (stream-boot / stream-end) ------------------------------------------------ */
+  .log {
+    overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end;
+    gap: 2px; padding: 10px 12px; background: rgba(0,0,0,.28);
+    border: 1px solid var(--ink-line); border-radius: 3px; font-size: 12.5px; line-height: 1.55;
+  }
+  .log.boot { height: 168px; }
+  .log.end  { height: 230px; }
+  .log-line .ts { color: var(--amber-dim); flex-shrink: 0; }
+  .log-line .lvl {
+    flex-shrink: 0; font-weight: 600; width: 58px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .log-line .lvl.chat { width: auto; max-width: 150px; }
+  .lvl.info { color: var(--cyan); } .lvl.ok { color: var(--green); } .lvl.warn { color: var(--amber); }
+  .lvl.error { color: var(--red); } .lvl.debug { color: var(--amber-dim); } .lvl.chat { color: var(--pink); }
+
+  /* alt */
+  .old .log-line { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .old .log-line .msg { color: #e9d9b8; overflow: hidden; text-overflow: ellipsis; }
+  /* neu */
+  .new .log-line { display: flex; gap: 8px; flex-shrink: 0; }
+  .new .log-line .ts { white-space: nowrap; }
+  .new .log-line .msg { color: #e9d9b8; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+  /* --- Terminal-Chat ------------------------------------------------------------------ */
+  .chat-log {
+    height: 190px; overflow: hidden; display: flex; flex-direction: column;
+    justify-content: flex-end; gap: 5px; font-size: 14px; line-height: 1.35;
+    padding: 10px 12px; background: rgba(0,0,0,.28); border: 1px solid var(--ink-line); border-radius: 3px;
+  }
+  .chat-line { display: flex; flex-wrap: wrap; gap: 0 5px; flex-shrink: 0; }
+  .old .chat-line { flex-shrink: 1; }
+  .chat-user { font-weight: 600; flex-shrink: 0; }
+  .chat-user::after { content: ":"; opacity: .6; }
+  .chat-text { color: #e9d9b8; word-break: break-word; }
+</style>
+</head>
+<body>
+<h1>Zeilenumbruch: alt vs. neu</h1>
+<p class="lead">Gleiche Beispielzeilen links und rechts. Links der Stand vor der Änderung, rechts der neue.</p>
+
+<h2>stream-boot.html</h2>
+<div class="pair">
+  <div class="card old"><h3>ALT</h3><div class="log boot" data-set="boot" data-maxlines="7"></div>
+    <div class="note">Lange Zeilen werden mit „…“ abgeschnitten.</div></div>
+  <div class="card new"><h3>NEU</h3><div class="log boot" data-set="boot" data-maxlines="7"></div>
+    <div class="note">Lange Zeilen brechen in ihrer Spalte um; was nicht mehr passt, fällt oben ganz raus.</div></div>
+</div>
+
+<h2>stream-end.html</h2>
+<div class="pair">
+  <div class="card old"><h3>ALT</h3><div class="log end" data-set="end" data-maxlines="8"></div>
+    <div class="note">Titel und Spielname werden abgeschnitten.</div></div>
+  <div class="card new"><h3>NEU</h3><div class="log end" data-set="end" data-maxlines="8"></div>
+    <div class="note">Alles lesbar, eingerückt unter der Nachricht.</div></div>
+</div>
+
+<h2>terminal/chat.html</h2>
+<div class="pair">
+  <div class="card old"><h3>ALT</h3><div class="chat-log" data-set="chat" data-maxlines="8"></div>
+    <div class="note">Umbruch gab es schon – aber oben bleibt eine halb abgeschnittene Zeile hängen.</div></div>
+  <div class="card new"><h3>NEU</h3><div class="chat-log" data-set="chat" data-maxlines="8"></div>
+    <div class="note">Gleicher Umbruch, aber oben fallen nur ganze Zeilen raus.</div></div>
+</div>
+
+<script>
+(function () {
+  var sets = {
+    boot: [
+      ["10:00:01", "INFO", "info", "Boote Stream-Overlay …"],
+      ["10:00:02", "Zuschauer_mit_langem_Namen:", "chat", "Hallo zusammen! Freu mich schon riesig auf den Stream heute, was wird denn gespielt? Hoffentlich wieder das Spiel von letzter Woche!"],
+      ["10:00:04", "OK", "ok", "GPU erkannt: RX 9070 XT"],
+      ["10:00:07", "WARN", "warn", "motivation.service reagiert nicht — neu gestartet"],
+      ["10:00:10", "DEBUG", "debug", "ping chat -c 4 — 4 packets, 0% loss, 100% hype"],
+      ["10:00:15", "INFO", "info", "Löse Abhängigkeiten auf (node_modules: 3,7 TB) …"],
+      ["10:00:18", "ERROR", "error", "Segmentation fault (core dumped) — war nur ein Witz"],
+      ["10:00:21", "OK", "ok", "Vim verlassen (nach nur 3 Versuchen)"],
+      ["10:00:24", "INFO", "info", "Wärme Tensorkerne auf Betriebstemperatur …"]
+    ],
+    end: [
+      ["22:14:01", "INFO", "info", "Stream beendet nach 3h 42m"],
+      ["22:14:03", "OK", "ok", "Titel: Endlich wieder Elden Ring – Nightreign mit Chat-Challenges, Bossrush und zu wenig Schlaf"],
+      ["22:14:05", "OK", "ok", "Spiel: Elden Ring Nightreign"],
+      ["22:14:07", "INFO", "info", "Neue Follower: SuperLangerNutzername123, NochEinViewer, Kaffeetrinker, Pixelschubser"],
+      ["22:14:09", "INFO", "info", "Bits: 1.250 · Subs: 4 · Raids: 1"],
+      ["22:14:11", "OK", "ok", "Top-Chatter: Zuschauer_mit_langem_Namen (312 Nachrichten)"],
+      ["22:14:13", "INFO", "info", "Danke fürs Zuschauen – bis zum nächsten Mal!"]
+    ],
+    chat: [
+      ["Kaffeetrinker", "gn8"],
+      ["Pixelschubser", "Das war richtig knapp beim letzten Boss, ich hab echt die Luft angehalten und dann einfach nur noch gelacht"],
+      ["NochEinViewer", "GG!"],
+      ["Zuschauer_mit_langem_Namen", "Kannst du nächstes Mal bitte wieder die Challenge mit nur einer Waffe machen? Das war mit Abstand das Lustigste bisher"],
+      ["wafobitv", "Mal sehen, kommt auf die Mehrheit im Chat an :)"],
+      ["Pixelschubser", "Abstimmung!!! Ich bin dafür, und zwar mit extra schwerem Modus und ohne Heilung"],
+      ["Kaffeetrinker", "+1"]
+    ]
+  };
+  var userColors = ["var(--cyan)", "var(--green)", "var(--amber)", "var(--red)", "var(--amber-soft)"];
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // Same as fitLog() in the three real pages.
+  function fitLog(box) {
+    var style = getComputedStyle(box);
+    var room = box.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    var gap = parseFloat(style.rowGap) || 0;
+    function used() {
+      var total = 0;
+      for (var k = 0; k < box.children.length; k++) total += box.children[k].offsetHeight + (k ? gap : 0);
+      return total;
+    }
+    while (box.children.length > 1 && used() > room) box.removeChild(box.firstElementChild);
+  }
+
+  document.querySelectorAll("[data-set]").forEach(function (box) {
+    var isNew = !!box.closest(".new");
+    var maxLines = parseInt(box.dataset.maxlines, 10);
+    sets[box.dataset.set].forEach(function (entry, i) {
+      var row = document.createElement("div");
+      if (box.dataset.set === "chat") {
+        row.className = "chat-line";
+        row.innerHTML = '<span class="chat-user" style="color:' + userColors[i % userColors.length] + '">' +
+          escapeHtml(entry[0]) + '</span><span class="chat-text">' + escapeHtml(entry[1]) + "</span>";
+      } else {
+        row.className = "log-line";
+        row.innerHTML = '<span class="ts">[' + entry[0] + ']</span><span class="lvl ' + entry[2] + '">' +
+          escapeHtml(entry[1]) + '</span><span class="msg">' + escapeHtml(entry[3]) + "</span>";
+      }
+      box.appendChild(row);
+      while (box.children.length > maxLines) box.removeChild(box.firstElementChild);
+      if (isNew) fitLog(box);
+    });
+  });
+})();
+</script>
+</body>
+</html>

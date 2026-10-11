@@ -218,13 +218,16 @@
     font-size: 12.5px;
     line-height: 1.55;
   }
-  .log-line { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; }
-  .log-line .ts { color: var(--amber-dim); flex-shrink: 0; }
+  /* A recap line can be long (stream title, game name) - it wraps inside its own .msg
+     column instead of being cut off, and fitLog() below drops the oldest lines once the
+     wrapped ones no longer fit into the box. */
+  .log-line { display: flex; gap: 8px; flex-shrink: 0; }
+  .log-line .ts { color: var(--amber-dim); flex-shrink: 0; white-space: nowrap; }
   .log-line .lvl {
     flex-shrink: 0; font-weight: 600; width: 58px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .log-line .msg { color: #e9d9b8; overflow: hidden; text-overflow: ellipsis; }
+  .log-line .msg { color: #e9d9b8; flex: 1; min-width: 0; overflow-wrap: anywhere; }
   .lvl.info { color: var(--cyan); }
   .lvl.ok   { color: var(--green); }
   .lvl.warn { color: var(--amber); }
@@ -476,6 +479,21 @@
     return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
   }
 
+  // Wrapped lines are taller than one row, so maxLines alone no longer guarantees they fit:
+  // drop the oldest until the rest does - always keeping the line being typed. Checked on
+  // every typed character, because a line only wraps partway through typing.
+  function fitLog() {
+    var style = getComputedStyle(log);
+    var room = log.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    var gap = parseFloat(style.rowGap) || 0;
+    function used() {
+      var total = 0;
+      for (var k = 0; k < log.children.length; k++) total += log.children[k].offsetHeight + (k ? gap : 0);
+      return total;
+    }
+    while (log.children.length > 1 && used() > room) log.removeChild(log.firstChild);
+  }
+
   // One line at a time, same principle as stream-boot.html's typingLock - just simpler,
   // since there is only ever one source of lines here (the recap), not a simulated feed and
   // real chat competing for the same box.
@@ -490,10 +508,11 @@
     while (log.children.length > maxLines) log.removeChild(log.firstChild);
 
     var msgEl = row.querySelector(".msg");
-    if (reduceMotion) { msgEl.textContent = text; if (onDone) onDone(); return; }
+    if (reduceMotion) { msgEl.textContent = text; fitLog(); if (onDone) onDone(); return; }
     var i = 0;
     (function type() {
       msgEl.textContent = text.slice(0, i);
+      fitLog();
       if (i > 0 && window.__endSound && text[i - 1] !== " ") window.__endSound.plotter();
       i++;
       if (i <= text.length) setTimeout(type, 35 + Math.random() * 45);
