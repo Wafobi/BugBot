@@ -41,3 +41,12 @@ def test_installed_lists_only_complete_models(tmp_path):
     install(tmp_path, "a-model")
     (tmp_path / "half.onnx").write_bytes(b"")
     assert synth.installed(tmp_path) == ["a-model", "b-model"]
+
+
+def test_effect_is_part_of_the_voice(tmp_path):
+    install(tmp_path, "de_DE-mls-medium", speakers=236)
+    voice = synth.resolve("de_DE-mls-medium#7@robot", tmp_path)
+    assert (voice.speaker, voice.effect, voice.name) == (7, "robot", "de_DE-mls-medium#7@robot")
+    assert synth.resolve("de_DE-mls-medium", tmp_path).effect is None
+    with pytest.raises(synth.VoiceError):
+        synth.resolve("de_DE-mls-medium@laser", tmp_path)

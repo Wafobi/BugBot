@@ -84,6 +84,7 @@ class TtsAdmin:
             "queue": len(self._feature._queue),
             "max_text": MAX_TEXT,
             "fallback": synth.FALLBACK_VOICE,
+            "effects": synth.EFFECTS,
         })
 
     async def speak(self, query):

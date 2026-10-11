@@ -68,6 +68,8 @@
     <div><label for="voice">Stimme</label><select id="voice"></select></div>
     <div><label for="speaker">Sprecher</label><select id="speaker"></select></div>
   </div>
+  <label for="effect">Effekt</label>
+  <select id="effect"><option value="">– keiner (natürliche Stimme)</option></select>
 
   <label for="user">Name (optional – dann wie im Stream: „Name sagt: …“)</label>
   <input type="text" id="user" placeholder="z.B. xX_Gamer_Xx123">
@@ -111,7 +113,7 @@
 (function () {
   var token = new URLSearchParams(location.search).get("token") || "";
   var $ = function (id) { return document.getElementById(id); };
-  var voiceEl = $("voice"), speakerEl = $("speaker"), statusEl = $("status");
+  var voiceEl = $("voice"), speakerEl = $("speaker"), effectEl = $("effect"), statusEl = $("status");
   var SETTINGS = [
     ["length_scale", "Tempo (>1 langsamer)", 0.5, 2, 0.05],
     ["sentence_silence", "Satzpause (s)", 0, 1.5, 0.05],
@@ -137,7 +139,8 @@
   function model() { return state.voices[voiceEl.value]; }
   function voiceValue() {
     var m = model();
-    return voiceEl.value + (m && Object.keys(m.speakers).length > 1 ? "#" + speakerEl.value : "");
+    return voiceEl.value + (m && Object.keys(m.speakers).length > 1 ? "#" + speakerEl.value : "") +
+      (effectEl.value ? "@" + effectEl.value : "");
   }
   function defaults() { var m = model(); return m ? m.defaults : {}; }
 
@@ -160,9 +163,11 @@
   }
 
   function selectVoice(value) {
-    var parts = value.split("#");
+    var effect = value.split("@")[1] || "";
+    var parts = value.split("@")[0].split("#");
     if (!state.voices[parts[0]]) return;
     voiceEl.value = parts[0];
+    effectEl.value = effect;
     fillSpeakers(parts[1]);
   }
 
@@ -260,7 +265,7 @@
     var m = state.voices["de_DE-mls-medium"];
     if (!m) return setStatus("de_DE-mls-medium ist auf dem Server nicht installiert.", "err");
     var ids = Object.keys(m.speakers);
-    speak("de_DE-mls-medium#" + ids[Math.floor(Math.random() * ids.length)]);
+    speak("de_DE-mls-medium#" + ids[Math.floor(Math.random() * ids.length)] + (effectEl.value ? "@" + effectEl.value : ""));
   });
   $("addPool").addEventListener("click", function () {
     var value = voiceValue();
@@ -291,6 +296,9 @@
   setStatus("Lade …");
   api("/tts/admin/state").then(function (data) {
     state = data;
+    Object.keys(data.effects || {}).forEach(function (name) {
+      effectEl.appendChild(option(name, name + " – " + data.effects[name]));
+    });
     Object.keys(data.voices).forEach(function (name) {
       var n = Object.keys(data.voices[name].speakers).length;
       voiceEl.appendChild(option(name, name + (n > 1 ? "  (" + n + " Sprecher)" : "")));

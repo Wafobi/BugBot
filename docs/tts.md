@@ -89,6 +89,17 @@ stdin, never as an argument.
 | `de_DE-kerstin-low`, `-ramona-low`, `-karlsson-low`, `-pavoque-low` | 1 each |
 | `de_DE-eva_k-x_low` | 1 |
 
+Append `@<effect>` for a machine voice — applied to the finished audio on the server
+(`piper_runner.py`, numpy), mixable with natural voices in the pool:
+
+| Effect | Sound |
+|---|---|
+| `@robot` | ring modulation, flat intonation — the classic sci-fi robot |
+| `@retro` | 8-bit home computer / Speak & Spell — ~6 kHz, coarse resolution |
+| `@funk` | radio / small terminal speaker — thin, slightly overdriven |
+
+e.g. `"voice": ["de_DE-thorsten-medium", "de_DE-thorsten-medium@robot", "de_DE-mls-medium#42@retro"]`.
+
 Which models exist in the image is decided by `voices.txt` (kept out of `tts.json` so switching
 the voice does not invalidate the image's download layer). An unusable `voice` logs a warning
 once and falls back to `de_DE-thorsten-medium`.

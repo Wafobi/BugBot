@@ -10,9 +10,11 @@ shell or argument parser gets to interpret.
 
 Everything here is blocking - the feature calls synthesize() via asyncio.to_thread.
 
-A voice is written "<model>" or "<model>#<speaker>": the model is a Piper voice name
-(de_DE-thorsten-medium), the speaker a number for the multi-speaker models
-(de_DE-mls-medium#42, de_DE-thorsten_emotional-medium#3). Without "#" speaker 0 talks.
+A voice is written "<model>" or "<model>#<speaker>", optionally with "@<effect>": the model
+is a Piper voice name (de_DE-thorsten-medium), the speaker a number for the multi-speaker
+models (de_DE-mls-medium#42, de_DE-thorsten_emotional-medium#3) - without "#" speaker 0
+talks - and the effect one of EFFECTS, applied to the finished audio
+(de_DE-thorsten-medium@robot).
 """
 
 import json
@@ -35,6 +37,15 @@ _MODEL_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 TIMEOUT_SECONDS = 60
 
 
+# Sound effects on the finished audio (piper_runner.py does the work) - Piper's own voices all
+# sound like people; these make one sound like a machine.
+EFFECTS = {
+    "robot": "Roboter - Ringmodulation, flache Betonung",
+    "retro": "8-Bit-Computer - niedrige Abtastrate, grobe Auflösung",
+    "funk": "Funkgerät/Terminal-Lautsprecher - dünn, leicht übersteuert",
+}
+
+
 class VoiceError(ValueError):
     """The voice setting cannot be used - message says why."""
 
@@ -44,14 +55,30 @@ class Voice:
     model: str
     speaker: int | None
     model_path: Path
+    effect: str | None = None
 
     @property
     def name(self):
-        return self.model if self.speaker is None else f"{self.model}#{self.speaker}"
+        name = self.model if self.speaker is None else f"{self.model}#{self.speaker}"
+        return name if self.effect is None else f"{name}@{self.effect}"
+
+
+def split_effect(value):
+    """"...@robot" -> ("...", "robot"); without "@" -> (value, None). Raises VoiceError on an
+    unknown effect."""
+    base, sep, effect = str(value or "").partition("@")
+    effect = effect.strip().lower()
+    if not sep:
+        return base, None
+    if effect not in EFFECTS:
+        raise VoiceError(f"unknown effect {effect!r} - known: {', '.join(EFFECTS)}")
+    return base, effect
 
 
 def parse(value):
-    """"model" or "model#speaker" -> (model, speaker or None). Raises VoiceError."""
+    """"model" or "model#speaker" (an "@effect" is ignored here, see split_effect) ->
+    (model, speaker or None). Raises VoiceError."""
+    value, _ = split_effect(value)
     model, sep, speaker = str(value or "").strip().partition("#")
     model = model.strip()
     if not _MODEL_NAME.match(model):
@@ -73,6 +100,7 @@ def num_speakers(model_path):
 def resolve(value, voices_dir):
     """The configured voice, checked against what is actually installed. Raises VoiceError
     when the model is missing or the speaker number is out of range."""
+    _, effect = split_effect(value)
     model, speaker = parse(value)
     model_path = Path(voices_dir) / f"{model}.onnx"
     if not model_path.is_file() or not Path(f"{model_path}.json").is_file():
@@ -81,7 +109,7 @@ def resolve(value, voices_dir):
         count = num_speakers(model_path)
         if speaker >= count:
             raise VoiceError(f"{model} has speakers 0-{count - 1}, not {speaker}")
-    return Voice(model, speaker, model_path)
+    return Voice(model, speaker, model_path, effect)
 
 
 def model_info(model_path):
@@ -153,6 +181,7 @@ def synthesize(text, voice, settings=None, english_words=None):
         job = {
             "text": text, "model": str(voice.model_path), "speaker": voice.speaker,
             "out": str(out), "settings": speech_settings(settings), "english_words": words,
+            "effect": voice.effect,
         }
         try:
             result = subprocess.run(
