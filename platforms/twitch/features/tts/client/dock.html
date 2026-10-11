@@ -2,8 +2,8 @@
 <!--
   TTS control panel for an OBS dock (Docks -> Custom Browser Docks), served by the bot
   (platforms/twitch/features/tts/admin.py): http://127.0.0.1:4457/tts/dock?token=<TTS_TOKEN>
-  Shows the queue and releases it - the same /tts/next and /tts/skip a Stream Deck button
-  would call. Speech is made on the server; this page plays nothing itself.
+  Shows the queue and releases it - the same /tts/next and /tts/skip (stop what is playing)
+  a Stream Deck button would call. Speech is made on the server; this page plays nothing itself.
 -->
 <html lang="de">
 <head>
@@ -42,7 +42,7 @@
 <body>
   <div class="btns">
     <button class="play" id="next">▶ Abspielen</button>
-    <button id="skip">⏭ Skip</button>
+    <button id="skip" title="Bricht die laufende Ansage ab - sonst nichts">⏹ Stopp</button>
   </div>
   <div id="info"><span id="count">…</span><span id="player">…</span></div>
   <div id="status"></div>
@@ -82,7 +82,7 @@
       box.appendChild(item);
     });
     $("next").disabled = busy || !q.length || !data.player;
-    $("skip").disabled = busy || !q.length;
+    $("skip").disabled = busy;
   }
 
   function refresh() {
@@ -103,7 +103,7 @@
   }
 
   $("next").addEventListener("click", function () { press("/tts/next", "Erzeuge Sprache …"); });
-  $("skip").addEventListener("click", function () { press("/tts/skip", "Überspringe …"); });
+  $("skip").addEventListener("click", function () { press("/tts/skip", "Stoppe …"); });
 
   if (!token) { setStatus("Kein ?token= in der URL (TTS_TOKEN).", "err"); return; }
   refresh();

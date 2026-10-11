@@ -31,7 +31,7 @@ other features as the `BITS_LEDGER` capability.
 | `!tts` | explains the rule, shows the caller's balance |
 | `!tts <text>` | queues `<text>` for `min_bits` from the balance |
 | `GET :4457/tts/next?token=<TTS_TOKEN>` | synthesizes and plays the next queued entry |
-| `GET :4457/tts/skip?token=<TTS_TOKEN>` | drops the next queued entry unplayed |
+| `GET :4457/tts/skip?token=<TTS_TOKEN>` | stops what is playing, at once — nothing else: with nothing playing it does nothing, and it never touches the queue |
 
 Both HTTP routes answer with one line of text (e.g. `ok - noch 2 in der Warteschlange`). On the
 Stream Deck: System → **Website**, with *GET request in background* ticked so no browser window

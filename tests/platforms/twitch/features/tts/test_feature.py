@@ -252,12 +252,13 @@ async def test_next_puts_the_entry_back_when_synthesis_fails(monkeypatch):
     assert [e["text"] for e in f._queue] == ["eins"]
 
 
-async def test_skip_drops_the_head():
+async def test_skip_with_nothing_playing_leaves_the_queue_alone():
     f = make_feature()
+    f._overlay = FakeOverlay()
     await f._enqueue("eins")
-    await f._enqueue("zwei")
-    await f.skip_next()
-    assert [e["text"] for e in f._queue] == ["zwei"]
+    status, text = await f.skip_next()
+    assert status == http.HTTPStatus.OK and "läuft nichts" in text
+    assert [e["text"] for e in f._queue] == ["eins"] and not f._overlay.sent
 
 
 async def test_empty_queue_answers_ok():
@@ -370,3 +371,34 @@ async def test_resub_messages_can_be_switched_off():
     f = with_config(make_feature(), resub_messages=False)
     await f.on_raw_event("twitch", "channel.subscription.message", resub())
     assert not f._queue
+
+
+# --- skip while playing ------------------------------------------------------------------
+
+def make_wav(seconds):
+    import io
+    import wave
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(1000)
+        w.writeframes(b"\0\0" * int(1000 * seconds))
+    return buffer.getvalue()
+
+
+async def test_skip_while_playing_interrupts_and_keeps_the_queue(monkeypatch):
+    f = make_feature()
+    f._overlay = FakeOverlay()
+    monkeypatch.setattr(TtsFeature, "_voice", lambda self, entry=None: "voice")
+    monkeypatch.setattr(synth, "synthesize", lambda *args: make_wav(5))
+    await f._enqueue("eins")
+    await f._enqueue("zwei")
+    await f.release_next()
+    status, text = await f.skip_next()
+    assert "abgebrochen" in text
+    assert f._overlay.sent[-1] == ("stop", None, "tts")
+    assert [e["text"] for e in f._queue] == ["zwei"]
+    # Nothing playing any more - the next skip does nothing.
+    await f.skip_next()
+    assert [e["text"] for e in f._queue] == ["zwei"]

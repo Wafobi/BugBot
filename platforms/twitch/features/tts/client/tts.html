@@ -43,16 +43,33 @@
   var GAP_MS = 400;
   var pending = [];
   var playing = false;
+  var current = null;
 
   function playNext() {
     if (playing || !pending.length) return;
     playing = true;
     var audio = new Audio("data:audio/wav;base64," + pending.shift());
+    current = audio;
     audio.volume = volume;
-    function done() { setTimeout(function () { playing = false; playNext(); }, GAP_MS); }
+    var finished = false;
+    function done() {
+      if (finished) return;
+      finished = true;
+      setTimeout(function () { playing = false; current = null; playNext(); }, GAP_MS);
+    }
     audio.onended = done;
     audio.onerror = done;
+    audio.done = done;
     audio.play().catch(done);
+  }
+
+  // "stop" (the Skip button while something plays): silence now, drop what was waiting here.
+  function stop() {
+    pending = [];
+    if (current) {
+      current.pause();
+      current.done();
+    }
   }
 
   function connect() {
@@ -62,6 +79,7 @@
     socket.onmessage = function (message) {
       var frame;
       try { frame = JSON.parse(message.data); } catch (e) { return; }
+      if (frame.type === "stop") return stop();
       if (frame.type !== "speak" || !frame.data || typeof frame.data.audio !== "string") return;
       if (pending.length >= MAX_PENDING) return;
       pending.push(frame.data.audio);

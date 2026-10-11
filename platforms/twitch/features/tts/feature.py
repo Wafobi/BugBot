@@ -15,8 +15,8 @@ Three ways in, one queue:
 
 Nothing is spoken on arrival. Every entry waits in the queue until a Stream Deck button
 calls /tts/next - only then is it synthesized (synth.py, Piper - on the server, in the bot's
-container) and sent to the browser source as a WAV. /tts/skip drops the next entry unplayed; the bits stay spent either
-way, booking happens when an entry is queued, not when it is played.
+container) and sent to the browser source as a WAV. /tts/skip stops what is playing and
+nothing else. Bits are booked when an entry is queued, not when it is played.
 
 Why RAW_EVENT and not PLATFORM_EVENT: the latter carries no free text (see
 platforms/twitch/bot.py:_publish_event). Rather than widen the shared event contract for a
@@ -45,9 +45,12 @@ anywhere and !tts <text> is open to mods and the broadcaster only.
 import asyncio
 import base64
 import http
+import io
 import logging
 import random
 import re
+import time
+import wave
 import zlib
 from collections import deque
 
@@ -105,6 +108,10 @@ class TtsFeature(feature_api.Feature):
         # One /next at a time: a double press waits for the first synthesis instead of
         # starting a second Piper process next to it.
         self._release_lock = asyncio.Lock()
+        # Until when (time.monotonic) the browser source is busy playing what was released -
+        # the clips' own lengths, back to back. While it is, /tts/skip interrupts instead of
+        # dropping the next queued entry.
+        self._playing_until = 0.0
         # Pool entries already reported as unusable - each is warned about once, not on
         # every press.
         self._voice_complaints = set()
@@ -365,15 +372,30 @@ class TtsFeature(feature_api.Feature):
                 log.warning(f"TTS synthesis failed: {error}")
                 return http.HTTPStatus.INTERNAL_SERVER_ERROR, self.config.text("http.error")
             await self._overlay.push("speak", {"audio": base64.b64encode(wav).decode("ascii")}, ROLE)
+            self._playing_until = max(time.monotonic(), self._playing_until) + _duration(wav)
             await self._report("tts_played", entry.get("user_name", ""))
             return http.HTTPStatus.OK, self.config.text("http.played", remaining=len(self._queue))
 
     async def skip_next(self, query=None):
-        async with self._release_lock:
-            if not self._queue:
-                return http.HTTPStatus.OK, self.config.text("http.empty")
-            self._queue.popleft()
-            return http.HTTPStatus.OK, self.config.text("http.skipped", remaining=len(self._queue))
+        """Stops what is playing, right now. Nothing else: with nothing playing it does
+        nothing at all, and it never touches the queue - a stray press must not throw away a
+        message somebody paid for."""
+        if time.monotonic() >= self._playing_until:
+            return http.HTTPStatus.OK, self.config.text("http.nothing_playing", remaining=len(self._queue))
+        self._playing_until = 0.0
+        if self._overlay is not None:
+            await self._overlay.push("stop", None, ROLE)
+        return http.HTTPStatus.OK, self.config.text("http.stopped", remaining=len(self._queue))
+
+
+def _duration(wav):
+    """Seconds of audio in a WAV, plus the browser source's pause between two clips
+    (client/tts.html, GAP_MS). 0 when the header is unreadable - then skip just drops."""
+    try:
+        with wave.open(io.BytesIO(wav)) as reader:
+            return reader.getnframes() / reader.getframerate() + 0.4
+    except (wave.Error, EOFError, ZeroDivisionError):
+        return 0.0
 
 
 def create_feature():
