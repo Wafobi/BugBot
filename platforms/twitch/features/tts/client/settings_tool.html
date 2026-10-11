@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <!--
-  TTS admin page - served by the bot (platforms/twitch/features/tts/admin.py) on the overlay
-  listener: http://127.0.0.1:4457/tts/admin?token=<TTS_TOKEN> through the SSH tunnel. Speech is
-  made on the server; this page only plays the samples. Not an OBS source.
+  The TTS page of the settings website (features/settings): shown there in a frame, under
+  "Werkzeuge". It has no connection of its own - every call goes through the settings page's
+  authenticated WebSocket via window.parent.bugbotTool(tool, action, args), which hands it to
+  TtsFeature.settings_tool (admin.py). Speech is made on the server; this page only plays the
+  samples.
 -->
 <html lang="de">
 <head>
@@ -10,15 +12,15 @@
 <title>BugBot TTS – Stimmen &amp; Pool</title>
 <style>
   :root {
-    --ink: #15100a; --ink-deep: #0d0904; --ink-line: #2a1f10;
-    --amber: #ffb000; --amber-soft: #d99a3d; --amber-dim: #8a6a34;
-    --green: #7cffb2; --red: #ff5f6d; --cyan: #6fe7dd;
+    --ink: #0f0d18; --ink-deep: #08070e; --ink-line: #2a2140;
+    --amber: #5FEAF5; --amber-soft: #c9bde0; --amber-dim: #8a7ba0;
+    --green: #7cffb2; --red: #ff5f6d; --cyan: #F22A80;
     --font: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 32px; background: var(--ink-deep); color: #e9d9b8; font-family: var(--font); }
+  body { margin: 0; padding: 4px 0 40px; background: var(--ink-deep); color: #e7e2f2; font-family: var(--font); }
   .card {
-    max-width: 760px; margin: 0 auto 24px; background: var(--ink); border: 1px solid var(--ink-line);
+    max-width: 900px; margin: 0 0 18px; background: var(--ink); border: 1px solid var(--ink-line);
     border-radius: 6px; padding: 22px 24px; box-shadow: 0 20px 60px rgba(0,0,0,.55);
   }
   h1 { margin: 0 0 4px; font-size: 20px; color: var(--amber); }
@@ -67,8 +69,7 @@
 </head>
 <body>
 <div class="card">
-  <h1>TTS – Stimmen &amp; Pool</h1>
-  <p class="lead">Läuft auf dem Server, mit den dort installierten Stimmen. Speichern landet in settings/tts.json auf dem Server (überlagert die tts.json aus dem Repo) – gilt sofort.</p>
+  <p class="lead">Läuft auf dem Server, mit den dort installierten Stimmen. Speichern landet in settings/tts.json (überlagert die tts.json aus dem Repo) – gilt sofort. Alle übrigen TTS-Einstellungen: Datei „tts“ links.</p>
 
   <div class="row">
     <div><label for="voice">Stimme</label><select id="voice"></select></div>
@@ -127,7 +128,6 @@
 
 <script>
 (function () {
-  var token = new URLSearchParams(location.search).get("token") || "";
   var $ = function (id) { return document.getElementById(id); };
   var voiceEl = $("voice"), speakerEl = $("speaker"), effectEl = $("effect"), statusEl = $("status");
   var SETTINGS = [
@@ -140,15 +140,11 @@
   var pool = [], savedPool = "", savedPick = "";
   var speech = {}, savedSpeech = "";   // only the explicitly set ones; missing = model default
 
+  // Every call goes through the settings page's own, authenticated connection.
+  var ACTION = { "/tts/admin/state": "state", "/tts/admin/speak": "speak", "/tts/admin/save": "save", "/tts/admin/history": "history" };
   function api(path, params) {
-    var q = new URLSearchParams(params || {});
-    q.set("token", token);
-    return fetch(path + "?" + q.toString()).then(function (r) {
-      return r.json().then(function (data) {
-        if (!r.ok) throw new Error(data.error || r.status);
-        return data;
-      });
-    });
+    if (!window.parent || !window.parent.bugbotTool) return Promise.reject(new Error("nur innerhalb der Einstellungs-Seite"));
+    return window.parent.bugbotTool("tts", ACTION[path], params || {});
   }
   function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = cls || ""; }
   function option(value, label) { var o = document.createElement("option"); o.value = value; o.textContent = label; return o; }
@@ -364,7 +360,6 @@
   $("stream").addEventListener("change", loadHistory);
   $("reloadHistory").addEventListener("click", loadStreams);
 
-  if (!token) { setStatus("Kein ?token= in der URL (TTS_TOKEN).", "err"); return; }
   loadStreams();
   setStatus("Lade …");
   api("/tts/admin/state").then(function (data) {

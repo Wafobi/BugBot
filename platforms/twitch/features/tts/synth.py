@@ -113,7 +113,7 @@ def resolve(value, voices_dir):
 
 
 def model_info(model_path):
-    """What the admin page needs to know about an installed model: its speakers (number ->
+    """What the settings website's TTS page needs to know about an installed model: its speakers (number ->
     label; the label is the name from speaker_id_map where that is a word - thorsten_emotional:
     "amused", "drunk", ... - otherwise just the number) and its own speech defaults."""
     config = json.loads(Path(f"{model_path}.json").read_text(encoding="utf-8"))

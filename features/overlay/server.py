@@ -183,6 +183,10 @@ class OverlayServer:
                 self._on_error(f"overlay route {path}: {error}")
                 status, body, content_type = http.HTTPStatus.INTERNAL_SERVER_ERROR, "error", "text/plain; charset=utf-8"
             return self._response(connection, status, body, content_type)
+        if path not in ("", "/"):
+            # Not a route and not the WebSocket endpoint - e.g. a browser asking for
+            # /favicon.ico next to the settings page. Answered, not logged as an intruder.
+            return connection.respond(http.HTTPStatus.NOT_FOUND, "not found\n")
         role = (parse_qs(urlsplit(request.path).query).get(ROLE_QUERY) or [""])[0]
         if role in self._role_tokens:
             if not _token_matches(_token_from(request), self._role_tokens[role]):

@@ -144,7 +144,7 @@ class LiveConfig:
         self._path = Path(path)
         self._defaults = defaults or {}
         # The override layer: settings/<same name>.json, only what was changed at runtime
-        # (TTS admin page, later the settings website) - so the file in the repo is never
+        # (the settings website, features/settings) - so the file in the repo is never
         # written and `git pull` on the server never conflicts. Only for configuration files
         # that belong to this repository; a file elsewhere (tests) has none unless asked.
         if override is None and self._path.resolve().is_relative_to(ROOT):

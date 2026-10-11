@@ -93,7 +93,7 @@ companions are browser sources in OBS that dial in to the bot and get every chan
 **Reads out loud.** Cheers with a message, resub messages and `!tts` go into a queue; a Stream
 Deck button releases them one at a time. Speech is made by Piper on the server — a voice pool,
 per-viewer voices, robot/retro/radio effects, English chat words pronounced in English — and
-every message is kept with its position in the VOD. Tuned on its own admin page.
+every message is kept with its position in the VOD. Tuned on the settings website.
 → [TTS](docs/tts.md)
 
 **Announces across platforms.** A neutral `Announcement` goes to every platform that can post
@@ -139,7 +139,7 @@ Six things are worth knowing:
   last good state or the shipped default still applies.
 - **Or in the browser.** The [settings website](docs/settings.md) edits every one of these files
   through the tunnel — `http://127.0.0.1:4457/settings?token=<SETTINGS_TOKEN>`.
-- **Overrides.** What is changed at runtime (the settings website, the TTS admin page) goes into
+- **Overrides.** What is changed at runtime (the settings website) goes into
   `settings/<name>.json`, which lies on top of the repo's file — so the files in git are never
   written and `git pull` never conflicts. → [Overrides](docs/configuration.md#overrides)
 

@@ -84,7 +84,7 @@ queued and played. **`stream_offset_seconds`** is the position in the stream at 
 played (from the session's start), i.e. where to find the moment of the answer in the VOD.
 Statuses: `queued`, `played`, `stopped` (cut off with skip), `expired`.
 
-The admin page's **Verlauf** lists every stream that had TTS and, per stream, each message with
+The **Verlauf** on the settings website's TTS page lists every stream that had TTS and, per stream, each message with
 its stream time (`1:23:45`), sender, source, what was said and its status.
 
 **Only while a stream runs:** offline, nothing is queued, booked or recorded — a cheer then just
@@ -133,19 +133,22 @@ Which models exist in the image is decided by `voices.txt` (kept out of `tts.jso
 the voice does not invalidate the image's download layer). An unusable `voice` logs a warning
 once and falls back to `de_DE-thorsten-medium`.
 
-### Admin page
+### On the settings website
 
-To pick voices by ear, build the pool and tune how it is spoken, open — through the tunnel —
+To pick voices by ear, build the pool and tune how it is spoken, open the
+[settings website](settings.md) (`http://127.0.0.1:4457/settings?token=<SETTINGS_TOKEN>`) →
+**Werkzeuge → 🔊 TTS – Stimmen & Pool**. The page belongs to this feature
+([`client/settings_tool.html`](../platforms/twitch/features/tts/client/settings_tool.html),
+backed by [`admin.py`](../platforms/twitch/features/tts/admin.py)) and is reached through the
+settings website's own connection — `SETTINGS_TOKEN`, not `TTS_TOKEN`.
 
-    http://127.0.0.1:4457/tts/admin?token=<TTS_TOKEN>
-
-Served by the bot itself ([`admin.py`](../platforms/twitch/features/tts/admin.py)), with the
-server's Piper and the voices installed there: nothing runs on the OBS machine. Type a text
-(optionally a name, to hear it as on stream), pick model and speaker (🎲 for a random one of the
-236 mls speakers), listen. Add the good ones to the pool; **Pool speichern** and **Sprechweise
-speichern** save `voice`/`voice_pick`/`speech` into `settings/tts.json` on the server — the
-override layer on top of the repo's `tts.json` (see [Configuration](configuration.md#overrides)),
-so `git pull` never conflicts. Effective from the next announcement, no restart.
+It uses the server's Piper and the voices installed there: nothing runs on the OBS machine. Type
+a text (optionally a name, to hear it as on stream), pick model, speaker and effect (🎲 for a
+random one of the 236 mls speakers), listen. Add the good ones to the pool; **Pool speichern** and
+**Sprechweise speichern** save `voice`/`voice_pick`/`speech` into `settings/tts.json` — the
+override layer on top of the repo's `tts.json` (see [Configuration](configuration.md#overrides)).
+Effective from the next announcement, no restart. Everything else of `tts.json` (rules,
+replacements, English words, texts) is the file **tts** in the same website.
 
 ## tts.json
 

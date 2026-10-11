@@ -60,8 +60,8 @@ just be a way of keeping deleted things alive, which is why it isn't there.
 ### Overrides
 
 `settings/<same file name>.json` — e.g. `settings/tts.json` over
-`platforms/twitch/features/tts/tts.json` — holds only what was changed at runtime: today by the
-[TTS admin page](tts.md#admin-page), later by the settings website (`settings-plan.md`). The
+`platforms/twitch/features/tts/tts.json` — holds only what was changed at runtime, by the
+[settings website](settings.md) (including its TTS page). The
 repo's files are never written that way, so `git pull` on the server never conflicts, and an
 update's new defaults arrive wherever you haven't overridden them. Same merge rules as above
 (dicts merged, lists replaced); a key removed from the override falls back to the repo's value.

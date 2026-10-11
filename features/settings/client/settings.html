@@ -15,11 +15,15 @@
 <meta charset="utf-8">
 <title>BugBot – Einstellungen</title>
 <style>
+  /* --cyan is the accent and --magenta the second accent - named after aurora, the default;
+     the theme picker (THEMES below) replaces all colour tokens at once. */
   :root {
     --ink: #0f0d18; --ink-2: #15121f; --ink-deep: #08070e; --line: #2a2140; --line-2: #3a2f55;
     --cyan: #5FEAF5; --magenta: #F22A80; --dim: #8a7ba0; --text: #e7e2f2; --green: #7cffb2; --red: #ff5f6d;
     --font: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
   }
+  .theme { margin-top: 22px; padding: 0 6px; font-size: 12px; color: var(--dim); }
+  .theme select { width: 100%; margin-top: 6px; font: inherit; color: var(--text); background: var(--ink-2); border: 1px solid var(--line-2); border-radius: 4px; padding: 6px 8px; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body { background: var(--ink-deep); color: var(--text); font-family: var(--font); font-size: 13px; display: flex; }
@@ -83,6 +87,8 @@
   #toast { position: fixed; right: 20px; bottom: 20px; background: var(--ink-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 10px 14px; font-size: 13px; opacity: 0; transition: opacity .2s; }
   #toast.show { opacity: 1; } #toast.err { border-color: var(--red); color: var(--red); } #toast.ok { border-color: var(--green); color: var(--green); }
   .empty { color: var(--dim); padding: 40px 0; text-align: center; }
+  iframe.tool { width: 100%; height: calc(100vh - 110px); border: none; background: var(--ink-deep); }
+  .toollink { display: inline-block; margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--ink); cursor: pointer; color: var(--cyan); }
 </style>
 </head>
 <body>
@@ -90,8 +96,9 @@
   <h1>⚙ BugBot</h1>
   <div class="sub">Einstellungen · <span id="conn">verbinde …</span></div>
   <div id="files"></div>
-  <div class="links">
-    <div>🔊 <a href="#" id="ttsLink">TTS: Stimmen &amp; Pool</a></div>
+  <div class="theme">
+    Stil
+    <select id="theme"></select>
   </div>
 </nav>
 <main>
@@ -108,19 +115,66 @@
 <script>
 (function () {
   "use strict";
-  // The token comes in the URL once, then lives in this tab only - and leaves the address bar.
-  var params = new URLSearchParams(location.search);
-  var token = params.get("token") || sessionStorage.getItem("bugbot-settings-token") || "";
-  if (params.get("token")) {
-    sessionStorage.setItem("bugbot-settings-token", token);
-    params.delete("token");
-    history.replaceState(null, "", location.pathname + (params.toString() ? "?" + params : "") + location.hash);
-  }
+  // The token stays in the URL: the page itself is behind it too (GET /settings), so taking it
+  // out of the address bar would break reloading and bookmarks.
+  var token = new URLSearchParams(location.search).get("token") || "";
   var $ = function (id) { return document.getElementById(id); };
-  $("ttsLink").href = "/tts/admin";
-  $("ttsLink").title = "braucht den TTS_TOKEN: /tts/admin?token=…";
 
-  var socket, nextId = 1, pending = {}, files = [], current = null, state = null;
+  var socket, nextId = 1, pending = {}, files = [], tools = [], current = null, state = null;
+
+  // --- Theme --------------------------------------------------------------------------------
+  // The overlays' colour worlds (features/overlay/client/terminal/themes, client/themes). The
+  // choice is a setting of the bot (features/settings/settings.json, "theme"), so it is the
+  // same in every browser - and undo/reset work on it like on everything else.
+  var SETTINGS_FILE = "features/settings/settings.json";
+  var THEMES = {
+    aurora: { label: "aurora – Cyan & Magenta", ink: "#0f0d18", ink2: "#15121f", deep: "#08070e", line: "#2a2140", line2: "#3a2f55", accent: "#5FEAF5", accent2: "#F22A80", dim: "#8a7ba0", text: "#e7e2f2" },
+    amber:  { label: "amber – klassisches Terminal", ink: "#15100a", ink2: "#1c150c", deep: "#0d0904", line: "#2a1f10", line2: "#3d2d17", accent: "#ffb000", accent2: "#ff8fd6", dim: "#8a6a34", text: "#f0e2c4" },
+    cyan:   { label: "cyan", ink: "#0a1318", ink2: "#0f1b22", deep: "#050b0e", line: "#183039", line2: "#23434f", accent: "#4FD8FF", accent2: "#8FE8FF", dim: "#5d8a98", text: "#dff6ff" },
+    matrix: { label: "matrix – Grün", ink: "#08130a", ink2: "#0c1a0e", deep: "#040904", line: "#15301a", line2: "#1f4626", accent: "#39FF14", accent2: "#7CFF6B", dim: "#4f8a45", text: "#d8ffd0" },
+    sunset: { label: "sunset – Orange & Rot", ink: "#1a0f0c", ink2: "#22140f", deep: "#100806", line: "#3a2016", line2: "#52301f", accent: "#FFB000", accent2: "#F2542A", dim: "#a07a66", text: "#ffefd9" },
+    mono:   { label: "mono – Schwarzweiß", ink: "#111111", ink2: "#181818", deep: "#0a0a0a", line: "#2a2a2a", line2: "#3a3a3a", accent: "#f5f5f5", accent2: "#bdbdbd", dim: "#8a8a8a", text: "#e8e8e8" },
+  };
+  var theme = "aurora";
+  Object.keys(THEMES).forEach(function (name) {
+    var o = document.createElement("option"); o.value = name; o.textContent = THEMES[name].label; $("theme").appendChild(o);
+  });
+  function themeVars(t) {
+    return { "--ink": t.ink, "--ink-2": t.ink2, "--ink-deep": t.deep, "--line": t.line, "--line-2": t.line2,
+             "--cyan": t.accent, "--magenta": t.accent2, "--dim": t.dim, "--text": t.text };
+  }
+  // A tool page (TTS) has its own token names - same colours, mapped onto them.
+  function toolVars(t) {
+    return { "--ink": t.ink, "--ink-deep": t.deep, "--ink-line": t.line, "--amber": t.accent, "--cyan": t.accent2,
+             "--amber-soft": t.text, "--amber-dim": t.dim };
+  }
+  function setVars(doc, vars) {
+    Object.keys(vars).forEach(function (k) { doc.documentElement.style.setProperty(k, vars[k]); });
+    if (doc.body) doc.body.style.color = vars["--text"] || vars["--amber-soft"];
+  }
+  function applyTheme(name) {
+    theme = THEMES[name] ? name : "aurora";
+    $("theme").value = theme;
+    setVars(document, themeVars(THEMES[theme]));
+    document.querySelectorAll("iframe.tool").forEach(function (f) {
+      if (f.contentDocument) setVars(f.contentDocument, toolVars(THEMES[theme]));
+    });
+  }
+  $("theme").addEventListener("change", function () {
+    var name = $("theme").value;
+    applyTheme(name);
+    call("set", { file: SETTINGS_FILE, path: ["theme"], value: name }).then(function (data) {
+      if (current === SETTINGS_FILE) show(data);
+      toast("Stil: " + name, "ok");
+    }).catch(function (e) { toast(e.message, "err"); });
+  });
+
+  // The bridge for tool pages (features offering SETTINGS_TOOL, e.g. TTS): they are shown in a
+  // frame and call back through this page's authenticated connection - they have none of
+  // their own.
+  window.bugbotTool = function (tool, action, args) {
+    return call("tool", { tool: tool, action: action, args: args || {} });
+  };
 
   function toast(text, cls) {
     var t = $("toast");
@@ -140,7 +194,9 @@
     };
     socket.onmessage = function (message) {
       var frame = JSON.parse(message.data);
-      if (frame.type === "files") { files = frame.data; renderFiles(); if (!current && files.length) open(location.hash.slice(1) || files[0].id); }
+      if (frame.type === "theme") applyTheme(frame.data);
+      else if (frame.type === "tools") { tools = frame.data; renderFiles(); }
+      else if (frame.type === "files") { files = frame.data; renderFiles(); if (!current && files.length) open(location.hash.slice(1) || files[0].id); }
       else if (frame.type === "reply" && pending[frame.id]) {
         var p = pending[frame.id]; delete pending[frame.id];
         frame.ok ? p.resolve(frame.data) : p.reject(new Error(frame.error));
@@ -175,9 +231,40 @@
         box.appendChild(b);
       });
     });
+    if (tools.length) {
+      var h = document.createElement("h2"); h.textContent = "Werkzeuge"; box.appendChild(h);
+      tools.forEach(function (t) {
+        var b = document.createElement("button");
+        b.className = current === "tool:" + t.id ? "active" : "";
+        b.textContent = (t.icon ? t.icon + " " : "") + t.title;
+        b.addEventListener("click", function () { open("tool:" + t.id); });
+        box.appendChild(b);
+      });
+    }
+  }
+
+  function openTool(id) {
+    var tool = tools.find(function (t) { return t.id === id; });
+    if (!tool) return open(files[0].id);
+    current = "tool:" + id; state = null;
+    location.hash = current;
+    renderFiles();
+    $("title").textContent = (tool.icon ? tool.icon + " " : "") + tool.title;
+    $("path").textContent = "Werkzeug";
+    $("search").classList.add("hidden"); $("undo").classList.add("hidden");
+    $("content").innerHTML = '<div class="empty">lade …</div>';
+    return call("tool", { tool: id, action: "page" }).then(function (data) {
+      var frame = document.createElement("iframe");
+      frame.className = "tool";
+      frame.addEventListener("load", function () { setVars(frame.contentDocument, toolVars(THEMES[theme])); });
+      frame.srcdoc = data.html;
+      $("content").innerHTML = ""; $("content").appendChild(frame);
+    }).catch(function (e) { $("content").innerHTML = ""; toast(e.message, "err"); });
   }
 
   function open(id) {
+    if (id.indexOf("tool:") === 0 && tools.some(function (t) { return "tool:" + t.id === id; })) return openTool(id.slice(5));
+    $("search").classList.remove("hidden"); $("undo").classList.remove("hidden");
     if (!files.some(function (f) { return f.id === id; })) id = files[0].id;
     current = id;
     location.hash = id;
@@ -187,6 +274,11 @@
 
   function show(data) {
     state = data;
+    // The theme is a setting like any other - edited in the form, it applies right away.
+    if (data.file === SETTINGS_FILE) {
+      var chosen = at(data.overrides, ["theme"]);
+      applyTheme(chosen !== undefined ? chosen : data.base.theme);
+    }
     var f = files.find(function (x) { return x.id === data.file; });
     if (f) { f.overridden = Object.keys(data.overrides).length > 0; renderFiles(); }
     $("title").textContent = data.file.split("/").pop();
@@ -197,6 +289,13 @@
     var scroll = document.querySelector("main").scrollTop;
     var openPaths = Array.from(content.querySelectorAll("details[open]")).map(function (d) { return d.dataset.path; });
     content.innerHTML = "";
+    // A file that has a tool page of its own (tts.json -> "TTS – Stimmen & Pool"): point to it.
+    tools.filter(function (t) { return t.config && data.file.split("/").pop() === t.config; }).forEach(function (t) {
+      var link = document.createElement("div"); link.className = "toollink";
+      link.textContent = (t.icon ? t.icon + " " : "") + t.title + " – Stimmen anhören, Pool & Sprechweise →";
+      link.addEventListener("click", function () { open("tool:" + t.id); });
+      content.appendChild(link);
+    });
     renderDict(data.base, data.overrides, [], content, openPaths, true);
     applySearch();
     document.querySelector("main").scrollTop = scroll;

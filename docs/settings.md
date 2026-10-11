@@ -9,8 +9,8 @@ http://127.0.0.1:4457/settings?token=<SETTINGS_TOKEN>
 ```
 
 Served by the bot itself, on the [overlay](overlay.md) listener: no port of its own, through the
-same [SSH tunnel](tunnel.md) as everything on screen. The token is only needed once — the page
-keeps it for the tab and removes it from the address bar.
+same [SSH tunnel](tunnel.md) as everything on screen. The token stays in the address, so
+reloading and a bookmark work.
 
 ## How it works
 
@@ -29,6 +29,21 @@ keeps it for the tab and removes it from the address bar.
 - **New entries** (`＋ hinzufügen`) only where the bot accepts them: plain name → text tables
   such as `commands` (static commands) or TTS `replacements`. Shipped keys cannot be deleted —
   only overridden.
+
+## Style
+
+Bottom left, **Stil**: the overlays' colour worlds — aurora (default, the stream's cyan/magenta),
+amber, cyan, matrix, sunset, mono. The choice is itself a setting
+(`features/settings/settings.json`, `theme`), so it is the same in every browser and can be reset
+or undone like any other; tool pages (TTS) follow it.
+
+## Tools
+
+Under **Werkzeuge** the website lists pages that features bring along (capability
+`SETTINGS_TOOL`): today **🔊 TTS – Stimmen & Pool** — try voices, build the pool, tune the speech,
+read the per-stream record. The website knows nothing about them: it shows the feature's page
+in a frame and hands its calls through its own connection (op `tool`), so they need no token of
+their own. A file with such a page (`tts.json`) shows a link to it at the top.
 
 ## Checked before saving
 

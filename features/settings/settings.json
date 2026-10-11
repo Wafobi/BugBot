@@ -1,0 +1,5 @@
+{
+  "_comment": "The settings website's own settings. Hot-reload, like every JSON here.",
+  "_theme": "Colours of the settings website - the same colour worlds as the overlays: aurora (cyan/magenta, the stream's look), amber (classic terminal), cyan, matrix, sunset, mono. Also selectable at the bottom left of the website itself.",
+  "theme": "aurora"
+}

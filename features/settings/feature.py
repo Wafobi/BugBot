@@ -16,6 +16,10 @@ settings/<name>.json (LiveConfig.set_override), which lies on top - `git pull` n
 conflicts, "back to default" is removing the override, and every save keeps the previous
 version for undo (LiveConfig.history/restore). Secrets (.env) are out of reach by design.
 
+Next to the files, features can bring a page of their own (SETTINGS_TOOL capability) - TTS
+does, for trying voices, building the pool and reading its record. The website lists them
+under "Werkzeuge" and hands their calls through (op "tool"), knowing nothing about them.
+
 Checked before anything is saved:
   - the key must exist in the shipped file, or be a new entry in a section that is a plain
     name -> text table (static commands, replacements); "_comment" keys are not editable;
@@ -74,9 +78,16 @@ class SettingsError(ValueError):
 
 class SettingsFeature(feature_api.Feature):
     name = "settings"
-    optional = frozenset({feature_api.OVERLAY})
+    optional = frozenset({feature_api.OVERLAY, feature_api.SETTINGS_TOOL})
+
+    def __init__(self):
+        # Its own settings.json: today only the colour theme of the website - editable on
+        # the website like every other file (and from its theme picker, which saves here).
+        self.config = runtime_config.for_package(__file__, {"theme": "aurora"})
+        self._tools = {}
 
     async def setup(self, bus):
+        self._tools = {tool.settings_tool_info()["id"]: tool for tool in bus.features_with(feature_api.SETTINGS_TOOL)}
         overlay = bus.feature_with(feature_api.OVERLAY)
         if not env.SETTINGS_TOKEN:
             log.info("No SETTINGS_TOKEN set - no settings website.")
@@ -85,7 +96,10 @@ class SettingsFeature(feature_api.Feature):
             log.info("Settings website needs the overlay listener (overlay feature + OVERLAY_TOKEN) - not offered.")
             return
         overlay.add_route(ROUTE, self.page, env.SETTINGS_TOKEN)
-        overlay.add_role(ROLE, lambda: [("files", self.files())], token=env.SETTINGS_TOKEN, on_message=self.handle)
+        overlay.add_role(
+            ROLE, lambda: [("theme", self.config.get("theme", "aurora")), ("tools", self.tools()), ("files", self.files())],
+            token=env.SETTINGS_TOKEN, on_message=self.handle,
+        )
         log.info(f"Settings website on the overlay listener: {ROUTE}")
 
     async def page(self, query):
@@ -102,6 +116,9 @@ class SettingsFeature(feature_api.Feature):
             if self._id(config) == file_id:
                 return config
         raise SettingsError(f"unbekannte Datei {file_id!r}")
+
+    def tools(self):
+        return [tool.settings_tool_info() for tool in self._tools.values()]
 
     def files(self):
         """Every editable file: id (path in the repo), group, and whether it is overridden."""
@@ -175,10 +192,23 @@ class SettingsFeature(feature_api.Feature):
             return {"type": "reply", "ok": False, "error": "kein JSON"}
         reply = {"type": "reply", "id": request.get("id")}
         try:
-            reply.update(ok=True, data=await asyncio.to_thread(self._dispatch, request))
+            if request.get("op") == "tool":
+                data = await self._tool(request)
+            else:
+                data = await asyncio.to_thread(self._dispatch, request)
+            reply.update(ok=True, data=data)
         except (SettingsError, OSError, ValueError, KeyError) as error:
             reply.update(ok=False, error=str(error))
         return reply
+
+    async def _tool(self, request):
+        tool = self._tools.get(str(request.get("tool") or ""))
+        if tool is None:
+            raise SettingsError(f"unbekanntes Werkzeug {request.get('tool')!r}")
+        args = request.get("args") or {}
+        if not isinstance(args, dict):
+            raise SettingsError("args muss ein Objekt sein")
+        return await tool.settings_tool(str(request.get("action") or ""), args)
 
     def _dispatch(self, request):
         op = request.get("op")

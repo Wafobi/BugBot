@@ -32,10 +32,11 @@ expanded - "replacements" in tts.json), and English chat words are pronounced in
 ("english_words", see piper_runner.py). Moderation sees the original. How it is spoken
 (tempo, intonation, pauses) is "speech" in tts.json, see synth.SPEECH_SETTINGS.
 
-No port of its own: the browser source (client/tts.html, ?role=tts) and the two Stream Deck
-routes ride on features/overlay's listener (OVERLAY) - same port, same SSH tunnel. The routes
-are guarded by TTS_TOKEN, not by OVERLAY_TOKEN, which sits in the scene collection and only
-ever grants reading.
+No port of its own: the browser source (client/tts.html, ?role=tts) and the Stream Deck routes
+(/tts/next, /tts/skip, /tts/count) ride on features/overlay's listener (OVERLAY) - same port,
+same SSH tunnel. The routes are guarded by TTS_TOKEN, not by OVERLAY_TOKEN, which sits in the
+scene collection and only ever grants reading. Voices, pool, speech and the record are a page
+of the settings website (SETTINGS_TOOL, see settings_tool).
 
 MODERATION and BITS_LEDGER are optional: without MODERATION nothing is filtered (as
 everywhere else in the bot), without BITS_LEDGER a cheer is read out without being booked
@@ -46,6 +47,7 @@ import asyncio
 import base64
 import http
 import io
+import json
 import logging
 import random
 import re
@@ -54,6 +56,7 @@ import wave
 import zlib
 from collections import deque
 from datetime import datetime, UTC
+from pathlib import Path
 
 from core import events
 from core import feature as feature_api
@@ -71,6 +74,8 @@ log = logging.getLogger(__name__)
 # those get the audio frames. The Stream Deck buttons are routes on that same listener.
 ROLE = "tts"
 ROUTE_NEXT = "/tts/next"
+# The page the settings website shows for this feature (settings_tool, action "page").
+TOOL_PAGE = Path(__file__).parent / "client" / "settings_tool.html"
 ROUTE_SKIP = "/tts/skip"
 
 DEFAULTS = {
@@ -100,6 +105,9 @@ class TtsFeature(feature_api.Feature):
         feature_api.MODERATION, feature_api.BITS_LEDGER, feature_api.OVERLAY,
         feature_api.STORAGE, feature_api.SESSIONS,
     })
+
+    # Its page on the settings website (voices, pool, speech, record) - see settings_tool.
+    provides = frozenset({feature_api.SETTINGS_TOOL})
 
     def __init__(self):
         self.config = runtime_config.for_package(__file__, DEFAULTS)
@@ -173,9 +181,30 @@ class TtsFeature(feature_api.Feature):
         else:
             self._overlay.add_route(ROUTE_NEXT, self.release_next, env.TTS_TOKEN)
             self._overlay.add_route(ROUTE_SKIP, self.skip_next, env.TTS_TOKEN)
-            # The admin page (try voices, build the pool, save to tts.json) - see admin.py.
+            # /tts/count for a Stream Deck label - see admin.py. Everything else of the old
+            # admin page lives on the settings website now (settings_tool).
             for path, handler in TtsAdmin(self).routes().items():
                 self._overlay.add_route(path, handler, env.TTS_TOKEN)
+
+    # --- Settings website (SETTINGS_TOOL) ----------------------------------------------
+
+    def settings_tool_info(self):
+        return {"id": "tts", "title": "TTS – Stimmen & Pool", "icon": "🔊", "config": "tts.json"}
+
+    async def settings_tool(self, action, args):
+        """One call from the settings website's TTS page (behind SETTINGS_TOKEN): state,
+        speak, save, history - see admin.py. Returns the answer as data; a refused call
+        raises ValueError with the reason."""
+        if action == "page":
+            return {"html": TOOL_PAGE.read_text(encoding="utf-8")}
+        handler = TtsAdmin(self).actions().get(action)
+        if handler is None:
+            raise ValueError(f"unknown action {action!r}")
+        status, body, _ = await handler({str(k): str(v) for k, v in (args or {}).items()})
+        data = json.loads(body)
+        if int(status) >= 400:
+            raise ValueError(data.get("error") or f"error {int(status)}")
+        return data
 
     # --- Shared helpers -------------------------------------------------------------
 

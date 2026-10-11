@@ -1,5 +1,5 @@
 {
-  "_comment": "Hot-reload: changes apply without a restart (see core/runtime_config.py). 'voice' is '<model>' or '<model>#<speaker>' (e.g. 'de_DE-mls-medium#42'), or a list of those - a pool; 'voice_pick' then decides: 'random' = a fresh pick per message, 'per_user' = the same voice for the same viewer every time - which models are installed is decided by voices.txt (Dockerfile), not here - easiest to set on the admin page, http://127.0.0.1:4457/tts/admin?token=<TTS_TOKEN> (docs/tts.md). Every sentence the bot says or speaks lives under 'texts'; {placeholders} in curly braces get filled in and must stay.",
+  "_comment": "Hot-reload: changes apply without a restart (see core/runtime_config.py). 'voice' is '<model>' or '<model>#<speaker>' (e.g. 'de_DE-mls-medium#42'), or a list of those - a pool; 'voice_pick' then decides: 'random' = a fresh pick per message, 'per_user' = the same voice for the same viewer every time - which models are installed is decided by voices.txt (Dockerfile), not here - easiest to set on the settings website, page 'TTS – Stimmen & Pool' (docs/settings.md). Every sentence the bot says or speaks lives under 'texts'; {placeholders} in curly braces get filled in and must stay.",
   "min_bits": 100,
   "include_anonymous": false,
   "resub_messages": true,
@@ -12,7 +12,7 @@
   "voice": "de_DE-thorsten-medium",
   "voice_pick": "random",
   "speech": {
-    "_comment": "How it is spoken. Leave a key out (or null) for the model's own default. length_scale >1 = slower; noise_scale = variation in intonation; noise_w_scale = variation in sound lengths; sentence_silence = pause after a sentence in seconds. Try values live on the admin page (/tts/admin).",
+    "_comment": "How it is spoken. Leave a key out (or null) for the model's own default. length_scale >1 = slower; noise_scale = variation in intonation; noise_w_scale = variation in sound lengths; sentence_silence = pause after a sentence in seconds. Try values live on the settings website, page 'TTS – Stimmen & Pool'.",
     "length_scale": null,
     "noise_scale": null,
     "noise_w_scale": null,

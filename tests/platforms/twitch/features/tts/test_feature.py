@@ -402,3 +402,16 @@ async def test_skip_while_playing_interrupts_and_keeps_the_queue(monkeypatch):
     # Nothing playing any more - the next skip does nothing.
     await f.skip_next()
     assert [e["text"] for e in f._queue] == ["zwei"]
+
+
+# --- the settings website's TTS page (SETTINGS_TOOL) ---------------------------------------
+
+async def test_settings_tool_serves_its_page_and_refuses_unknown_actions():
+    f = make_feature()
+    assert f.settings_tool_info()["id"] == "tts"
+    page = await f.settings_tool("page", {})
+    assert "bugbotTool" in page["html"]
+    with pytest.raises(ValueError):
+        await f.settings_tool("explode", {})
+    with pytest.raises(ValueError):  # an action's own refusal comes back as ValueError too
+        await f.settings_tool("speak", {"voice": "../x", "text": "hi"})

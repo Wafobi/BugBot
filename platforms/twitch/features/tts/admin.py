@@ -1,16 +1,13 @@
-"""The TTS admin page: try voices, build the voice pool, tune how it is spoken - and save it
-on the server.
+"""The TTS tool of the settings website: try voices, build the voice pool, tune how it is
+spoken, read the record - and save it on the server.
 
-Served by the bot itself, on the overlay listener (same port, same SSH tunnel as everything
-else), so nothing TTS-related runs on the streamer's machine: open
+Shown on the settings website (features/settings), as its "TTS – Stimmen & Pool" page: the
+website reaches these methods through the SETTINGS_TOOL capability (TtsFeature.settings_tool),
+behind SETTINGS_TOKEN - nothing TTS-related runs on the streamer's machine. Only /tts/count is
+still a route of its own, for a Stream Deck label (TTS_TOKEN, like the buttons).
 
-    http://127.0.0.1:4457/tts/admin?token=<TTS_TOKEN>
-
-through the tunnel. Every route here hangs on TTS_TOKEN, like the Stream Deck buttons.
-
-GET only (the overlay listener answers routes in the WebSocket handshake hook, which never
-sees anything else), so everything travels in the query string - fine for 255 characters of
-text and a list of voice names.
+Every method takes the arguments as a dict of strings (the shape the old query-string API had)
+and answers (HTTPStatus, JSON text, content type).
 
 Saving never touches tts.json in the repository - it goes into the override layer,
 settings/tts.json (see core/runtime_config.py, LiveConfig.save_overrides), which lies on top
@@ -23,7 +20,6 @@ import base64
 import http
 import json
 import logging
-from pathlib import Path
 
 from . import config as env
 from . import normalize
@@ -31,7 +27,6 @@ from . import synth
 
 log = logging.getLogger(__name__)
 
-PAGE = Path(__file__).parent / "client" / "admin.html"
 MAX_TEXT = 1000
 VOICE_PICKS = ("random", "per_user")
 JSON = "application/json; charset=utf-8"
@@ -46,7 +41,7 @@ def _error(message):
 
 
 class TtsAdmin:
-    """Route handlers for the admin page. `feature` is the TtsFeature - for its config, its
+    """Handlers behind the settings website's TTS page. `feature` is the TtsFeature - for its config, its
     queue length and the same synthesis path the stream uses."""
 
     def __init__(self, feature):
@@ -57,21 +52,13 @@ class TtsAdmin:
         return self._feature.config
 
     def routes(self):
-        return {
-            "/tts/admin": self.page,
-            "/tts/admin/state": self.state,
-            "/tts/admin/speak": self.speak,
-            "/tts/admin/save": self.save,
-            # Just the number waiting - for a Stream Deck button label (Bitfocus Companion:
-            # a trigger polls this into a custom variable, see docs/tts.md).
-            "/tts/count": self.count,
-            # The record (store.py): which streams had TTS, and per stream every message with
-            # when it was played - as a position in the VOD.
-            "/tts/admin/history": self.history,
-        }
+        """The one route left on the overlay listener: the queue length for a Stream Deck
+        label (Bitfocus Companion polls it into a custom variable, see docs/tts.md)."""
+        return {"/tts/count": self.count}
 
-    async def page(self, query):
-        return http.HTTPStatus.OK, PAGE.read_text(encoding="utf-8"), "text/html; charset=utf-8"
+    def actions(self):
+        """What the settings website may call - see TtsFeature.settings_tool."""
+        return {"state": self.state, "speak": self.speak, "save": self.save, "history": self.history}
 
     async def history(self, query):
         """Without ?session=: the streams that had TTS (newest first, with title/date from

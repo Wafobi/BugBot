@@ -94,3 +94,31 @@ async def test_garbage_is_answered_not_raised(setup):
     assert (await feature.handle("{nope"))["ok"] is False
     assert (await ask(feature, op="get", file="../etc/passwd"))["ok"] is False
     assert (await ask(feature, op="explode", file="platforms/twitch/twitch.json"))["ok"] is False
+
+
+class FakeTool:
+    def settings_tool_info(self):
+        return {"id": "fake", "title": "Fake", "config": "fake.json"}
+
+    async def settings_tool(self, action, args):
+        if action == "boom":
+            raise ValueError("kaputt")
+        return {"action": action, "args": args}
+
+
+class ToolBus:
+    def features_with(self, capability):
+        return [FakeTool()]
+
+    def feature_with(self, capability):
+        return None
+
+
+async def test_tool_calls_are_handed_through(setup):
+    feature, *_ = setup
+    await feature.setup(ToolBus())
+    assert feature.tools() == [{"id": "fake", "title": "Fake", "config": "fake.json"}]
+    reply = await ask(feature, op="tool", tool="fake", action="speak", args={"text": "hi"})
+    assert reply["ok"] and reply["data"] == {"action": "speak", "args": {"text": "hi"}}
+    assert (await ask(feature, op="tool", tool="fake", action="boom"))["error"] == "kaputt"
+    assert not (await ask(feature, op="tool", tool="nope", action="x"))["ok"]
