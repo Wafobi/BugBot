@@ -78,3 +78,27 @@ async def test_route_gets_the_query_and_can_send_bytes_with_a_type(server):
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/x?token=t&text=hallo") as response:
             return response.headers["Content-Type"], response.read()
     assert await asyncio.to_thread(fetch) == ("audio/wav", b"hallo")
+
+
+async def test_page_role_gets_its_own_snapshot_and_only_its_own_frames(server):
+    server.add_role("companion", lambda: [("state", [{"key": "twitch:1"}])])
+    url = f"ws://127.0.0.1:{PORT}/?token=overlay-token"
+    async with websockets.connect(url) as plain, websockets.connect(url + "&role=companion") as pond:
+        assert json.loads(await pond.recv()) == {"type": "state", "data": [{"key": "twitch:1"}]}
+        await plain.recv()  # overlay state
+        await plain.recv()  # overlay history
+        await asyncio.sleep(0.05)
+        await server.broadcast("patch", {"viewers": 3})          # overlay frame: not for the pond
+        await server.broadcast("join", {"key": "twitch:2"}, role="companion")
+        assert json.loads(await pond.recv())["type"] == "join"
+        assert json.loads(await plain.recv())["type"] == "patch"
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(plain.recv(), 0.2)  # ...and the join never reached the overlay
+
+
+async def test_page_role_snapshot_may_be_async(server):
+    async def snapshot():
+        return [("state", [])]
+    server.add_role("companion", snapshot)
+    async with websockets.connect(f"ws://127.0.0.1:{PORT}/?role=companion&token=overlay-token") as pond:
+        assert json.loads(await pond.recv()) == {"type": "state", "data": []}

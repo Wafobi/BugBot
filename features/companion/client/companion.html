@@ -4,7 +4,7 @@
 <!--
   The browser source for the companion pond in the picture. Belongs on the OBS machine, not
   the server - like features/chat_panel/client/chat.html it sits here because it belongs to
-  its counterpart (features/companion/server.py), and runs elsewhere.
+  its counterpart (the overlay listener, features/overlay/server.py, ?role=companion), and runs elsewhere.
 
   Every person who writes in chat gets a small DiceBear "sprouts" creature, seeded from
   their name - the same approach as the standalone vtubbi avatar (vtubbi/src/companion.ts),
@@ -14,14 +14,14 @@
   Setup: add a "Browser" source, width/height to taste (fills the source, like chat.html -
   no fixed canvas), and as URL the file with a token:
 
-    file:///path/to/bugbot/features/companion/client/companion.html?token=YOUR_COMPANION_TOKEN
+    file:///path/to/bugbot/features/companion/client/companion.html?token=YOUR_OVERLAY_TOKEN
 
   To see it without OBS: open preview.html next to it, or append ?demo=1 to this file.
 
   Parameters (all optional):
-    token=   the COMPANION_TOKEN from the bot's .env. Without it, no data.
+    token=   the OVERLAY_TOKEN from the bot's .env (the same as bars.html/chat.html). Without it, no data.
     host=    default 127.0.0.1 - the tunnel ends here, not at the server
-    port=    port of the tunnel on this machine (default 4459)
+    port=    port of the tunnel on this machine (default 4457, the overlay listener; token = OVERLAY_TOKEN)
     size=    height of one companion in pixels (default 96)
     max=     how many companions are visible at once, oldest makes room first (default 24)
     floor=   ground line from the bottom, in % of the height (default 10)
@@ -427,10 +427,10 @@ requestAnimationFrame(tick);
 function connect() {
   const token = params.get("token") || "";
   const host = params.get("host") || "127.0.0.1";
-  const port = params.get("port") || "4459";
+  const port = params.get("port") || "4457";
   if (!token) { console.warn("No ?token= in the URL - not connecting."); return; }
 
-  const socket = new WebSocket(`ws://${host}:${port}/?token=${encodeURIComponent(token)}`);
+  const socket = new WebSocket(`ws://${host}:${port}/?role=companion&token=${encodeURIComponent(token)}`);
 
   socket.onopen = () => document.getElementById("link").classList.add("ok");
   socket.onclose = () => {

@@ -1,13 +1,12 @@
 # The SSH tunnel
 
-Three of the bot's listeners are reached from outside the server, and none is exposed to the
+Two of the bot's listeners are reached from outside the server, and none is exposed to the
 internet to make that possible. The way in is an SSH tunnel, dialled **from the OBS machine**.
 
 | Port | Listener | Used by |
 |---|---|---|
 | `4456` | obs-websocket relay | [`platforms/obs`](obs.md) |
-| `4457` | overlay listener — stat bars and chat, one listener for both; also carries [TTS](tts.md) | [`features/overlay`](overlay.md) |
-| `4459` | companion listener | [`features/companion`](companion.md) |
+| `4457` | overlay listener — stat bars, chat, the [companion](companion.md) pond and [TTS](tts.md), all on one | [`features/overlay`](overlay.md) |
 
 Everything here runs on the OBS machine — the same end that runs OBS itself. That is unusual for
 this repo, where every other script runs on the server, and it follows from the direction of the
@@ -17,7 +16,7 @@ connection rather than from preference.
 
 ## Why it points that way
 
-The bot publishes all three ports to the **server's loopback only**
+The bot publishes both ports to the **server's loopback only**
 (`PublishPort=127.0.0.1:4456:4456` in `bugbot.container`). Nothing outside that machine can open
 them, which is the point: a listener that answers strangers is a listener someone will eventually
 knock on. The tokens are a second lock, not the first one.
@@ -32,7 +31,6 @@ OBS machine                                  server
 ┌──────────────────────┐                    ┌──────────────────────┐
 │ relay ──► 127.0.0.1:4456 ══ ssh -L ══════► 127.0.0.1:4456        │
 │ browser ► 127.0.0.1:4457 ══ ssh -L ══════► 127.0.0.1:4457        │
-│ browser ► 127.0.0.1:4459 ══ ssh -L ══════► 127.0.0.1:4459        │
 └──────────────────────┘   encrypted        └──────────────────────┘
 ```
 
@@ -43,7 +41,7 @@ OBS machine                                  server
 **Then you do not need any of this.** Skip `setup-tunnel.sh` entirely.
 
 The tunnel exists to cross a network, and if the bot and OBS sit on one box there is nothing to
-cross: the container already publishes `4456`/`4457`/`4459` to that machine's loopback, which is
+cross: the container already publishes `4456`/`4457` to that machine's loopback, which is
 exactly where the relay and the browser sources look. Running the script anyway would build an
 ssh connection from localhost to localhost and then fail to bind ports that are already
 answering.
@@ -53,10 +51,10 @@ listeners exist at all, and `OBS_BRIDGE_TOKEN` is still checked on every handsha
 not a trust boundary here; the loopback bind is.
 
 One thing to watch: running the bot **outside** a container on that machine, set
-`OBS_BRIDGE_BIND=127.0.0.1`, `OVERLAY_BIND=127.0.0.1` and `COMPANION_BIND=127.0.0.1`. The
+`OBS_BRIDGE_BIND=127.0.0.1` and `OVERLAY_BIND=127.0.0.1`. The
 defaults bind `0.0.0.0`, which is correct only because a container's network namespace makes the
 host-side `PublishPort` the real restriction. Without the container, that restriction is gone and
-the default would expose all three listeners to your whole network.
+the default would expose both listeners to your whole network.
 
 Everything below is for the split setup.
 
@@ -78,7 +76,7 @@ particular, does **not** bounce the tunnel.
 
 | Variable | Default | For |
 |---|---|---|
-| `BUGBOT_TUNNEL_PORTS` | `4456 4457 4459` | running only some of the three listeners |
+| `BUGBOT_TUNNEL_PORTS` | `4456 4457` | running only one of the two listeners |
 | `BUGBOT_TUNNEL_ALIAS` | `bugbot` | naming the `~/.ssh/config` entry, or pointing the script at an existing one |
 
 ### Two shapes
@@ -90,7 +88,7 @@ a `bugbot-tunnel.service`, and nothing else on the machine is involved. Other tu
 server are left alone: separate ssh connections coexist fine, as long as they do not ask for the
 same ports.
 
-**A shared tunnel** — you already forward 4456, 4457 and 4459 through a tunnel of your own,
+**A shared tunnel** — you already forward 4456 and 4457 through a tunnel of your own,
 perhaps alongside unrelated ports to the same machine. The script detects this and stays out of
 the way:
 it adds only what is missing, between its own marker comments, and leaves the connection to
@@ -148,7 +146,7 @@ inserts its own block above any catch-all for that reason.
 systemctl --user status bugbot-tunnel
 journalctl --user-unit=bugbot-tunnel.service -f
 ssh -G bugbot | grep -E 'localforward|serveralive|exitonforward'   # what ssh really resolves
-ss -tlnp | grep -E ':(4456|4457|4459) '                             # what is actually listening
+ss -tlnp | grep -E ':(4456|4457) '                             # what is actually listening
 ```
 
 `ssh -G` is worth knowing: it prints the options ssh will use after `Include`s, `Match` blocks and
@@ -157,7 +155,7 @@ catch-alls have been applied. Reading the config file yourself will eventually d
 | Symptom | Likely cause |
 |---|---|
 | `bind: Address already in use`, unit restart-loops | another tunnel already forwards that port — see *shared tunnel* above |
-| Unit runs, nothing answers | the tunnel is up but the listener is not; check `OBS_BRIDGE_TOKEN` / `OVERLAY_TOKEN` / `COMPANION_TOKEN` on the server |
+| Unit runs, nothing answers | the tunnel is up but the listener is not; check `OBS_BRIDGE_TOKEN` / `OVERLAY_TOKEN` on the server |
 | `Permission denied (publickey)` in the journal | `ssh-copy-id bugbot`; a passphrase on the key needs a running ssh-agent |
 | Works until you log out | lingering is off — `loginctl enable-linger $USER` |
 | Config edits have no effect | something above them already answered; check with `ssh -G` |

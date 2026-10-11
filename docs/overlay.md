@@ -16,6 +16,12 @@ OBS machine                                     server
 └──────────────────────┘  encrypted tunnel └──────────────────────┘
 ```
 
+**Other pages ride on the same listener** (capability `OVERLAY`, see `feature.py`): a browser
+source may connect with `?role=<name>`. The [companion](companion.md) pond (`role=companion`) is
+a page of its own there — it gets its own snapshot on connect and only its own frames — and
+[TTS](tts.md) (`role=tts`) receives its audio that way; its Stream Deck buttons and admin page
+are HTTP routes on this port, behind their own `TTS_TOKEN`. One port, one tunnel forward.
+
 The payoff of pushing rather than polling: a follower is in the picture the moment they arrive,
 not at the next poll. And the bot decides when something changed — a viewer sample that repeats
 the previous number sends nothing, so the page does not repaint without reason.

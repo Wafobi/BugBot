@@ -60,11 +60,13 @@ from core import events
 from core import feature as feature_api
 from core import runtime_config
 
-from . import config as env
-from .server import CompanionServer
 from .store import CompanionStore
 
 log = logging.getLogger(__name__)
+
+# The companion page connects to the overlay listener with ?role=companion (see
+# client/companion.html and features/overlay/server.py, add_role).
+ROLE = "companion"
 
 DEFAULTS = {
     "platforms": [],
@@ -100,7 +102,7 @@ class CompanionFeature(feature_api.Feature):
     # !companion spends from is the same one platforms/twitch/features/tts spends from, and
     # a cheer read out by that feature is booked here so its bits do not count twice.
     provides = frozenset({feature_api.BITS_LEDGER})
-    optional = frozenset({feature_api.STATS, feature_api.MODERATION, feature_api.STORAGE})
+    optional = frozenset({feature_api.STATS, feature_api.MODERATION, feature_api.STORAGE, feature_api.OVERLAY})
 
     # Chat only - a companion is spoken into being, and only platforms with the CHAT
     # capability report messages at all.
@@ -109,7 +111,9 @@ class CompanionFeature(feature_api.Feature):
     def __init__(self):
         self.config = runtime_config.for_package(__file__, DEFAULTS)
         self._bus = None
-        self._server = None
+        # The browser source is reached through the overlay listener (OVERLAY), as a page of
+        # its own: ?role=companion - no port of its own any more.
+        self._overlay = None
         self._stats = None
         self._moderation = None
         self._store = None
@@ -144,17 +148,14 @@ class CompanionFeature(feature_api.Feature):
         bus.subscribe(events.MESSAGE_ACCEPTED, self.on_message_accepted)
         self._sweep_task = asyncio.create_task(self._sweep_loop())
 
-        if not env.COMPANION_TOKEN:
-            log.info("No COMPANION_TOKEN set - no companion listener. "
-                     "The !companion command still runs, just without anywhere to show it.")
+        overlay = bus.feature_with(feature_api.OVERLAY)
+        if overlay is None or not overlay.add_role(
+            ROLE, lambda: [("state", [self._public(c) for c in self._companions.values()])],
+        ):
+            log.info("Companion without an overlay listener (no overlay feature or no OVERLAY_TOKEN) - "
+                     "the !companion command still runs, just without anywhere to show it.")
             return
-
-        self._server = CompanionServer(
-            env.COMPANION_TOKEN, env.COMPANION_BIND, env.COMPANION_PORT,
-            snapshot=lambda: [self._public(c) for c in self._companions.values()],
-            on_error=lambda message: log.warning(message),
-        )
-        await self._server.start()
+        self._overlay = overlay
 
     async def close(self):
         if self._sweep_task is not None:
@@ -164,9 +165,11 @@ class CompanionFeature(feature_api.Feature):
             except asyncio.CancelledError:
                 pass
             self._sweep_task = None
-        if self._server is not None:
-            await self._server.close()
-            self._server = None
+
+    async def _push(self, type_, data):
+        """One frame to the companion page(s) - nothing without a listener."""
+        if self._overlay is not None:
+            await self._overlay.push(type_, data, ROLE)
 
     # --- Scope ------------------------------------------------------------------------
 
@@ -281,8 +284,8 @@ class CompanionFeature(feature_api.Feature):
         }
         # Only a genuinely new companion is worth a frame - every other message just
         # refreshes last_seen in RAM, or the pond would redraw itself on every chat line.
-        if is_new and self._server is not None:
-            await self._server.broadcast("join", self._public(self._companions[key]))
+        if is_new:
+            await self._push("join", self._public(self._companions[key]))
 
     async def _sweep_loop(self):
         try:
@@ -298,8 +301,7 @@ class CompanionFeature(feature_api.Feature):
         stale = [key for key, c in self._companions.items() if c["last_seen"] < cutoff]
         for key in stale:
             del self._companions[key]
-            if self._server is not None:
-                await self._server.broadcast("leave", {"key": key})
+            await self._push("leave", {"key": key})
 
     # --- Speaking -------------------------------------------------------------------
 
@@ -372,8 +374,8 @@ class CompanionFeature(feature_api.Feature):
         # Excluded from the pond (exclude_users) means excluded here too - the client's
         # speak() creates a pet on the fly for a key it does not recognise yet, so without
         # this guard the broadcaster would still make one appear just by talking through it.
-        if self._server is not None and not self._is_excluded(message):
-            await self._server.broadcast("speak", {
+        if not self._is_excluded(message):
+            await self._push("speak", {
                 "key": key,
                 "seed": await self._seed_for(key, message.user_name),
                 "platform": message.platform,
@@ -417,8 +419,7 @@ class CompanionFeature(feature_api.Feature):
             # than a duplicate (see client/companion.html:addPet), so the new look shows up
             # immediately instead of waiting for whatever chat line happens next.
             self._companions[key]["seed"] = seed
-            if self._server is not None:
-                await self._server.broadcast("join", self._public(self._companions[key]))
+            await self._push("join", self._public(self._companions[key]))
         return self.config.text("set_done", seed=seed)
 
     # --- Commands -------------------------------------------------------------------

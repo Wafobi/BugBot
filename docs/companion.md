@@ -3,24 +3,24 @@
 A browser source with one small pet per eligible chatter, seeded from their name. Same reversed
 direction as [Overlay](overlay.md) (stat bars and the chat mirrored alongside them), and for the
 same reason: the page runs in OBS on the streamer's PC, the bot on a server. So the page *dials
-the bot*, and the bot pushes.
+the bot*, and the bot pushes. It has no port of its own: it connects to the overlay listener
+(`4457`) with `?role=companion` and gets only the pond's frames there — see
+[Overlay](overlay.md).
 
 ```
 OBS machine                                     server
 ┌──────────────────────┐                  ┌──────────────────────┐
 │ Browser source        │                  │ BugBot (container)   │
 │   companion.html       │                  │  features/companion  │
-│        │               │                  │  listens :4459       │
-│        └── ws ──► :4459 ══ SSH ══════════►  token check          │
+│        │               │                  │  overlay :4457       │
+│        └── ws ──► :4457 ══ SSH ══════════►  role=companion      │
 └──────────────────────┘  encrypted tunnel └──────────────────────┘
 ```
 
 ```
 features/companion/
   feature.py      presence, the !companion/!vtubbi commands
-  server.py       the listener — token check, connections, broadcast
   store.py        what IS persisted: a custom seed and a spend ledger, both from !companion
-  config.py       token/port/bind from .env
   companion.json  bits thresholds, speech duration, idle timeout, texts
 
   client/         ── these do not run on the server ──
@@ -119,45 +119,22 @@ change, the same shape `features/moderation` uses for its own violation tracking
 
 ## Setup
 
-**1. A token, and not the other two.**
+**1. The overlay listener.** The page rides on it — `OVERLAY_TOKEN` set, port `4457` published
+and tunnelled, as for the stat bars ([Overlay](overlay.md), [The SSH tunnel](tunnel.md)).
+Nothing of its own to configure. Without the overlay listener the commands still run, there is
+just nowhere to show what they produce.
 
-```bash
-openssl rand -hex 32        # → COMPANION_TOKEN in .env
-```
-
-Same reasoning as `OVERLAY_TOKEN`: it ends up in the browser source URL and therefore in
-plaintext in the scene collection, because the browser's WebSocket API cannot set request
-headers. This one grants read access to who is currently chatting and what they typed into
-`!companion` — reuse neither of the other two tokens.
-
-Without `COMPANION_TOKEN` the bot opens no port — the commands still run, there is just nowhere
-to show what they produce.
-
-**2. Publish the port** — already in `bugbot.container`:
-
-```
-PublishPort=127.0.0.1:4459:4459
-```
-
-**3. The tunnel**, on the OBS machine — the same one that already carries the other two:
-
-```bash
-platforms/obs/client/setup-tunnel.sh user@your-server
-```
-
-That forwards all three ports (4456/4457/4459) in one go — see [The SSH tunnel](tunnel.md).
-
-**4. The browser source.** Width/height to taste — like `chat.html`, this page is not a fixed
+**2. The browser source.** Width/height to taste — like `chat.html`, this page is not a fixed
 canvas but fills whatever size the source is given. As URL:
 
 ```
-file:///path/to/bugbot/features/companion/client/companion.html?token=YOUR_COMPANION_TOKEN
+file:///path/to/bugbot/features/companion/client/companion.html?token=YOUR_OVERLAY_TOKEN
 ```
 
 To see it without a bot running, open **`preview.html`** next to it, or append `?demo=1` to
 `companion.html` directly.
 
-**5. Optional: the Twitch panel.** `client/info.md` is short, German text explaining
+**3. Optional: the Twitch panel.** `client/info.md` is short, German text explaining
 `!companion` / `!companion set` to viewers. `client/dicebear.md` and `client/vtubbi.md` are
 separate, even shorter texts explaining DiceBear and the vtubbi project respectively, for whoever
 wants those explained on their own panel instead of folded into info.md. Paste one of these
@@ -177,8 +154,8 @@ anywhere else.
 
 | | |
 |---|---|
-| `token=` | the `COMPANION_TOKEN`. Without it, no connection |
-| `host=` / `port=` | where the tunnel ends on *this* machine (default `127.0.0.1:4459`) |
+| `token=` | the `OVERLAY_TOKEN` — the same as for `bars.html`/`chat.html`. Without it, no connection |
+| `host=` / `port=` | where the tunnel ends on *this* machine (default `127.0.0.1:4457`) |
 | `size=` | height of one companion in pixels (default `96`) |
 | `max=` | how many companions are shown at once — oldest makes room for a new one past this (default `24`) |
 | `floor=` | the ground line from the bottom, in % of the source's height (default `10`) |

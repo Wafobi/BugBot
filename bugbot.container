@@ -68,26 +68,21 @@ Volume=/path/to/bugbot/settings:/app/settings:Z
 # The restriction to loopback therefore belongs here, on the host side of the forward.
 PublishPort=127.0.0.1:4456:4456
 
-# The second: this is where the overlays hang (see features/overlay) - both the stat bars and
-# the chat mirrored alongside them (formerly the separate chat_panel feature, folded in; see
-# features/overlay/feature.py). Has to match OVERLAY_PORT from the .env. Anyone not embedding a
-# browser source leaves the line out.
+# The second: this is where the overlays hang (see features/overlay) - the stat bars, the chat
+# mirrored alongside them (formerly the separate chat_panel feature, folded in), and the pages
+# riding on the same listener: the companion pond (?role=companion, formerly its own port 4459)
+# and TTS (?role=tts, plus its Stream Deck routes). Has to match OVERLAY_PORT from the .env.
+# Anyone not embedding a browser source leaves the line out.
 #
 # The same arrangement and the same loopback restriction as above - an SSH tunnel from the OBS
 # machine leads here too, and here too the bot in the container listens on 0.0.0.0.
 #
 # What goes out here is read-only (viewer count, last follower, game, death counter, already-
-# moderated chat text), and the listener accepts nothing from the far side. There is a token in
-# front of it nonetheless: the `127.0.0.1:` in this line is the first lock, and it is exactly
+# moderated chat text, who is in the pond), behind OVERLAY_TOKEN. The one thing it accepts from
+# the far side is the TTS buttons (/tts/next, /tts/skip, the /tts/admin page) - behind their
+# own TTS_TOKEN. And the `127.0.0.1:` in this line is the first lock in front of both, exactly
 # one forgotten prefix away from no longer being one.
 PublishPort=127.0.0.1:4457:4457
-
-# The third: this is where the companion page hangs (see features/companion). Has to match
-# COMPANION_PORT from the .env. Anyone not embedding that browser source leaves the line out.
-#
-# Same arrangement and the same loopback restriction as the two above: read-only, and the
-# listener accepts nothing from the far side.
-PublishPort=127.0.0.1:4459:4459
 
 [Service]
 # always rather than on-failure: the bot should come back up even when the process ends cleanly

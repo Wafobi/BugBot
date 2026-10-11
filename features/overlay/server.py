@@ -22,6 +22,9 @@ OverlayFeature's OVERLAY capability):
   - a browser source may name a role on connect (?role=tts), and broadcast(..., role=...)
     then reaches only connections with that role - so one feature's frames (a TTS clip,
     hundreds of KB) do not go to every stat bar and chat on screen;
+  - add_role() makes a role a page of its own (the companion pond): on connect it gets that
+    role's snapshot instead of the overlay's state/history, and the overlay's own broadcasts
+    (role=None) skip it - it only ever sees its own frames;
   - add_route() answers a plain HTTP GET on its own path (/tts/next) in the handshake hook,
     without upgrading to a WebSocket - for a Stream Deck button, or a small page of its own
     (HTML, audio). Every route brings its own token: OVERLAY_TOKEN sits in the scene
@@ -112,6 +115,9 @@ class OverlayServer:
         self._roles = {}
         # path -> (async handler returning (HTTPStatus, text), token), see add_route.
         self._routes = {}
+        # role -> callable returning the [(type, data), ...] frames for a fresh connection
+        # with that role, see add_role.
+        self._role_snapshots = {}
 
     @property
     def client_count(self):
@@ -119,6 +125,12 @@ class OverlayServer:
 
     def clients_with_role(self, role):
         return sum(1 for connection in self._clients if self._roles.get(connection) == role)
+
+    def add_role(self, role, snapshot):
+        """A role that is a page of its own - see the module docstring. `snapshot` is a
+        callable (sync or async) returning the frames a new connection with this role gets,
+        as [(type, data), ...]."""
+        self._role_snapshots[role] = snapshot
 
     def add_route(self, path, handler, token):
         """Answers GET <path> with `await handler(query)` - query being the parsed query
@@ -205,8 +217,16 @@ class OverlayServer:
         peer = f"{connection.remote_address[0]}:{connection.remote_address[1]}"
         log.info(f"Overlay connected: {peer} ({len(self._clients)} open)")
         try:
-            await connection.send(json.dumps({"type": "state", "data": await self._snapshot()}))
-            await connection.send(json.dumps({"type": "history", "data": self._history()}))
+            snapshot = self._role_snapshots.get(self._roles[connection])
+            if snapshot is not None:
+                frames = snapshot()
+                if asyncio.iscoroutine(frames):
+                    frames = await frames
+                for type_, data in frames:
+                    await connection.send(json.dumps({"type": type_, "data": data}))
+            else:
+                await connection.send(json.dumps({"type": "state", "data": await self._snapshot()}))
+                await connection.send(json.dumps({"type": "history", "data": self._history()}))
             # We expect nothing from the far side. Reading runs anyway, because it is the
             # route by which a dropped connection arrives here.
             async for _ in connection:
@@ -222,9 +242,13 @@ class OverlayServer:
 
     async def broadcast(self, type_, data, role=None):
         """One message to all open overlays - or, with `role`, only to those that named it
-        on connect. Failures of individual connections are swallowed: an overlay that
-        happens to be reloading is not the bot's problem."""
-        targets = [c for c in list(self._clients) if role is None or self._roles.get(c) == role]
+        on connect. Without a role, connections of a role registered with add_role are
+        skipped: those are pages of their own. Failures of individual connections are
+        swallowed: an overlay that happens to be reloading is not the bot's problem."""
+        if role is None:
+            targets = [c for c in list(self._clients) if self._roles.get(c) not in self._role_snapshots]
+        else:
+            targets = [c for c in list(self._clients) if self._roles.get(c) == role]
         if not targets:
             return
         message = json.dumps({"type": type_, "data": data})

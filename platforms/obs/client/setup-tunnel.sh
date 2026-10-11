@@ -7,8 +7,7 @@
 # from the internet, so the way to them is a tunnel dialled from this side.
 #
 #   4456  obs-websocket relay   (platforms/obs)
-#   4457  overlay listener      (features/overlay - stat bars and chat, one listener for both)
-#   4459  companion listener    (features/companion)
+#   4457  overlay listener      (features/overlay - stat bars, chat, companions and TTS, all on one)
 #
 # Two shapes exist, and the script decides between them by looking at what is already
 # there - both are fine, they just differ in who owns the connection:
@@ -26,13 +25,13 @@
 #                   BUGBOT_TUNNEL_ALIAS.
 #
 #   ./setup-tunnel.sh user@server
-#   BUGBOT_TUNNEL_PORTS="4456 4457 4459" ./setup-tunnel.sh user@server
+#   BUGBOT_TUNNEL_PORTS="4456 4457" ./setup-tunnel.sh user@server
 #   BUGBOT_TUNNEL_ALIAS=myhost ./setup-tunnel.sh user@server   # pick the entry yourself
 #
 # Safe to re-run in either shape: blocks and forward lines are replaced, never stacked.
 set -euo pipefail
 
-PORTS="${BUGBOT_TUNNEL_PORTS:-4456 4457 4459}"
+PORTS="${BUGBOT_TUNNEL_PORTS:-4456 4457}"
 SSH_CONFIG="$HOME/.ssh/config"
 UNIT_DIR="$HOME/.config/systemd/user"
 UNIT="$UNIT_DIR/bugbot-tunnel.service"

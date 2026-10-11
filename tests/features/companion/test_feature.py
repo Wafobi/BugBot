@@ -118,3 +118,48 @@ def test_key_prefers_user_id_over_name():
 
 def test_key_falls_back_to_lowercased_name_without_an_id():
     assert CompanionFeature._key(make_message("SomeName", platform="discord", user_id="")) == "discord:somename"
+
+
+# --- the pond rides on the overlay listener (OVERLAY, role "companion") ------------------
+
+class FakeOverlay:
+    def __init__(self):
+        self.roles = {}
+        self.pushed = []
+
+    def add_role(self, role, snapshot):
+        self.roles[role] = snapshot
+        return True
+
+    async def push(self, type_, data, role):
+        self.pushed.append((type_, data, role))
+
+
+class FakeBus:
+    def __init__(self, overlay):
+        self.overlay = overlay
+
+    def feature_with(self, capability):
+        from core import feature as feature_api
+        return self.overlay if capability == feature_api.OVERLAY else None
+
+    def subscribe(self, *args):
+        pass
+
+    def resolve_platforms(self, tokens):
+        return None
+
+
+async def test_companion_registers_its_page_and_pushes_joins_there():
+    overlay = FakeOverlay()
+    f = CompanionFeature()
+    f.config.get = lambda key, default=None: [] if key in ("exclude_users", "platforms") else default
+    await f.setup(FakeBus(overlay))
+    try:
+        assert overlay.roles["companion"]() == [("state", [])]
+        from core import feature as feature_api
+        await f.on_message_accepted(feature_api.Message(platform="twitch", user_id="7", user_name="Sub", is_subscriber=True))
+        assert overlay.pushed[0][0] == "join" and overlay.pushed[0][2] == "companion"
+        assert overlay.roles["companion"]()[0][1][0]["key"] == "twitch:7"
+    finally:
+        await f.close()

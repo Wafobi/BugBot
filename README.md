@@ -1,9 +1,9 @@
 # 🤖 BugBot
 
 A modular async bot that links a Twitch channel, a Discord server and (optionally) the OBS
-instance the stream runs on. It moderates both chats, answers ~50 commands, records everything
-worth counting into SQLite, and carries announcements across platforms — a bug report typed in
-Twitch chat lands in a Discord channel.
+instance the stream runs on. It moderates both chats, answers ~50 commands, records what happens
+during a stream into SQLite, feeds the stream overlays, reads cheers out loud, and carries
+announcements across platforms — a bug report typed in Twitch chat lands in a Discord channel.
 
 Everything a different operator would want to change — rules, thresholds, timings, role and
 channel names, command names, and **every line the bot says** — lives in JSON files next to the
@@ -75,14 +75,25 @@ window. Subscribers are exempt from the pure spam heuristics, nobody is exempt f
 
 **Answers commands** in three flavours: static text from JSON, live Helix calls (`!uptime`,
 `!title`, `!raid`), and feature commands that work on every platform at once (`!rank`, `!top`,
-`!streamstats`, `!highscores`, `!leaderboard`, `!companion`). OBS gets remote-controlled from
+`!streamstats`, `!highscores`, `!leaderboard`, `!companion`, `!tts`). OBS gets remote-controlled from
 either chat with `!obs`, `!scene`, `!rec`, `!replay`, `!obssource`.
 → [Commands](docs/commands.md)
 
 **Records** messages, commands, moderation actions, live events, viewer samples and ad breaks
-into SQLite. Every row carries the stream session it happened in, so overall and per-stream
-numbers are the same query with and without a `WHERE`.
+into SQLite — **only while a stream runs**. Cheers are the one exception and always kept, since
+every viewer's bits balance is computed from them. Every row carries the stream session it
+happened in, so overall and per-stream numbers are the same query with and without a `WHERE`.
 → [Database](docs/database.md)
+
+**Feeds the overlays.** Stat bars, the mirrored chat, the boot/pause/ad-break/end screens and the
+companions are browser sources in OBS that dial in to the bot and get every change pushed.
+→ [Overlay](docs/overlay.md) · [Companion](docs/companion.md)
+
+**Reads out loud.** Cheers with a message, resub messages and `!tts` go into a queue; a Stream
+Deck button releases them one at a time. Speech is made by Piper on the server — a voice pool,
+per-viewer voices, robot/retro/radio effects, English chat words pronounced in English — and
+every message is kept with its position in the VOD. Tuned on its own admin page.
+→ [TTS](docs/tts.md)
 
 **Announces across platforms.** A neutral `Announcement` goes to every platform that can post
 one, and each decides how to render it — Discord as an embed, Twitch as a chat line, OBS as a
@@ -109,8 +120,12 @@ when their mtime changes — editing and saving is enough.
 | `features/stats/stats.json` | every label, field and line the statistics print |
 | `features/chat_log/chat_log.json` | which platforms get logged |
 | `features/sql_db/sql_db.json` | where the database file lives |
+| `features/variables/variables.json` | timezone, locale and the `{placeholders}` of static commands |
+| `features/overlay/overlay.json` | what the overlays show — chat, event slots, texts |
+| `features/companion/companion.json` | companion prices and timings, texts |
+| `platforms/twitch/features/tts/tts.json` | TTS rules, voice pool, speech settings, replacements, English words, texts |
 
-Four things are worth knowing:
+Five things are worth knowing:
 
 - **Names are not cosmetics.** Discord roles and channels are found *by these strings*. Get
   `roles.moderator` wrong and nobody on that server is a moderator — mod commands then do
@@ -121,6 +136,9 @@ Four things are worth knowing:
   `"!uptime": "!live"`, `"!bug": ["!bug", "!fehler"]`, `"!giveaway": false`.
 - **You cannot lock yourself out.** Delete a key, break the JSON, remove the file entirely — the
   last good state or the shipped default still applies.
+- **Overrides.** What is changed at runtime (today: the TTS admin page) goes into
+  `settings/<name>.json`, which lies on top of the repo's file — so the files in git are never
+  written and `git pull` never conflicts. → [Overrides](docs/configuration.md#overrides)
 
 Run `python3 check_config.py` after editing. Silence plus one ✅ means the edit is sound.
 → [Configuration](docs/configuration.md)
@@ -136,7 +154,8 @@ goes through the bus in `core/events.py`.
 bugbot.py     names nothing — finds, starts and stops whatever the registry hands it
 core/         contracts and wiring only: no moderation rules, no SQL, no Discord, no Twitch
 platforms/    where the bot acts — discord/, twitch/, obs/
-features/     what the bot does — sql_db/, moderation/, stats/, chat_log/
+features/     what the bot does — sql_db/, moderation/, stats/, chat_log/, variables/,
+              overlay/, companion/ (+ platform-owned ones, e.g. platforms/twitch/features/tts/)
 ```
 
 A **platform** provides `platform.py` with `create_platform()`; a **feature** provides
@@ -162,7 +181,7 @@ Two machines are involved, and which is which decides what you install where:
 | | **Server** — where the bot runs | **OBS machine** — where you stream from |
 |---|---|---|
 | Runs | the container, all platforms and features | the OBS relay, the overlay and chat pages, the tunnel |
-| Files | everything except the `client/` folders | `platforms/obs/client/`, `features/overlay/client/` |
+| Files | everything except the `client/` folders | `platforms/obs/client/`, `features/overlay/client/`, `features/companion/client/`, `platforms/twitch/features/tts/client/` |
 | Scripts | `./setup-systemd.sh` (once), `./start.sh`, `./update.sh` (day-to-day), `./disable-systemd.sh` | `platforms/obs/client/setup-tunnel.sh`, `disable-tunnel.sh` |
 | Needs | Podman, `.env`, the JSON configs | Python + `websockets`, an ssh key to the server |
 
@@ -170,7 +189,7 @@ The rule of thumb: anything inside a **`client/`** folder is the streaming PC's,
 the server's. Nothing in a `client/` folder is ever imported by the bot, so a server that never
 copies them is complete.
 
-The tunnel exists because the bot's three listeners (`4456`, `4457`, `4459`) are published to the
+The tunnel exists because the bot's two listeners (`4456` for the OBS relay, `4457` for everything on screen) are published to the
 server's loopback only, so the OBS machine dials in rather than the other way round. Both tunnel scripts are
 safe to re-run, and both cope with a machine that already tunnels to that server for something
 else. → [The SSH tunnel](docs/tunnel.md)
@@ -184,7 +203,7 @@ DB are mounted over it from your clone:
 
 | You changed | Run |
 |---|---|
-| any `*.json` | **nothing** — re-read on mtime change |
+| any `*.json`, or `settings/*.json` | **nothing** — re-read on mtime change |
 | `.env` | `systemctl --user restart bugbot` |
 | any `.py`, `requirements.txt`, `Dockerfile` | `./update.sh` |
 | `bugbot.container` | `./update.sh` |
@@ -195,6 +214,4 @@ DB are mounted over it from your clone:
 Logs: `journalctl --user-unit=bugbot.service -f` (the `--user-unit=` form matters —
 [why](docs/deployment.md#logs)).
 → [Deployment](docs/deployment.md)
-
-claude --resume a491b8df-fc61-4329-a0ac-accced1d599b
 
