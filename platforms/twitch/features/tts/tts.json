@@ -106,7 +106,6 @@
     "help.balance": " Dein Guthaben: {have} Bits.",
     "needs_bits": "Fürs Vorlesen werden {need} Bits benötigt (aktuelles Guthaben: {have}). Ein Cheer ohne Nachricht lädt das Guthaben auf.",
     "blocked": "Diese Nachricht wird nicht vorgelesen ({label}).",
-    "queued": "🔊 Ist in der Warteschlange (Platz {position}).",
     "queue_full": "Die Vorlese-Warteschlange ist gerade voll - versuch es später nochmal.",
     "http.played": "ok - noch {remaining} in der Warteschlange",
     "http.skipped": "übersprungen - noch {remaining} in der Warteschlange",

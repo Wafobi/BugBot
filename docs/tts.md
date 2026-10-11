@@ -37,6 +37,23 @@ Both HTTP routes answer with one line of text (e.g. `ok - noch 2 in der Wartesch
 Stream Deck: System → **Website**, with *GET request in background* ticked so no browser window
 opens. Releasing deliberately does not go through chat.
 
+### Stream Deck with Bitfocus Companion
+
+Connection **Generic: HTTP Requests**, Base URL `http://127.0.0.1:4457`. Buttons: action `GET`,
+URI `/tts/next?token=<TTS_TOKEN>` (and `/tts/skip?...`).
+
+Queue length on a button: `GET /tts/count?token=<TTS_TOKEN>` answers the bare number (`3`).
+Create a custom variable `tts_count`, add a trigger (event *Time interval*, 2 s) with the action
+`GET /tts/count?token=…` and *JSON Response Data Variable* = `tts_count`, then put
+`$(custom:tts_count)` into a button's text — optionally with an internal *Check boolean
+expression* feedback `$(custom:tts_count) > 0` to colour it while something waits.
+
+### OBS dock
+
+`http://127.0.0.1:4457/tts/dock?token=<TTS_TOKEN>` as a custom browser dock (Docks → Custom
+Browser Docks): the queue with each waiting sentence, ▶ play and ⏭ skip, and whether a player is
+connected.
+
 ## Where it runs
 
 Everything happens on the server, inside the bot's container: Piper makes the speech there.

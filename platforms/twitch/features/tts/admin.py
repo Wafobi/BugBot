@@ -32,6 +32,7 @@ from . import synth
 log = logging.getLogger(__name__)
 
 PAGE = Path(__file__).parent / "client" / "admin.html"
+DOCK = Path(__file__).parent / "client" / "dock.html"
 MAX_TEXT = 1000
 VOICE_PICKS = ("random", "per_user")
 JSON = "application/json; charset=utf-8"
@@ -62,10 +63,35 @@ class TtsAdmin:
             "/tts/admin/state": self.state,
             "/tts/admin/speak": self.speak,
             "/tts/admin/save": self.save,
+            # The control panel for OBS (Docks -> Custom Browser Docks): the queue plus
+            # play/skip - the same /tts/next and /tts/skip a Stream Deck button would call.
+            "/tts/dock": self.dock,
+            "/tts/dock/queue": self.queue,
+            # Just the number waiting - for a Stream Deck button label (Bitfocus Companion:
+            # a trigger polls this into a custom variable, see docs/tts.md).
+            "/tts/count": self.count,
         }
 
     async def page(self, query):
         return http.HTTPStatus.OK, PAGE.read_text(encoding="utf-8"), "text/html; charset=utf-8"
+
+    async def count(self, query):
+        """The queue length as bare text, "3" - bytes so no trailing newline is added: it goes
+        straight into a button label."""
+        return http.HTTPStatus.OK, str(len(self._feature._queue)).encode("ascii"), "text/plain; charset=utf-8"
+
+    async def dock(self, query):
+        return http.HTTPStatus.OK, DOCK.read_text(encoding="utf-8"), "text/html; charset=utf-8"
+
+    async def queue(self, query):
+        """What is waiting, oldest first - the sentences as they will be spoken (already
+        moderated and prepared), plus whether a TTS browser source is listening."""
+        feature = self._feature
+        overlay = getattr(feature, "_overlay", None)
+        return _json(http.HTTPStatus.OK, {
+            "queue": [{"user_name": e.get("user_name", ""), "text": e["text"]} for e in feature._queue],
+            "player": overlay.listeners("tts") if overlay is not None else 0,
+        })
 
     async def state(self, query):
         """Installed voices with their speakers and defaults, plus what tts.json says now."""

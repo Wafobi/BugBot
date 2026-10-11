@@ -303,7 +303,9 @@ class TtsFeature(feature_api.Feature):
             self.config.text("announce_command", user=normalize.name(message.user_name), message=spoken),
             key, message.user_name,
         )
-        return self.config.text("queued", position=len(self._queue))
+        # Deliberately no confirmation in chat - it was noise. Only the failures above answer,
+        # since without them nobody could tell why nothing happens.
+        return None
 
     def commands(self):
         return (

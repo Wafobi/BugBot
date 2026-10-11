@@ -163,7 +163,7 @@ async def test_tts_spends_min_bits_from_the_balance():
     reply = await f.cmd_tts(chat("Hallo"))
     assert ledger.spent == [("twitch:42", 100)]
     assert [e["text"] for e in f._queue] == ["Viewer sagt: Hallo"]
-    assert "Platz 1" in reply
+    assert reply is None  # no confirmation in chat
 
 
 async def test_tts_with_too_little_balance_spends_nothing():

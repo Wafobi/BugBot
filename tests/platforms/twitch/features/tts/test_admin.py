@@ -94,3 +94,23 @@ async def test_save_speech_sets_only_given_values_rest_null(setup):
 async def test_speak_rejects_a_bad_voice(setup):
     admin, _ = setup
     assert (await admin.speak({"voice": "../x", "text": "hi"}))[0] == http.HTTPStatus.BAD_REQUEST
+
+
+async def test_dock_queue_lists_waiting_sentences(setup):
+    admin, _ = setup
+    admin._feature._queue = [{"text": "Viewer sagt: hallo", "user_key": "twitch:1", "user_name": "Viewer"}]
+
+    class Overlay:
+        def listeners(self, role):
+            return 1 if role == "tts" else 0
+    admin._feature._overlay = Overlay()
+    data = body(await admin.queue({}))
+    assert data == {"queue": [{"user_name": "Viewer", "text": "Viewer sagt: hallo"}], "player": 1}
+    status, html, content_type = await admin.dock({})
+    assert status == http.HTTPStatus.OK and content_type.startswith("text/html") and "/tts/next" in html
+
+
+async def test_count_is_the_bare_number(setup):
+    admin, _ = setup
+    admin._feature._queue = [{"text": "a"}, {"text": "b"}, {"text": "c"}]
+    assert (await admin.count({}))[:2] == (http.HTTPStatus.OK, b"3")
