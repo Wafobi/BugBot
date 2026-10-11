@@ -47,7 +47,13 @@ Volume=/path/to/bugbot/features/chat_log/chat_log.json:/app/features/chat_log/ch
 Volume=/path/to/bugbot/features/sql_db/sql_db.json:/app/features/sql_db/sql_db.json:Z
 Volume=/path/to/bugbot/features/overlay/overlay.json:/app/features/overlay/overlay.json:Z
 Volume=/path/to/bugbot/features/companion/companion.json:/app/features/companion/companion.json:Z
+Volume=/path/to/bugbot/platforms/twitch/features/tts/tts.json:/app/platforms/twitch/features/tts/tts.json:Z
 Volume=/path/to/bugbot/features/sql_db/bugbot.db:/app/features/sql_db/bugbot.db:Z
+# The override layer (core/runtime_config.py): what the TTS admin page (and later the settings
+# website) changes, lying on top of the JSON files above - never written into the repo, so
+# `git pull` never conflicts. A directory mount, unlike the single files above: files in it are
+# replaced atomically, which a single-file mount would not see.
+Volume=/path/to/bugbot/settings:/app/settings:Z
 # The first incoming port: this is where the OBS relay from the streamer's machine dials in
 # (see platforms/obs/). Has to match OBS_BRIDGE_PORT from the .env. Anyone not connecting OBS
 # leaves the line out.

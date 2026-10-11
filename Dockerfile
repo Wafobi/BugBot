@@ -23,6 +23,22 @@ RUN useradd --create-home --uid 1000 bugbot
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# TTS (platforms/twitch/features/tts): Piper and its voice models. Not in requirements.txt -
+# the bot never imports Piper, it runs it as a separate process (`python -m piper`, see
+# synth.py), and local development/tests do not need several hundred MB of it.
+#
+# The models go to /opt/piper-voices rather than under /app, so the `chown -R` further down
+# does not copy them into a second layer. voices.txt is copied on its own before `COPY . .`:
+# this layer only rebuilds when the list of models changes, not on every code change - and
+# not when the voice is switched in tts.json either, which is why the list is not kept there.
+ENV TTS_VOICES_DIR=/opt/piper-voices
+RUN pip install --no-cache-dir "piper-tts>=1.8,<2"
+COPY platforms/twitch/features/tts/voices.txt /tmp/voices.txt
+RUN mkdir -p "${TTS_VOICES_DIR}" \
+    && python3 -m piper.download_voices --data-dir "${TTS_VOICES_DIR}" \
+       $(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' /tmp/voices.txt) \
+    && rm /tmp/voices.txt
+
 COPY . .
 RUN chown -R bugbot:bugbot /app
 

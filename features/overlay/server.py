@@ -16,11 +16,24 @@ for the chat, all through the one connection a browser source opens. A client th
 understands one half simply ignores the frame types it does not recognise - see
 features/overlay/client/chat.html.
 
+Other features can ride on the same listener instead of opening a port of their own (see
+OverlayFeature's OVERLAY capability):
+
+  - a browser source may name a role on connect (?role=tts), and broadcast(..., role=...)
+    then reaches only connections with that role - so one feature's frames (a TTS clip,
+    hundreds of KB) do not go to every stat bar and chat on screen;
+  - add_route() answers a plain HTTP GET on its own path (/tts/next) in the handshake hook,
+    without upgrading to a WebSocket - for a Stream Deck button, or a small page of its own
+    (HTML, audio). Every route brings its own token: OVERLAY_TOKEN sits in the scene
+    collection and only ever grants reading, a route that *does* something must not hang on
+    it. GET only - the handshake hook never sees anything else.
+
 This file knows only connections and JSON frames. What goes into the frames is decided by
-features/overlay/feature.py.
+features/overlay/feature.py and whoever registered a route or role.
 """
 
 import asyncio
+import dataclasses
 import hmac
 import http
 import json
@@ -49,6 +62,27 @@ TOKEN_HEADER = "X-BugBot-Token"
 # machine OBS runs on anyway.
 TOKEN_QUERY = "token"
 
+# ?role=... on connect - see the module docstring.
+ROLE_QUERY = "role"
+
+
+def _token_from(request):
+    """Header, then "Authorization: Bearer", then ?token= - see TOKEN_HEADER/TOKEN_QUERY."""
+    header = request.headers.get(TOKEN_HEADER, "")
+    if not header:
+        bearer = request.headers.get("Authorization", "")
+        header = bearer[7:] if bearer.lower().startswith("bearer ") else ""
+    if not header:
+        query = parse_qs(urlsplit(request.path).query)
+        header = (query.get(TOKEN_QUERY) or [""])[0]
+    return header
+
+
+def _token_matches(given, expected):
+    """compare_digest, so that the running time gives nothing away about the token; encoded
+    first, because compare_digest on str only accepts ASCII and raises TypeError otherwise."""
+    return bool(expected) and hmac.compare_digest(given.encode("utf-8", "ignore"), expected.encode("utf-8"))
+
 
 async def _empty_snapshot():
     return {}
@@ -74,14 +108,29 @@ class OverlayServer:
         self._on_error = on_error or (lambda message: None)
         self._server = None
         self._clients = set()
+        # connection -> role named on connect ("" without one), see ROLE_QUERY.
+        self._roles = {}
+        # path -> (async handler returning (HTTPStatus, text), token), see add_route.
+        self._routes = {}
 
     @property
     def client_count(self):
         return len(self._clients)
 
+    def clients_with_role(self, role):
+        return sum(1 for connection in self._clients if self._roles.get(connection) == role)
+
+    def add_route(self, path, handler, token):
+        """Answers GET <path> with `await handler(query)` - query being the parsed query
+        string ({name: first value}, token included) - which returns (HTTPStatus, body) or
+        (HTTPStatus, body, content type); body str (sent as UTF-8, text/plain by default) or
+        bytes. Only with `token`, never with OVERLAY_TOKEN; an empty token disables the
+        route rather than opening it."""
+        self._routes[path] = (handler, token)
+
     async def start(self):
         self._server = await websockets.serve(
-            self._session, self._bind, self._port, process_request=self._check_token,
+            self._session, self._bind, self._port, process_request=self._process_request,
         )
         log.info(f"Overlay listener on {self._bind}:{self._port}")
 
@@ -94,6 +143,40 @@ class OverlayServer:
             await self._server.wait_closed()
             self._server = None
 
+    async def _process_request(self, connection, request):
+        """The handshake hook: a registered route is answered right here (with its own
+        token), everything else goes through the overlay token check."""
+        path = urlsplit(request.path).path
+        if path in self._routes:
+            handler, token = self._routes[path]
+            if not _token_matches(_token_from(request), token):
+                log.warning(f"Overlay route {path} from {connection.remote_address} rejected: wrong/missing token.")
+                return connection.respond(http.HTTPStatus.UNAUTHORIZED, "invalid token\n")
+            query = {k: v[0] for k, v in parse_qs(urlsplit(request.path).query).items()}
+            try:
+                status, body, *rest = await handler(query)
+                content_type = rest[0] if rest else "text/plain; charset=utf-8"
+            except Exception as error:  # a failing button must not take the listener with it
+                self._on_error(f"overlay route {path}: {error}")
+                status, body, content_type = http.HTTPStatus.INTERNAL_SERVER_ERROR, "error", "text/plain; charset=utf-8"
+            return self._response(connection, status, body, content_type)
+        return self._check_token(connection, request)
+
+    @staticmethod
+    def _response(connection, status, body, content_type):
+        """connection.respond() only does plain text - this swaps in any body and type."""
+        if isinstance(body, str):
+            if content_type.startswith("text/plain") and not body.endswith("\n"):
+                body += "\n"  # a curl in a terminal ends on its own line
+            body = body.encode("utf-8")
+        response = connection.respond(status, "")
+        for name in ("Content-Type", "Content-Length"):
+            del response.headers[name]
+        response.headers["Content-Type"] = content_type
+        response.headers["Content-Length"] = str(len(body))
+        response.headers["Cache-Control"] = "no-store"
+        return dataclasses.replace(response, body=body)
+
     def _check_token(self, connection, request):
         """Still runs during the HTTP handshake, before the WebSocket connection stands. A
         response rejects the setup, None lets it through.
@@ -105,15 +188,7 @@ class OverlayServer:
         compare_digest on str only accepts ASCII and raises TypeError otherwise - encoding
         first turns a non-ASCII token into a normal rejection instead of an unhandled
         exception in the handshake."""
-        header = request.headers.get(TOKEN_HEADER, "")
-        if not header:
-            bearer = request.headers.get("Authorization", "")
-            header = bearer[7:] if bearer.lower().startswith("bearer ") else ""
-        if not header:
-            query = parse_qs(urlsplit(request.path).query)
-            header = (query.get(TOKEN_QUERY) or [""])[0]
-
-        if not hmac.compare_digest(header.encode("utf-8", "ignore"), self._token.encode("utf-8")):
+        if not _token_matches(_token_from(request), self._token):
             log.warning(f"Overlay from {connection.remote_address} rejected: wrong/missing token.")
             return connection.respond(http.HTTPStatus.UNAUTHORIZED, "invalid token\n")
         return None
@@ -125,6 +200,8 @@ class OverlayServer:
         scene is the normal case, and the preview in the browser is added while setting
         things up."""
         self._clients.add(connection)
+        query = parse_qs(urlsplit(connection.request.path).query)
+        self._roles[connection] = (query.get(ROLE_QUERY) or [""])[0]
         peer = f"{connection.remote_address[0]}:{connection.remote_address[1]}"
         log.info(f"Overlay connected: {peer} ({len(self._clients)} open)")
         try:
@@ -140,16 +217,19 @@ class OverlayServer:
             self._on_error(f"overlay session {peer}: {error}")
         finally:
             self._clients.discard(connection)
+            self._roles.pop(connection, None)
             log.info(f"Overlay disconnected: {peer} ({len(self._clients)} open)")
 
-    async def broadcast(self, type_, data):
-        """One message to all open overlays. Failures of individual connections are
-        swallowed: an overlay that happens to be reloading is not the bot's problem."""
-        if not self._clients:
+    async def broadcast(self, type_, data, role=None):
+        """One message to all open overlays - or, with `role`, only to those that named it
+        on connect. Failures of individual connections are swallowed: an overlay that
+        happens to be reloading is not the bot's problem."""
+        targets = [c for c in list(self._clients) if role is None or self._roles.get(c) == role]
+        if not targets:
             return
         message = json.dumps({"type": type_, "data": data})
         results = await asyncio.gather(
-            *(connection.send(message) for connection in list(self._clients)),
+            *(connection.send(message) for connection in targets),
             return_exceptions=True,
         )
         for result in results:

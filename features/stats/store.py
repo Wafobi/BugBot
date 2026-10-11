@@ -86,6 +86,10 @@ _EVENT_COUNT_METRICS = {
     "sub": "subs_gained",
     "resub": "resubs",
     "raid": "raids_in",
+    # Reported by platforms/twitch/features/tts: queued = every message that went into the
+    # read-out queue, played = the ones actually released and spoken.
+    "tts_queued": "tts_queued",
+    "tts_played": "tts_played",
 }
 _EVENT_SUM_METRICS = {
     "cheer": "bits_cheered",

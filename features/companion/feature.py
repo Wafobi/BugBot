@@ -92,10 +92,14 @@ MAX_CACHED_KEYS = 5000
 class CompanionFeature(feature_api.Feature):
     name = "companion"
 
-    # Offers nothing, needs nothing to load at all - a companion pond without bits gating
-    # (STATS), text filtering (MODERATION) or a persisted custom look (STORAGE) is still a
-    # valid, if more trusting/forgetful, setup.
-    provides = frozenset()
+    # Needs nothing to load at all - a companion pond without bits gating (STATS), text
+    # filtering (MODERATION) or a persisted custom look (STORAGE) is still a valid, if more
+    # trusting/forgetful, setup.
+    #
+    # Offers its bits balance (BITS_LEDGER, see balance()/spend() below) - the one pot that
+    # !companion spends from is the same one platforms/twitch/features/tts spends from, and
+    # a cheer read out by that feature is booked here so its bits do not count twice.
+    provides = frozenset({feature_api.BITS_LEDGER})
     optional = frozenset({feature_api.STATS, feature_api.MODERATION, feature_api.STORAGE})
 
     # Chat only - a companion is spoken into being, and only platforms with the CHAT
@@ -240,6 +244,21 @@ class CompanionFeature(feature_api.Feature):
         else:
             total = self._spend_cache.get(key, 0) + amount
         self._remember_bounded(self._spend_cache, key, total)
+
+    # --- BITS_LEDGER (Pull) ------------------------------------------------------------
+    # What other features with `optional = {BITS_LEDGER}` use - see
+    # platforms/twitch/features/tts. Keys are the same shape as _key().
+
+    async def balance(self, key, user_name):
+        """Bits this person can still spend: cheered all-time minus everything spent from
+        this pot so far (on !companion, !companion set, or by another feature via spend()).
+        Can be negative when a feature booked a cheer STATS never recorded."""
+        return await self._bits_total(user_name) - await self._spent_for(key)
+
+    async def spend(self, key, amount):
+        """Books `amount` bits as spent from this person's balance. Does not check the
+        balance - the caller decides whether that is required first."""
+        await self._spend(key, int(amount))
 
     async def on_message_accepted(self, message):
         if not self._in_scope(message.platform):

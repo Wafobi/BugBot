@@ -6,7 +6,7 @@ internet to make that possible. The way in is an SSH tunnel, dialled **from the 
 | Port | Listener | Used by |
 |---|---|---|
 | `4456` | obs-websocket relay | [`platforms/obs`](obs.md) |
-| `4457` | overlay listener — stat bars and chat, one listener for both | [`features/overlay`](overlay.md) |
+| `4457` | overlay listener — stat bars and chat, one listener for both; also carries [TTS](tts.md) | [`features/overlay`](overlay.md) |
 | `4459` | companion listener | [`features/companion`](companion.md) |
 
 Everything here runs on the OBS machine — the same end that runs OBS itself. That is unusual for

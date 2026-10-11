@@ -1,0 +1,17 @@
+# The Piper models baked into the image (Dockerfile) - one per line, '#' starts a comment.
+# Which one actually speaks is chosen in tts.json ("voice"), at runtime; this file only
+# decides what is available to choose from. Kept separate from tts.json on purpose: a
+# change of voice there must not invalidate the image's download layer.
+#
+# All German models as of 2026-10-11 (rhasspy/piper-voices). Remove lines to keep the
+# image smaller - each model is roughly 60-110 MB.
+de_DE-thorsten-low
+de_DE-thorsten-medium
+de_DE-thorsten-high
+de_DE-thorsten_emotional-medium
+de_DE-mls-medium
+de_DE-kerstin-low
+de_DE-ramona-low
+de_DE-karlsson-low
+de_DE-pavoque-low
+de_DE-eva_k-x_low

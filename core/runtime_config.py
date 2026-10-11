@@ -18,10 +18,19 @@
 
 import json
 import logging
+import os
 from pathlib import Path
 from string import Formatter
 
 log = logging.getLogger(__name__)
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def settings_dir():
+    """Where the overrides live - see LiveConfig. Outside of git (.gitignore), mounted into
+    the container as a directory. BUGBOT_SETTINGS_DIR moves it (tests point it elsewhere)."""
+    return Path(os.environ.get("BUGBOT_SETTINGS_DIR") or ROOT / "settings")
 
 
 def for_package(module_file, defaults=None):
@@ -92,12 +101,20 @@ class LiveConfig:
     otherwise have to carry them twice, once in Python and once in JSON. For everything
     else the same underlay would only be a way of keeping deleted things alive."""
 
-    def __init__(self, path, defaults=None):
+    def __init__(self, path, defaults=None, override=None):
         self._path = Path(path)
         self._defaults = defaults or {}
+        # The override layer: settings/<same name>.json, only what was changed at runtime
+        # (TTS admin page, later the settings website) - so the file in the repo is never
+        # written and `git pull` on the server never conflicts. Only for configuration files
+        # that belong to this repository; a file elsewhere (tests) has none unless asked.
+        if override is None and self._path.resolve().is_relative_to(ROOT):
+            override = settings_dir() / self._path.name
+        self._override_path = Path(override) if override else None
         self._baseline = None
         self._mtime = None
         self._file_data = {}
+        self._override_data = {}
         self._data = dict(self._defaults)
         self._complained = set()
 
@@ -112,28 +129,78 @@ class LiveConfig:
     def path(self):
         return self._path
 
-    def reload(self):
+    @property
+    def override_path(self):
+        return self._override_path
+
+    @staticmethod
+    def _mtime_of(path):
         try:
-            mtime = self._path.stat().st_mtime
+            return path.stat().st_mtime if path is not None else None
         except OSError:
-            return
+            return None
+
+    def reload(self):
+        file_mtime = self._mtime_of(self._path)
+        if file_mtime is None and self._mtime is None:
+            return  # never loaded and still missing: the defaults stay
+        mtime = (file_mtime, self._mtime_of(self._override_path))
         if mtime == self._mtime:
             return
-        try:
-            data = json.loads(self._path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as e:
-            log.warning(f"Could not load {self._path.name}, keeping the previous state: {e}")
-            return
+        data = self._file_data
+        if file_mtime is not None and (self._mtime is None or file_mtime != self._mtime[0]):
+            try:
+                data = json.loads(self._path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as e:
+                log.warning(f"Could not load {self._path.name}, keeping the previous state: {e}")
+                return
+        override = {}
+        if mtime[1] is not None:
+            try:
+                override = json.loads(self._override_path.read_text(encoding="utf-8"))
+                if not isinstance(override, dict):
+                    raise ValueError("not a JSON object")
+            except (OSError, ValueError) as e:  # JSONDecodeError is a ValueError
+                log.warning(f"Could not load {self._override_path}, keeping the previous overrides: {e}")
+                override = self._override_data
         if self._baseline is None:
             self._baseline = data
         self._mtime = mtime
         self._file_data = data
+        self._override_data = override
         # Deliberately without _baseline in between: the file is the truth, otherwise
         # nothing that was once in it at startup could ever be deleted. Missing texts are
         # caught by text() itself via _baseline - the only place where that is wanted.
-        self._data = deep_merge(self._defaults, data)
+        self._data = deep_merge(deep_merge(self._defaults, data), override)
         self._complained.clear()
         self.version += 1
+
+    # --- Overrides -----------------------------------------------------------------------
+
+    @property
+    def overrides(self):
+        """What the override layer currently changes - a copy."""
+        self.reload()
+        return json.loads(json.dumps(self._override_data))
+
+    def save_overrides(self, changes):
+        """Sets top-level keys in the override file (a value of None removes the key -
+        back to the repository's value). Written to a temporary file and moved into place:
+        the settings directory is mounted as a directory, so replacing a file there is
+        seen by the container, unlike with the single-file mounts of the repo configs."""
+        if self._override_path is None:
+            raise OSError(f"{self._path.name} has no override file")
+        current = self.overrides
+        for key, value in changes.items():
+            if value is None:
+                current.pop(key, None)
+            else:
+                current[key] = value
+        self._override_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._override_path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        os.replace(tmp, self._override_path)
+        self.reload()
 
     @property
     def data(self):

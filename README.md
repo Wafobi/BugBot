@@ -60,6 +60,7 @@ The [`docs/`](docs/) folder is the long version.
 | [Database](docs/database.md) | every table and column, and how the stream session stamps them |
 | [Overlay](docs/overlay.md) | the browser sources in the picture — stat bars and the chat mirrored alongside them: what the bot pushes, and how to wire one up |
 | [Companion](docs/companion.md) | one small pet per chatter, seeded from their name; `!companion`/`!vtubbi` |
+| [TTS](docs/tts.md) | cheers with a message and `!tts` read out loud via Piper, released one at a time from the Stream Deck |
 | [Twitch](docs/twitch.md) · [Discord](docs/discord.md) · [OBS](docs/obs.md) | per-platform specifics |
 | [Deployment](docs/deployment.md) | Podman, systemd, logs, and what to run after changing what |
 

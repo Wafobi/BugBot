@@ -243,3 +243,40 @@ def test_color_falls_back_to_default_on_garbage(tmp_path, caplog):
     config = LiveConfig(path)
     with caplog.at_level("WARNING"):
         assert config.color("bug", default=0x123456) == 0x123456
+
+
+# --- override layer ------------------------------------------------------------------------
+
+def test_override_lies_on_top_and_lists_replace(tmp_path):
+    import json as _json
+    path = tmp_path / "x.json"
+    path.write_text(_json.dumps({"a": 1, "nested": {"k": 1, "j": 2}, "pool": ["x", "y"]}))
+    override = tmp_path / "settings" / "x.json"
+    config = LiveConfig(path, override=override)
+    assert config.get("a") == 1 and config.overrides == {}
+    config.save_overrides({"a": 5, "nested": {"k": 9}, "pool": ["z"]})
+    assert config.get("a") == 5
+    assert config.section("nested") == {"k": 9, "j": 2}
+    assert config.get("pool") == ["z"]
+    assert _json.loads(path.read_text())["a"] == 1  # the file underneath is never written
+    config.save_overrides({"a": None})  # None = back to the file's value
+    assert config.get("a") == 1
+
+
+def test_broken_override_keeps_the_previous_one(tmp_path):
+    path = tmp_path / "x.json"
+    path.write_text('{"a": 1}')
+    override = tmp_path / "o.json"
+    config = LiveConfig(path, override=override)
+    config.save_overrides({"a": 2})
+    import os as _os
+    import time as _time
+    override.write_text("{broken")
+    _os.utime(override, (_time.time() + 5, _time.time() + 5))
+    assert config.get("a") == 2
+
+
+def test_files_outside_the_repo_have_no_override_by_default(tmp_path):
+    path = tmp_path / "x.json"
+    path.write_text('{"a": 1}')
+    assert LiveConfig(path).override_path is None

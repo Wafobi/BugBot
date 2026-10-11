@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<!--
+  TTS admin page - served by the bot (platforms/twitch/features/tts/admin.py) on the overlay
+  listener: http://127.0.0.1:4457/tts/admin?token=<TTS_TOKEN> through the SSH tunnel. Speech is
+  made on the server; this page only plays the samples. Not an OBS source.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>BugBot TTS – Stimmen &amp; Pool</title>
+<style>
+  :root {
+    --ink: #15100a; --ink-deep: #0d0904; --ink-line: #2a1f10;
+    --amber: #ffb000; --amber-soft: #d99a3d; --amber-dim: #8a6a34;
+    --green: #7cffb2; --red: #ff5f6d; --cyan: #6fe7dd;
+    --font: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 32px; background: var(--ink-deep); color: #e9d9b8; font-family: var(--font); }
+  .card {
+    max-width: 760px; margin: 0 auto 24px; background: var(--ink); border: 1px solid var(--ink-line);
+    border-radius: 6px; padding: 22px 24px; box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  }
+  h1 { margin: 0 0 4px; font-size: 20px; color: var(--amber); }
+  h2 { margin: 0 0 6px; font-size: 15px; color: var(--amber); }
+  .lead, .hint { font-size: 12px; color: var(--amber-dim); margin: 0 0 6px; }
+  label { display: block; font-size: 12px; color: var(--amber-soft); margin: 14px 0 5px; }
+  select, textarea, input[type=text], button {
+    font: inherit; font-size: 14px; color: #e9d9b8; background: rgba(0,0,0,.35);
+    border: 1px solid var(--ink-line); border-radius: 4px; padding: 8px 10px; width: 100%;
+  }
+  textarea { min-height: 80px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  button { cursor: pointer; width: auto; }
+  button.primary { background: var(--amber); color: var(--ink-deep); font-weight: 700; border: none; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+  .btns .primary { flex: 1; }
+  .sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
+  .slider label { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .slider label span { color: var(--cyan); }
+  .slider label span.default { color: var(--amber-dim); }
+  .slider input { width: 100%; accent-color: var(--amber); }
+  .slider button { padding: 0 6px; font-size: 12px; border: none; background: none; color: var(--amber-dim); }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; }
+  .check input { width: auto; }
+  #status { min-height: 1.4em; margin-top: 10px; font-size: 13px; }
+  #status.err { color: var(--red); } #status.ok { color: var(--green); }
+  #spoken { margin-top: 8px; font-size: 13px; color: var(--amber-soft); overflow-wrap: anywhere; }
+  #spoken b { color: #e9d9b8; font-weight: normal; }
+  audio { width: 100%; margin-top: 10px; }
+  #pool { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; min-height: 30px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 9px; font-size: 12px;
+    border: 1px solid var(--ink-line); border-radius: 12px; background: rgba(0,0,0,.35); cursor: pointer;
+  }
+  .chip:hover { border-color: var(--amber-dim); }
+  .chip button { padding: 0 6px; background: none; border: none; color: var(--red); font-size: 14px; }
+  .dirty { color: var(--amber); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>TTS – Stimmen &amp; Pool</h1>
+  <p class="lead">Läuft auf dem Server, mit den dort installierten Stimmen. Speichern landet in settings/tts.json auf dem Server (überlagert die tts.json aus dem Repo) – gilt sofort.</p>
+
+  <div class="row">
+    <div><label for="voice">Stimme</label><select id="voice"></select></div>
+    <div><label for="speaker">Sprecher</label><select id="speaker"></select></div>
+  </div>
+
+  <label for="user">Name (optional – dann wie im Stream: „Name sagt: …“)</label>
+  <input type="text" id="user" placeholder="z.B. xX_Gamer_Xx123">
+  <label for="text">Text</label>
+  <textarea id="text">GG, das war richtig nice!!! 😂 Freu mich schon aufs nächste Game xD</textarea>
+  <div class="check"><input type="checkbox" id="prepare" checked><label for="prepare" style="margin:0">Aufbereiten wie im Stream (Emojis, Links, Namen, Ersetzungen, englische Wörter)</label></div>
+
+  <div class="btns">
+    <button class="primary" id="speak">▶ Sprechen</button>
+    <button id="randomMls" title="Zufälliger mls-Sprecher (236 Stimmen)">🎲 Zufälliger mls-Sprecher</button>
+  </div>
+  <div id="status"></div>
+  <audio id="audio" controls></audio>
+  <div id="spoken"></div>
+</div>
+
+<div class="card">
+  <h2>Sprechweise <span class="dirty" id="speechDirty"></span></h2>
+  <p class="hint">Gilt für alle Stimmen. „Std.“ = Wert des jeweiligen Modells; ↺ setzt einen Regler darauf zurück.</p>
+  <div class="sliders" id="sliders"></div>
+  <div class="btns"><button class="primary" id="saveSpeech">Sprechweise speichern</button></div>
+</div>
+
+<div class="card">
+  <h2>Stimmen-Pool <span class="dirty" id="poolDirty"></span></h2>
+  <p class="hint">Im Stream spricht eine Stimme aus diesem Pool. Klick auf eine Stimme lädt sie oben, × entfernt sie.</p>
+  <div id="pool"></div>
+  <div class="btns">
+    <button id="addPool">＋ Aktuelle Stimme hinzufügen</button>
+    <button id="speakPool">🎲 Zufällig aus Pool sprechen</button>
+  </div>
+  <label for="pick">Auswahl</label>
+  <select id="pick">
+    <option value="random">random – jede Nachricht eine zufällige Stimme</option>
+    <option value="per_user">per_user – jeder Zuschauer immer dieselbe Stimme</option>
+  </select>
+  <div class="btns"><button class="primary" id="savePool">Pool speichern</button></div>
+</div>
+
+<script>
+(function () {
+  var token = new URLSearchParams(location.search).get("token") || "";
+  var $ = function (id) { return document.getElementById(id); };
+  var voiceEl = $("voice"), speakerEl = $("speaker"), statusEl = $("status");
+  var SETTINGS = [
+    ["length_scale", "Tempo (>1 langsamer)", 0.5, 2, 0.05],
+    ["sentence_silence", "Satzpause (s)", 0, 1.5, 0.05],
+    ["noise_scale", "Betonungs-Variation", 0, 1.5, 0.01],
+    ["noise_w_scale", "Längen-Variation", 0, 1.5, 0.01],
+  ];
+  var state = null;
+  var pool = [], savedPool = "", savedPick = "";
+  var speech = {}, savedSpeech = "";   // only the explicitly set ones; missing = model default
+
+  function api(path, params) {
+    var q = new URLSearchParams(params || {});
+    q.set("token", token);
+    return fetch(path + "?" + q.toString()).then(function (r) {
+      return r.json().then(function (data) {
+        if (!r.ok) throw new Error(data.error || r.status);
+        return data;
+      });
+    });
+  }
+  function setStatus(text, cls) { statusEl.textContent = text; statusEl.className = cls || ""; }
+  function option(value, label) { var o = document.createElement("option"); o.value = value; o.textContent = label; return o; }
+  function model() { return state.voices[voiceEl.value]; }
+  function voiceValue() {
+    var m = model();
+    return voiceEl.value + (m && Object.keys(m.speakers).length > 1 ? "#" + speakerEl.value : "");
+  }
+  function defaults() { var m = model(); return m ? m.defaults : {}; }
+
+  function fillSpeakers(keep) {
+    speakerEl.innerHTML = "";
+    var m = model();
+    var ids = m ? Object.keys(m.speakers) : [];
+    if (ids.length <= 1) {
+      speakerEl.appendChild(option("", "– (nur ein Sprecher)"));
+      speakerEl.disabled = true;
+    } else {
+      ids.forEach(function (id) {
+        var label = m.speakers[id] === id ? "#" + id : "#" + id + " – " + m.speakers[id];
+        speakerEl.appendChild(option(id, label));
+      });
+      speakerEl.disabled = false;
+      if (keep !== undefined && ids.indexOf(String(keep)) !== -1) speakerEl.value = String(keep);
+    }
+    renderSliders();
+  }
+
+  function selectVoice(value) {
+    var parts = value.split("#");
+    if (!state.voices[parts[0]]) return;
+    voiceEl.value = parts[0];
+    fillSpeakers(parts[1]);
+  }
+
+  // --- speech sliders ---------------------------------------------------------------
+  function renderSliders() {
+    var box = $("sliders");
+    box.innerHTML = "";
+    SETTINGS.forEach(function (s) {
+      var key = s[0], isSet = speech[key] !== undefined && speech[key] !== null;
+      var value = isSet ? speech[key] : defaults()[key];
+      var wrap = document.createElement("div");
+      wrap.className = "slider";
+      wrap.innerHTML = '<label><span style="color:inherit">' + s[1] + '</span><span class="' + (isSet ? "" : "default") + '">' +
+        (isSet ? Number(value).toFixed(2) : "Std. " + Number(value).toFixed(2)) + '</span><button title="Auf Modell-Standard">↺</button></label>' +
+        '<input type="range" min="' + s[2] + '" max="' + s[3] + '" step="' + s[4] + '" value="' + value + '">';
+      wrap.querySelector("input").addEventListener("input", function (e) {
+        speech[key] = Math.round(parseFloat(e.target.value) * 100) / 100;
+        renderSliderLabel(wrap, key);
+        markDirty();
+      });
+      wrap.querySelector("button").addEventListener("click", function () {
+        delete speech[key];
+        renderSliders();
+        markDirty();
+      });
+      box.appendChild(wrap);
+    });
+  }
+  function renderSliderLabel(wrap, key) {
+    var span = wrap.querySelectorAll("label span")[1];
+    span.className = "";
+    span.textContent = Number(speech[key]).toFixed(2);
+  }
+  function speechParams() {
+    var out = {};
+    SETTINGS.forEach(function (s) { if (speech[s[0]] !== undefined && speech[s[0]] !== null) out[s[0]] = speech[s[0]]; });
+    return out;
+  }
+
+  // --- pool -------------------------------------------------------------------------
+  function renderPool() {
+    var box = $("pool");
+    box.innerHTML = "";
+    pool.forEach(function (value, i) {
+      var chip = document.createElement("span");
+      chip.className = "chip";
+      chip.appendChild(document.createTextNode(value));
+      var x = document.createElement("button");
+      x.textContent = "×";
+      x.title = "Entfernen";
+      x.addEventListener("click", function (e) { e.stopPropagation(); pool.splice(i, 1); renderPool(); });
+      chip.appendChild(x);
+      chip.addEventListener("click", function () { selectVoice(value); });
+      box.appendChild(chip);
+    });
+    markDirty();
+  }
+  function markDirty() {
+    $("poolDirty").textContent = (JSON.stringify(pool) !== savedPool || $("pick").value !== savedPick) ? "● ungespeichert" : "";
+    $("speechDirty").textContent = JSON.stringify(speechParams()) !== savedSpeech ? "● ungespeichert" : "";
+  }
+
+  // --- speak ------------------------------------------------------------------------
+  function speak(voice) {
+    if (voice) selectVoice(voice);
+    var params = Object.assign({
+      voice: voiceValue(), text: $("text").value, user: $("user").value,
+      prepare: $("prepare").checked ? "1" : "0",
+    }, speechParams());
+    $("speak").disabled = true;
+    setStatus("Erzeuge Sprache auf dem Server …");
+    var started = performance.now();
+    api("/tts/admin/speak", params).then(function (data) {
+      $("spoken").innerHTML = "Gesprochen (" + voiceValue() + "): <b></b>";
+      $("spoken").querySelector("b").textContent = data.spoken;
+      var audio = $("audio");
+      audio.src = "data:audio/wav;base64," + data.audio;
+      audio.play();
+      setStatus("Fertig in " + ((performance.now() - started) / 1000).toFixed(1) + " s", "ok");
+    }).catch(function (e) { setStatus("Fehler: " + e.message, "err"); })
+      .finally(function () { $("speak").disabled = false; });
+  }
+
+  function save(params, what) {
+    return api("/tts/admin/save", params).then(function () {
+      setStatus(what + " gespeichert – gilt ab der nächsten Ansage.", "ok");
+    }).catch(function (e) { setStatus("Fehler: " + e.message, "err"); throw e; });
+  }
+
+  // --- wiring -----------------------------------------------------------------------
+  voiceEl.addEventListener("change", function () { fillSpeakers(); });
+  $("speak").addEventListener("click", function () { speak(); });
+  $("text").addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) speak(); });
+  $("randomMls").addEventListener("click", function () {
+    var m = state.voices["de_DE-mls-medium"];
+    if (!m) return setStatus("de_DE-mls-medium ist auf dem Server nicht installiert.", "err");
+    var ids = Object.keys(m.speakers);
+    speak("de_DE-mls-medium#" + ids[Math.floor(Math.random() * ids.length)]);
+  });
+  $("addPool").addEventListener("click", function () {
+    var value = voiceValue();
+    if (pool.indexOf(value) === -1) pool.push(value);
+    renderPool();
+  });
+  $("speakPool").addEventListener("click", function () {
+    if (!pool.length) return setStatus("Pool ist leer.", "err");
+    speak(pool[Math.floor(Math.random() * pool.length)]);
+  });
+  $("pick").addEventListener("change", markDirty);
+  $("savePool").addEventListener("click", function () {
+    if (!pool.length) return setStatus("Ein leerer Pool kann nicht gespeichert werden.", "err");
+    save({ pool: JSON.stringify(pool), voice_pick: $("pick").value }, "Pool").then(function () {
+      savedPool = JSON.stringify(pool); savedPick = $("pick").value; markDirty();
+    });
+  });
+  $("saveSpeech").addEventListener("click", function () {
+    save({ speech: JSON.stringify(speechParams()) }, "Sprechweise").then(function () {
+      savedSpeech = JSON.stringify(speechParams()); markDirty();
+    });
+  });
+  window.addEventListener("beforeunload", function (e) {
+    if ($("poolDirty").textContent || $("speechDirty").textContent) { e.preventDefault(); e.returnValue = ""; }
+  });
+
+  if (!token) { setStatus("Kein ?token= in der URL (TTS_TOKEN).", "err"); return; }
+  setStatus("Lade …");
+  api("/tts/admin/state").then(function (data) {
+    state = data;
+    Object.keys(data.voices).forEach(function (name) {
+      var n = Object.keys(data.voices[name].speakers).length;
+      voiceEl.appendChild(option(name, name + (n > 1 ? "  (" + n + " Sprecher)" : "")));
+    });
+    pool = data.pool.slice();
+    savedPool = JSON.stringify(pool);
+    $("pick").value = data.voice_pick;
+    savedPick = data.voice_pick;
+    speech = Object.assign({}, data.speech);
+    savedSpeech = JSON.stringify(speechParams());
+    selectVoice(pool[0] && data.voices[pool[0].split("#")[0]] ? pool[0] : data.fallback);
+    if (!voiceEl.value && voiceEl.options.length) { voiceEl.selectedIndex = 0; fillSpeakers(); }
+    renderPool();
+    setStatus(Object.keys(data.voices).length + " Stimmen-Modelle · " + data.queue + " in der Warteschlange");
+  }).catch(function (e) { setStatus("Fehler: " + e.message, "err"); });
+})();
+</script>
+</body>
+</html>

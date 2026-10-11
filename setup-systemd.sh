@@ -16,6 +16,9 @@ fi
 # yet, Podman creates an empty directory there instead of a file, which breaks
 # sqlite3.connect() inside the container - so make sure it exists first.
 touch features/sql_db/bugbot.db
+# Same for the override directory (settings/, see bugbot.container) - a missing bind-mount
+# source makes Podman refuse to start the container.
+mkdir -p settings
 
 echo "🏗️  Building image..."
 podman build -t bugbot .

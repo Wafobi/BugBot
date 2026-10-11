@@ -57,6 +57,10 @@ CHAT_LOG = "chat_log"      # records the full message text
 RAW_LOG = "raw_log"        # raw log of the platform notifications
 VARIABLES = "variables"    # fills the {placeholders} of static commands (resolve), and knows
                            # the operator's timezone (zone) - see features/variables
+OVERLAY = "overlay"        # the listener the OBS browser sources hang on: push frames to a
+                           # role, add an HTTP route - see features/overlay
+BITS_LEDGER = "bits_ledger"  # a viewer's spendable bits balance (balance/spend) - see
+                             # features/companion, whose balance it is
 
 
 @dataclass

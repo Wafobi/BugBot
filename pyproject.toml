@@ -63,8 +63,10 @@ skips = [
              # a game mechanic, not anything security- or token-related (which uses the
              # `secrets` module instead, e.g. platforms/twitch/get_token.py's CSRF state).
     "B404",  # import_subprocess / B603/B607 command-injection checks: subprocess is used
-             # in exactly two places (check_config.py, the OBS relay's script launcher),
-             # neither with shell=True or unsanitized input - see the security review.
+             # in exactly three places (check_config.py, the OBS relay's script launcher,
+             # the TTS feature's Piper call in platforms/twitch/features/tts/synth.py),
+             # none with shell=True - Piper gets viewer text only through stdin, never as
+             # an argument - see the security review.
     "B603",
     "B607",
 ]

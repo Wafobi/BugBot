@@ -6,3 +6,6 @@ __pycache__
 # The DB comes in via bind mount from the host (see bugbot.container); a copy baked into
 # the image would just be dead weight that grows with every build.
 features/sql_db/bugbot.db
+# Local Piper models - the image downloads its own (see Dockerfile)
+platforms/twitch/features/tts/voices/
+settings/

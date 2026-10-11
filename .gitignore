@@ -10,3 +10,9 @@ __pycache__/
 .claude/
 .venv/
 venv/
+
+# Piper models, if ever downloaded for running the bot outside the container
+platforms/twitch/features/tts/voices/
+
+# Runtime overrides of the JSON configs (core/runtime_config.py) - per installation, not in git
+settings/

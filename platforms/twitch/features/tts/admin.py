@@ -1,0 +1,148 @@
+"""The TTS admin page: try voices, build the voice pool, tune how it is spoken - and save it
+on the server.
+
+Served by the bot itself, on the overlay listener (same port, same SSH tunnel as everything
+else), so nothing TTS-related runs on the streamer's machine: open
+
+    http://127.0.0.1:4457/tts/admin?token=<TTS_TOKEN>
+
+through the tunnel. Every route here hangs on TTS_TOKEN, like the Stream Deck buttons.
+
+GET only (the overlay listener answers routes in the WebSocket handshake hook, which never
+sees anything else), so everything travels in the query string - fine for 255 characters of
+text and a list of voice names.
+
+Saving never touches tts.json in the repository - it goes into the override layer,
+settings/tts.json (see core/runtime_config.py, LiveConfig.save_overrides), which lies on top
+of it. So `git pull` on the server never conflicts, and the change applies from the next
+announcement, no restart.
+"""
+
+import asyncio
+import base64
+import http
+import json
+import logging
+from pathlib import Path
+
+from . import config as env
+from . import normalize
+from . import synth
+
+log = logging.getLogger(__name__)
+
+PAGE = Path(__file__).parent / "client" / "admin.html"
+MAX_TEXT = 1000
+VOICE_PICKS = ("random", "per_user")
+JSON = "application/json; charset=utf-8"
+
+
+def _json(status, data):
+    return status, json.dumps(data, ensure_ascii=False), JSON
+
+
+def _error(message):
+    return _json(http.HTTPStatus.BAD_REQUEST, {"error": message})
+
+
+class TtsAdmin:
+    """Route handlers for the admin page. `feature` is the TtsFeature - for its config, its
+    queue length and the same synthesis path the stream uses."""
+
+    def __init__(self, feature):
+        self._feature = feature
+
+    @property
+    def _config(self):
+        return self._feature.config
+
+    def routes(self):
+        return {
+            "/tts/admin": self.page,
+            "/tts/admin/state": self.state,
+            "/tts/admin/speak": self.speak,
+            "/tts/admin/save": self.save,
+        }
+
+    async def page(self, query):
+        return http.HTTPStatus.OK, PAGE.read_text(encoding="utf-8"), "text/html; charset=utf-8"
+
+    async def state(self, query):
+        """Installed voices with their speakers and defaults, plus what tts.json says now."""
+        voices = {}
+        for model in synth.installed(env.TTS_VOICES_DIR):
+            try:
+                voices[model] = synth.model_info(env.TTS_VOICES_DIR / f"{model}.onnx")
+            except (OSError, ValueError) as error:
+                log.warning(f"TTS admin: {model} unreadable: {error}")
+        configured = self._config.get("voice", synth.FALLBACK_VOICE)
+        return _json(http.HTTPStatus.OK, {
+            "voices": voices,
+            "pool": configured if isinstance(configured, list) else [configured],
+            "voice_pick": self._config.get("voice_pick", "random"),
+            "speech": synth.speech_settings(self._config.section("speech")),
+            "queue": len(self._feature._queue),
+            "max_text": MAX_TEXT,
+            "fallback": synth.FALLBACK_VOICE,
+        })
+
+    async def speak(self, query):
+        """A sample, synthesized exactly like on stream: normalize.py with tts.json's
+        replacements and english_words (unless prepare=0), the given voice and speech
+        settings. Answers JSON with the spoken text and the WAV as base64."""
+        text = " ".join(str(query.get("text") or "").split())[:MAX_TEXT]
+        user = " ".join(str(query.get("user") or "").split())[:50]
+        prepare = query.get("prepare", "1") != "0"
+        try:
+            voice = synth.resolve(query.get("voice") or "", env.TTS_VOICES_DIR)
+            settings = {k: float(query[k]) for k in synth.SPEECH_SETTINGS if query.get(k)}
+        except (synth.VoiceError, ValueError, OSError) as error:
+            return _error(str(error))
+        if prepare:
+            text = self._feature._speakable(text)
+        if user:
+            text = self._config.text("announce_command", user=normalize.name(user) if prepare else user, message=text)
+        if not text.strip():
+            return _error("Kein Text (oder nach dem Aufbereiten nichts übrig).")
+        english = self._config.get("english_words", []) if prepare else []
+        try:
+            wav = await asyncio.to_thread(synth.synthesize, text, voice, settings, english)
+        except RuntimeError as error:
+            return _json(http.HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
+        return _json(http.HTTPStatus.OK, {"spoken": text, "audio": base64.b64encode(wav).decode("ascii")})
+
+    async def save(self, query):
+        """Writes voice (the pool), voice_pick and/or speech into tts.json - each only when
+        given, each checked first: a pool entry that is not installed or a speaker out of
+        range is refused rather than saved."""
+        changes = {}
+        try:
+            if "pool" in query:
+                pool = json.loads(query["pool"])
+                if not isinstance(pool, list) or not pool or not all(isinstance(v, str) for v in pool):
+                    return _error("Pool muss eine nicht-leere Liste von Stimmen sein.")
+                for value in pool:
+                    synth.resolve(value, env.TTS_VOICES_DIR)
+                changes["voice"] = pool if len(pool) > 1 else pool[0]
+            if "voice_pick" in query:
+                if query["voice_pick"] not in VOICE_PICKS:
+                    return _error(f"voice_pick muss eins von {VOICE_PICKS} sein.")
+                changes["voice_pick"] = query["voice_pick"]
+            if "speech" in query:
+                speech = json.loads(query["speech"])
+                if not isinstance(speech, dict):
+                    return _error("speech muss ein Objekt sein.")
+                clean = synth.speech_settings(speech)
+                # Every key spelled out - null = the model's own default - so a value from
+                # the repo's tts.json does not shine through a slider that was reset.
+                changes["speech"] = {key: clean.get(key) for key in synth.SPEECH_SETTINGS}
+        except (json.JSONDecodeError, synth.VoiceError, OSError, ValueError) as error:
+            return _error(str(error))
+        if not changes:
+            return _error("Nichts zu speichern.")
+        try:
+            await asyncio.to_thread(self._config.save_overrides, changes)
+        except OSError as error:
+            return _json(http.HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"nicht speicherbar: {error}"})
+        log.info(f"TTS admin: saved {', '.join(changes)} to {self._config.override_path}")
+        return _json(http.HTTPStatus.OK, {"saved": sorted(changes)})

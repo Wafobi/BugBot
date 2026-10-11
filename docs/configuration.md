@@ -34,12 +34,13 @@ They are ignored everywhere, including in `command_names`.
 
 ## How the layering works
 
-Two layers lie on top of each other, the upper beating the lower:
+Three layers lie on top of each other, the upper beating the lower:
 
 | Layer | What it is |
 |---|---|
 | `defaults` | what the code brings along — the few values a module can't work without |
 | current file | whatever is in it now |
+| `settings/<name>.json` | the [overrides](#overrides) — only what was changed at runtime |
 
 What the file says is what applies. Delete a static command and it is gone; delete a threshold
 and the value from the code applies again. That is the point of the whole mechanism — a change
@@ -55,6 +56,18 @@ to exist twice — a feature that is almost entirely sentences would otherwise c
 Python and once in JSON, two copies that drift apart without anyone noticing. Delete a text key
 and the shipped sentence still comes out. For anything other than texts the same underlay would
 just be a way of keeping deleted things alive, which is why it isn't there.
+
+### Overrides
+
+`settings/<same file name>.json` — e.g. `settings/tts.json` over
+`platforms/twitch/features/tts/tts.json` — holds only what was changed at runtime: today by the
+[TTS admin page](tts.md#admin-page), later by the settings website (`settings-plan.md`). The
+repo's files are never written that way, so `git pull` on the server never conflicts, and an
+update's new defaults arrive wherever you haven't overridden them. Same merge rules as above
+(dicts merged, lists replaced); a key removed from the override falls back to the repo's value.
+
+`settings/` is outside git and mounted into the container as a directory (`bugbot.container`);
+`update.sh` creates it. Editing a file there by hand works too. `BUGBOT_SETTINGS_DIR` moves it.
 
 **You cannot lock yourself out.** Break the JSON or remove the file entirely and the last good
 state applies, with one line in the log saying so.

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!--
+  TTS browser source for OBS (platforms/twitch/features/tts). Invisible - it only plays what
+  the bot sends once a Stream Deck button released it (/tts/next). The speech itself is made
+  on the server; this page only plays the finished audio.
+
+  Connects to the overlay listener, same as bars.html/chat.html, with ?role=tts - only
+  connections with that role get the audio frames.
+
+  URL parameters:
+    token=   OVERLAY_TOKEN from the .env (required) - the same one the other overlays use
+    host=    default 127.0.0.1 (the SSH tunnel's local end, see docs/tunnel.md)
+    port=    default 4457 (OVERLAY_PORT)
+    volume=  0..1, default 1
+
+  In OBS: add as a browser source, tick "Control audio via OBS" so the voice gets its own
+  mixer channel, and leave "Shutdown source when not visible" off - otherwise a hidden scene
+  drops the connection and the next /tts/next answers "keine TTS-Browserquelle verbunden".
+
+  The page never receives the spoken text, only the finished audio - nothing a viewer typed
+  can end up interpreted here.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>BugBot TTS</title>
+<style>html, body { margin: 0; background: transparent; }</style>
+</head>
+<body>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var token = params.get("token") || "";
+  if (!token) { console.warn("Kein ?token= in der URL - TTS verbindet sich nicht."); return; }
+  var host = params.get("host") || "127.0.0.1";
+  var port = params.get("port") || "4457";
+  var volume = Math.min(1, Math.max(0, parseFloat(params.get("volume") || "1")));
+  if (isNaN(volume)) volume = 1;
+
+  // Flood guard: at most this many clips wait here, and a pause between two of them - a
+  // double press on the Stream Deck queues the second clip instead of talking over the first.
+  var MAX_PENDING = 5;
+  var GAP_MS = 400;
+  var pending = [];
+  var playing = false;
+
+  function playNext() {
+    if (playing || !pending.length) return;
+    playing = true;
+    var audio = new Audio("data:audio/wav;base64," + pending.shift());
+    audio.volume = volume;
+    function done() { setTimeout(function () { playing = false; playNext(); }, GAP_MS); }
+    audio.onended = done;
+    audio.onerror = done;
+    audio.play().catch(done);
+  }
+
+  function connect() {
+    var socket = new WebSocket("ws://" + host + ":" + port + "/?role=tts&token=" + encodeURIComponent(token));
+    socket.onclose = function () { setTimeout(connect, 3000); };
+    socket.onerror = function () { socket.close(); };
+    socket.onmessage = function (message) {
+      var frame;
+      try { frame = JSON.parse(message.data); } catch (e) { return; }
+      if (frame.type !== "speak" || !frame.data || typeof frame.data.audio !== "string") return;
+      if (pending.length >= MAX_PENDING) return;
+      pending.push(frame.data.audio);
+      playNext();
+    };
+  }
+  connect();
+})();
+</script>
+</body>
+</html>

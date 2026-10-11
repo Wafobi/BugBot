@@ -221,6 +221,10 @@ class StatsFeature(feature_api.Feature):
                 bits=session_stats["bits_cheered"], follows=session_stats["follows_gained"],
             ),
         ]
+        if session_stats.get("tts_queued"):
+            fields.append(replace(self._field(
+                "session.tts", played=session_stats.get("tts_played", 0), queued=session_stats["tts_queued"],
+            ), inline=True))
         if session_stats["raids_in"] or session_stats["hypetrain_level"]:
             fields.append(self._field(
                 "session.extras",

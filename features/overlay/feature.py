@@ -81,8 +81,11 @@ DEFAULTS = {
 class OverlayFeature(feature_api.Feature):
     name = "overlay"
 
-    # Offers nothing: nobody else should build on what is on screen.
-    provides = frozenset()
+    # Offers its listener (OVERLAY, see push/listeners/add_route below) - so a feature that
+    # also needs a browser source and a button (platforms/twitch/features/tts) rides on this
+    # port and tunnel instead of opening its own. Not the state itself: nobody else should
+    # build on what is on screen.
+    provides = frozenset({feature_api.OVERLAY})
 
     # All three taken along if present - none is needed in order to send. Without STORAGE
     # the death counter lives only until the restart; without SESSIONS the start time of an
@@ -158,6 +161,32 @@ class OverlayFeature(feature_api.Feature):
         if self._server is not None:
             await self._server.close()
             self._server = None
+
+    # --- OVERLAY (Pull) -------------------------------------------------------------
+    # What other features with `optional = {OVERLAY}` use. All three are harmless without
+    # a listener (no OVERLAY_TOKEN): nothing is sent, nobody listens, no route exists.
+
+    @property
+    def listening(self):
+        return self._server is not None
+
+    async def push(self, type_, data, role):
+        """One frame to the browser sources that connected with ?role=<role> - only those."""
+        if self._server is not None:
+            await self._server.broadcast(type_, data, role=role)
+
+    def listeners(self, role):
+        """How many browser sources with this role are connected right now."""
+        return self._server.clients_with_role(role) if self._server is not None else 0
+
+    def add_route(self, path, handler, token):
+        """GET <path> on this listener, answered by `handler` (async, returns (HTTPStatus,
+        text)) - guarded by `token`, never by OVERLAY_TOKEN (see server.py). Returns False
+        when there is no listener to add it to."""
+        if self._server is None:
+            return False
+        self._server.add_route(path, handler, token)
+        return True
 
     # --- State ----------------------------------------------------------------------
 
@@ -283,6 +312,8 @@ class OverlayFeature(feature_api.Feature):
             "peak_viewers": stats.get("peak_viewers") or 0,
             "avg_viewers": stats.get("avg_viewers") or 0,
             "unique_chatters": stats.get("unique_chatters") or 0,
+            "tts_queued": stats.get("tts_queued") or 0,
+            "tts_played": stats.get("tts_played") or 0,
             # Individual follows/subs/raids/cheers, oldest first - the names behind the
             # totals above.
             "events": recap_events,

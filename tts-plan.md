@@ -1,5 +1,13 @@
 # TTS-Feature: Plan (Stand 2026-10-11)
 
+> **Umgesetzt (2026-10-11).** Maßgeblich ist jetzt [docs/tts.md](docs/tts.md). Abweichungen vom
+> Plan unten: kein eigener Port 4458 / kein eigener Server – Browserquelle und Stream-Deck-Knöpfe
+> (`/tts/next`, `/tts/skip`) laufen über den Overlay-Listener (4457, `TTS_TOKEN` nur für die
+> Knöpfe); Modelle stehen in `voices.txt`; dazu kamen Textaufbereitung, englische Aussprache,
+> Stimmen-Pool, Resub-Nachrichten, TTS-Zahlen in der Stream-Statistik und die Admin-Seite
+> (`/tts/admin`) mit Speichern in `settings/tts.json`. Die lokalen Werkzeuge
+> (`voice_samples.py`) sind entfallen – Piper läuft nur auf dem Server.
+
 Bits/Cheer-getriggerte Text-to-Speech-Ansage, serverseitig synthetisiert (Piper), in eine
 Warteschlange gestellt und per Stream-Deck-Knopfdruck manuell freigegeben. Wird über eine
 Browser-Source in OBS abgespielt.

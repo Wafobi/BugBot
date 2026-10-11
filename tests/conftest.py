@@ -4,6 +4,7 @@ platforms.twitch.bot` would otherwise raise KeyError in an environment without a
 .env, which is exactly the environment CI/a fresh clone runs tests in."""
 
 import os
+import tempfile
 
 os.environ.setdefault("TWITCH_CHANNEL", "test_channel")
 os.environ.setdefault("TWITCH_CLIENT_ID", "test_client_id")
@@ -13,3 +14,7 @@ os.environ.setdefault("TWITCH_CHAT_REFRESH_TOKEN", "test_refresh_token")
 os.environ.setdefault("TWITCH_CHAT_CLIENT_ID", "test_client_id")
 os.environ.setdefault("DISCORD_TOKEN", "test_discord_token")
 os.environ.setdefault("OBS_BRIDGE_TOKEN", "test_obs_token")
+
+# The override layer (core/runtime_config.py) - never the real settings/ directory of this
+# checkout: a test must neither see someone's local overrides nor write into them.
+os.environ.setdefault("BUGBOT_SETTINGS_DIR", tempfile.mkdtemp(prefix="bugbot-settings-"))

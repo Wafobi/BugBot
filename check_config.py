@@ -37,6 +37,7 @@ CONTAINER = "bugbot"
 CONFIG_FOR = [
     ("platforms/discord/features/levels", "platforms/discord/features/levels/levels.json"),
     ("platforms/obs", "platforms/obs/obs.json"),
+    ("platforms/twitch/features/tts", "platforms/twitch/features/tts/tts.json"),
     ("platforms/twitch", "platforms/twitch/twitch.json"),
     ("platforms/discord", "platforms/discord/discord.json"),
     ("features/stats", "features/stats/stats.json"),
