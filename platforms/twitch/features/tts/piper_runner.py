@@ -66,12 +66,33 @@ def robot(x, rate):
     return 0.8 * x * np.sin(2 * np.pi * 45 * t) + 0.35 * x
 
 
+# Retro: how long the machine hums before and after speaking, and how loud its hiss is
+# relative to the voice's peak.
+RETRO_PAD_SECONDS = 0.4
+RETRO_HISS = 0.07
+
+
 def retro(x, rate):
-    """Speak & Spell / home computer: sample-and-hold down to ~6 kHz, 5-bit resolution."""
+    """Speak & Spell / home computer: sample-and-hold down to ~6 kHz, 5-bit resolution - and a
+    hiss that never stops: through every pause, and a moment before and after the voice, like
+    an old machine that is simply switched on. (Quantization alone only crackles while the
+    voice is there and drops to dead silence in between.)"""
+    peak = float(np.max(np.abs(x))) if len(x) else 1.0
+    pad = np.zeros(int(rate * RETRO_PAD_SECONDS), dtype=np.float32)
+    x = np.concatenate([pad, x, pad])
+    rng = np.random.default_rng()
+    x = x + rng.uniform(-1, 1, len(x)).astype(np.float32) * RETRO_HISS * (peak or 1.0)
     step = max(1, round(rate / 6000))
     held = np.repeat(x[::step], step)[:len(x)]
     levels = 2 ** 4
-    return np.round(held * levels) / levels
+    y = np.round(held * levels) / levels
+    # Short fades at the very ends, so the hiss starts and stops without a click.
+    fade = min(len(y) // 2, int(rate * 0.05))
+    if fade:
+        ramp = np.linspace(0, 1, fade, dtype=np.float32)
+        y[:fade] *= ramp
+        y[-fade:] *= ramp[::-1]
+    return y
 
 
 def funk(x, rate):
