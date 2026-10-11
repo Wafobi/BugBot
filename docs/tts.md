@@ -76,6 +76,21 @@ tunnel already forwards:
 
 `/tts/next` with no TTS browser source connected answers `503` and leaves the queue alone.
 
+## Record and VOD timestamps
+
+With STORAGE loaded, every message is kept in `tts_messages` (`store.py`): who, source (cheer /
+resub / `!tts`), bits, the original text, the spoken sentence, the voice — and when it was
+queued and played. **`stream_offset_seconds`** is the position in the stream at which it was
+played (from the session's start), i.e. where to find the moment of the answer in the VOD.
+Statuses: `queued`, `played`, `stopped` (cut off with skip), `expired`.
+
+The admin page's **Verlauf** lists every stream that had TTS and, per stream, each message with
+its stream time (`1:23:45`), sender, source, what was said and its status.
+
+**Every stream gets a clean queue:** once a different stream runs than the one the queue was
+filled in, whatever still waits is expired — kept in the record, never read out. A restart or
+update of the bot *during* a stream keeps that stream's queue (it is restored from the table).
+
 ## Statistics
 
 Every queued entry and every played one is reported as a `PLATFORM_EVENT` (`tts_queued`,

@@ -57,6 +57,12 @@
   .chip:hover { border-color: var(--amber-dim); }
   .chip button { padding: 0 6px; background: none; border: none; color: var(--red); font-size: 14px; }
   .dirty { color: var(--amber); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+  th { text-align: left; color: var(--amber-soft); font-weight: 600; border-bottom: 1px solid var(--ink-line); padding: 4px 6px; }
+  td { padding: 5px 6px; border-bottom: 1px solid var(--ink-line); vertical-align: top; overflow-wrap: anywhere; }
+  td.time { color: var(--cyan); white-space: nowrap; }
+  td.status-played { color: var(--green); } td.status-stopped { color: var(--amber); }
+  td.status-expired, td.status-queued { color: var(--amber-dim); }
 </style>
 </head>
 <body>
@@ -107,6 +113,16 @@
     <option value="per_user">per_user – jeder Zuschauer immer dieselbe Stimme</option>
   </select>
   <div class="btns"><button class="primary" id="savePool">Pool speichern</button></div>
+</div>
+
+<div class="card">
+  <h2>Verlauf</h2>
+  <p class="hint">Jede TTS-Nachricht pro Stream. „Stream-Zeit“ ist die Stelle im VOD, an der sie abgespielt wurde.</p>
+  <div class="btns">
+    <select id="stream" style="flex:1"></select>
+    <button id="reloadHistory">↻</button>
+  </div>
+  <div id="history"></div>
 </div>
 
 <script>
@@ -292,7 +308,64 @@
     if ($("poolDirty").textContent || $("speechDirty").textContent) { e.preventDefault(); e.returnValue = ""; }
   });
 
+  // --- history ----------------------------------------------------------------------
+  var STATUS = { queued: "wartet", played: "abgespielt", stopped: "abgebrochen", expired: "verfallen" };
+  var SOURCE = { cheer: "Cheer", resub: "Resub", command: "!tts" };
+  function hms(seconds) {
+    if (seconds === null || seconds === undefined) return "–";
+    var h = Math.floor(seconds / 3600), m = Math.floor(seconds % 3600 / 60), s = seconds % 60;
+    return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  }
+  function localTime(utc) {
+    if (!utc) return "";
+    var d = new Date(utc.replace(" ", "T") + "Z");
+    return d.toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+  function loadStreams() {
+    return api("/tts/admin/history").then(function (data) {
+      var sel = $("stream"), keep = sel.value;
+      sel.innerHTML = "";
+      if (!data.streams.length) sel.appendChild(option("", "– noch kein Stream mit TTS"));
+      data.streams.forEach(function (s) {
+        sel.appendChild(option(s.session_id, localTime(s.started_at) + " · " + (s.title || "Stream #" + s.session_id) +
+          " · " + s.played + "/" + s.messages + " abgespielt"));
+      });
+      if (keep && sel.querySelector('option[value="' + keep + '"]')) sel.value = keep;
+      return loadHistory();
+    }).catch(function (e) { $("history").textContent = "Fehler: " + e.message; });
+  }
+  function loadHistory() {
+    var session = $("stream").value;
+    var box = $("history");
+    if (!session) { box.innerHTML = ""; return; }
+    return api("/tts/admin/history", { session: session }).then(function (data) {
+      var table = document.createElement("table");
+      table.innerHTML = "<tr><th>Stream-Zeit</th><th>Wer</th><th>Quelle</th><th>Gesagt</th><th>Status</th></tr>";
+      data.messages.forEach(function (m) {
+        var tr = document.createElement("tr");
+        [
+          ["time", hms(m.stream_offset_seconds)],
+          ["", m.user_name || ""],
+          ["", (SOURCE[m.source] || m.source) + (m.bits ? " · " + m.bits + " Bits" : "")],
+          ["", m.spoken + (m.voice ? "  (" + m.voice + ")" : "")],
+          ["status-" + m.status, STATUS[m.status] || m.status],
+        ].forEach(function (cell) {
+          var td = document.createElement("td");
+          td.className = cell[0];
+          td.textContent = cell[1];
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+      box.innerHTML = "";
+      box.appendChild(table);
+    }).catch(function (e) { box.textContent = "Fehler: " + e.message; });
+  }
+  $("stream").addEventListener("change", loadHistory);
+  $("reloadHistory").addEventListener("click", loadStreams);
+
   if (!token) { setStatus("Kein ?token= in der URL (TTS_TOKEN).", "err"); return; }
+  loadStreams();
   setStatus("Lade …");
   api("/tts/admin/state").then(function (data) {
     state = data;

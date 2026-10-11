@@ -53,6 +53,7 @@ import time
 import wave
 import zlib
 from collections import deque
+from datetime import datetime, UTC
 
 from core import events
 from core import feature as feature_api
@@ -62,6 +63,7 @@ from . import config as env
 from . import normalize
 from .admin import TtsAdmin
 from . import synth
+from .store import TtsStore
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +96,10 @@ def strip_cheermotes(text):
 class TtsFeature(feature_api.Feature):
     name = "tts"
 
-    optional = frozenset({feature_api.MODERATION, feature_api.BITS_LEDGER, feature_api.OVERLAY})
+    optional = frozenset({
+        feature_api.MODERATION, feature_api.BITS_LEDGER, feature_api.OVERLAY,
+        feature_api.STORAGE, feature_api.SESSIONS,
+    })
 
     def __init__(self):
         self.config = runtime_config.for_package(__file__, DEFAULTS)
@@ -102,9 +107,16 @@ class TtsFeature(feature_api.Feature):
         self._moderation = None
         self._ledger = None
         self._overlay = None
-        # Entries waiting for /next: {"text": the full sentence to speak}. Nothing else is
-        # kept - who sent it is already in the sentence, and in chat.
+        self._store = None
+        self._sessions = None
+        # Entries waiting for /next: {"id": row in tts_messages (None without STORAGE),
+        # "text": the full sentence to speak, "user_key", "user_name", "session": the stream
+        # it was queued in}.
         self._queue = deque()
+        # The stream the queue belongs to - see _sync_session.
+        self._queue_session = None
+        # The row of what was released last - marked "stopped" if /tts/skip cuts it off.
+        self._playing_entry_id = None
         # One /next at a time: a double press waits for the first synthesis instead of
         # starting a second Piper process next to it.
         self._release_lock = asyncio.Lock()
@@ -127,6 +139,25 @@ class TtsFeature(feature_api.Feature):
                      "!tts <text> only works for mods and the broadcaster.")
 
         bus.subscribe(events.RAW_EVENT, self.on_raw_event)
+
+        # Every message is kept (store.py) - with when it was played, as a position in the
+        # stream - and the queue survives a restart in the middle of a stream.
+        self._sessions = bus.feature_with(feature_api.SESSIONS)
+        db = bus.feature_with(feature_api.STORAGE)
+        if db is not None:
+            self._store = TtsStore(db)
+            await asyncio.to_thread(self._store.init_schema)
+            session = self._current_session()
+            for row in await asyncio.to_thread(self._store.restore, session):
+                self._queue.append({
+                    "id": row["id"], "text": row["spoken"], "user_key": row["user_key"] or "",
+                    "user_name": row["user_name"] or "", "session": row["stream_session_id"],
+                })
+            self._queue_session = session
+            if self._queue:
+                log.info(f"TTS: {len(self._queue)} waiting message(s) of this stream restored.")
+        else:
+            log.info("TTS without STORAGE: messages are not kept, the queue is lost on restart.")
 
         installed = synth.installed(env.TTS_VOICES_DIR)
         if not installed:
@@ -178,14 +209,60 @@ class TtsFeature(feature_api.Feature):
     def _cap(self, text):
         return text[:max(1, int(self.config.get("max_chars", 255)))].strip()
 
-    async def _enqueue(self, sentence, user_key="", user_name=""):
+    def _current_session(self):
+        return self._sessions.current_session_id if self._sessions is not None else None
+
+    async def _sync_session(self):
+        """Every stream gets a clean queue: once a different stream runs than the one the
+        queue was filled in, what still waits is expired (kept in tts_messages, never read
+        out). Checked lazily - whenever the queue is touched - rather than on STREAM_START,
+        so it does not matter in which order the start reaches the features, and a restart in
+        the middle of a stream (same session) keeps its queue."""
+        session = self._current_session()
+        if session is None or session == self._queue_session:
+            return
+        stale = [entry for entry in self._queue if entry.get("session") != session]
+        if stale:
+            self._queue = deque(entry for entry in self._queue if entry.get("session") == session)
+            if self._store is not None:
+                await asyncio.to_thread(self._store.expire_waiting)
+            log.info(f"TTS: new stream - {len(stale)} waiting message(s) of the previous queue expired.")
+        self._queue_session = session
+        self._playing_until = 0.0
+
+    async def queue_length(self):
+        await self._sync_session()
+        return len(self._queue)
+
+    async def _enqueue(self, sentence, user_key="", user_name="", source="", bits=0, message=None):
         """False when the queue is full - the caller decides what that means. user_key is
-        only there for voice_pick "per_user" (see _voice)."""
+        only there for voice_pick "per_user" (see _voice); source/bits/message only for the
+        record in tts_messages."""
+        await self._sync_session()
         if len(self._queue) >= max(1, int(self.config.get("max_queue", 50))):
             return False
-        self._queue.append({"text": sentence, "user_key": user_key, "user_name": user_name})
+        session = self._current_session()
+        entry_id = None
+        if self._store is not None:
+            entry_id = await asyncio.to_thread(
+                self._store.add, session, source, user_key, user_name, bits, message, sentence,
+            )
+        self._queue.append({
+            "id": entry_id, "text": sentence, "user_key": user_key, "user_name": user_name, "session": session,
+        })
         await self._report("tts_queued", user_name)
         return True
+
+    async def _stream_offset(self, session):
+        """Seconds since the start of `session` - the position in the VOD - or None."""
+        if session is None or self._sessions is None:
+            return None
+        try:
+            data = await self._sessions.session(session)
+            started = datetime.strptime(data["started_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+        except (TypeError, KeyError, ValueError):
+            return None
+        return max(0, int((datetime.now(UTC) - started).total_seconds()))
 
     async def _report(self, event_type, user_name):
         """tts_queued / tts_played as an ordinary PLATFORM_EVENT - features/stats counts them
@@ -240,7 +317,10 @@ class TtsFeature(feature_api.Feature):
         # Anonymous cheers never count towards the balance in the first place.
         if self._ledger is not None and not anonymous:
             await self._ledger.spend(self._key(platform, user_id, user_name), bits)
-        await self._enqueue(sentence, "" if anonymous else self._key(platform, user_id, user_name), user_name)
+        await self._enqueue(
+            sentence, "" if anonymous else self._key(platform, user_id, user_name), user_name,
+            source="cheer", bits=bits, message=text if blocked is None else None,
+        )
 
     async def _on_resub(self, platform, payload):
         """A resub with a message: read out like a cheer, but free - the sub is the payment,
@@ -266,7 +346,7 @@ class TtsFeature(feature_api.Feature):
         if not spoken:
             return
         sentence = self.config.text("announce_resub", user=normalize.name(user_name), months=months, message=spoken)
-        await self._enqueue(sentence, self._key(platform, user_id, user_name), user_name)
+        await self._enqueue(sentence, self._key(platform, user_id, user_name), user_name, source="resub", message=text)
 
     # --- !tts (chat) ------------------------------------------------------------------
 
@@ -300,15 +380,17 @@ class TtsFeature(feature_api.Feature):
         if len(self._queue) >= max(1, int(self.config.get("max_queue", 50))):
             return self.config.text("queue_full")
 
+        paid = 0
         if not message.is_privileged:
             have = await self._ledger.balance(key, message.user_name)
             if have < min_bits:
                 return self.config.text("needs_bits", have=have, need=min_bits)
             await self._ledger.spend(key, min_bits)
+            paid = min_bits
 
         await self._enqueue(
             self.config.text("announce_command", user=normalize.name(message.user_name), message=spoken),
-            key, message.user_name,
+            key, message.user_name, source="command", bits=paid, message=text,
         )
         # Deliberately no confirmation in chat - it was noise. Only the failures above answer,
         # since without them nobody could tell why nothing happens.
@@ -356,6 +438,7 @@ class TtsFeature(feature_api.Feature):
         """Synthesizes the next entry and sends it to the browser source. On failure the
         entry goes back to the front - /skip is how to get rid of one that keeps failing."""
         async with self._release_lock:
+            await self._sync_session()
             if not self._queue:
                 return http.HTTPStatus.OK, self.config.text("http.empty")
             if self._overlay is None or self._overlay.listeners(ROLE) == 0:
@@ -373,6 +456,12 @@ class TtsFeature(feature_api.Feature):
                 return http.HTTPStatus.INTERNAL_SERVER_ERROR, self.config.text("http.error")
             await self._overlay.push("speak", {"audio": base64.b64encode(wav).decode("ascii")}, ROLE)
             self._playing_until = max(time.monotonic(), self._playing_until) + _duration(wav)
+            self._playing_entry_id = entry.get("id")
+            if self._store is not None and entry.get("id") is not None:
+                session = self._current_session()
+                await asyncio.to_thread(
+                    self._store.mark_played, entry["id"], voice.name, session, await self._stream_offset(session),
+                )
             await self._report("tts_played", entry.get("user_name", ""))
             return http.HTTPStatus.OK, self.config.text("http.played", remaining=len(self._queue))
 
@@ -385,6 +474,8 @@ class TtsFeature(feature_api.Feature):
         self._playing_until = 0.0
         if self._overlay is not None:
             await self._overlay.push("stop", None, ROLE)
+        if self._store is not None and self._playing_entry_id is not None:
+            await asyncio.to_thread(self._store.mark_stopped, self._playing_entry_id)
         return http.HTTPStatus.OK, self.config.text("http.stopped", remaining=len(self._queue))
 
 

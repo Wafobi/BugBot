@@ -24,6 +24,9 @@ class FakeFeature:
     def _speakable(self, text):
         return text
 
+    async def queue_length(self):
+        return len(self._queue)
+
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):

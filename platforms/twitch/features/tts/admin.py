@@ -65,15 +65,39 @@ class TtsAdmin:
             # Just the number waiting - for a Stream Deck button label (Bitfocus Companion:
             # a trigger polls this into a custom variable, see docs/tts.md).
             "/tts/count": self.count,
+            # The record (store.py): which streams had TTS, and per stream every message with
+            # when it was played - as a position in the VOD.
+            "/tts/admin/history": self.history,
         }
 
     async def page(self, query):
         return http.HTTPStatus.OK, PAGE.read_text(encoding="utf-8"), "text/html; charset=utf-8"
 
+    async def history(self, query):
+        """Without ?session=: the streams that had TTS (newest first, with title/date from
+        SESSIONS where available). With it: that stream's messages, oldest first."""
+        feature = self._feature
+        store = getattr(feature, "_store", None)
+        if store is None:
+            return _error("Ohne Datenbank (STORAGE) gibt es keinen Verlauf.")
+        sessions = getattr(feature, "_sessions", None)
+        if "session" not in query:
+            streams = await asyncio.to_thread(store.sessions)
+            for stream in streams:
+                data = await sessions.session(stream["session_id"]) if sessions is not None else None
+                stream["title"] = (data or {}).get("title") or ""
+                stream["started_at"] = (data or {}).get("started_at") or stream["first_at"]
+            return _json(http.HTTPStatus.OK, {"streams": streams})
+        try:
+            session = int(query["session"])
+        except ValueError:
+            return _error("session muss eine Zahl sein.")
+        return _json(http.HTTPStatus.OK, {"messages": await asyncio.to_thread(store.history, session)})
+
     async def count(self, query):
         """The queue length as bare text, "3" - bytes so no trailing newline is added: it goes
         straight into a button label."""
-        return http.HTTPStatus.OK, str(len(self._feature._queue)).encode("ascii"), "text/plain; charset=utf-8"
+        return http.HTTPStatus.OK, str(await self._feature.queue_length()).encode("ascii"), "text/plain; charset=utf-8"
 
     async def state(self, query):
         """Installed voices with their speakers and defaults, plus what tts.json says now."""
