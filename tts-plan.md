@@ -153,6 +153,8 @@ platforms/twitch/features/tts/
   config.py      TTS_TOKEN / TTS_PORT / TTS_BIND aus .env
   tts.json       min_bits, include_anonymous, max_chars, voice, voices, command_names,
                  texts (announce/announce_no_message/announce_command/help.tts/needs_bits/blocked)
+  tools/
+    voice_samples.py  Stimmen probehören (lokal, nicht auf dem Server)
   client/
     tts.html     unsichtbare Browser-Source, verbindet sich, spielt "speak"-Frames als Audio ab
 
@@ -179,28 +181,72 @@ features/companion/companion.json  help.companion-Text: Guthaben gilt auch für 
 | `min_bits` | 100 | ~1 $, üblich; gleich wie `min_bits_to_speak` beim Companion. Gilt für Cheer und `!tts <text>` |
 | `include_anonymous` | `false` | anonym = nicht sperrbar; zählt auch nicht fürs Companion-Guthaben |
 | `max_chars` | 255 | ~15-18 s Sprache |
-| `voice` | auswählbar, Standard `de_DE-thorsten-medium` | siehe unten |
+| `voice` | auswählbar (Modell + optional Sprecher), Standard `de_DE-thorsten-medium` | siehe unten |
 | Mods/Broadcaster bei `!tts <text>` | kostenlos | wie beim Companion |
 | Queue-Anzeige im Bild | nein | Cheers stehen ohnehin im Chat |
 
 ### Stimme auswählbar
 
-Mehrere deutsche Piper-Stimmen werden ins Image gebacken; welche spricht, steht in
-`tts.json` und ist per Hot-Reload ohne Neustart umstellbar (wie alle `*.json`-Werte, siehe
+Engine bleibt **Piper** - komplett lokal im Bot-Container, nur CPU, kein Internet zur
+Laufzeit. Alle deutschen Piper-Modelle (Stand `rhasspy/piper-voices/voices.json`, geprüft
+2026-10-11):
+
+| Modell | Qualität | Sprecher |
+|---|---|---|
+| `de_DE-thorsten-low` / `-medium` / `-high` | low / medium / high | 1 |
+| `de_DE-thorsten_emotional-medium` | medium | 8 (Thorsten in verschiedenen Emotionen) |
+| `de_DE-mls-medium` | medium | **236** (verschiedene Sprecher*innen) |
+| `de_DE-kerstin-low` | low | 1 |
+| `de_DE-ramona-low` | low | 1 |
+| `de_DE-karlsson-low` | low | 1 |
+| `de_DE-pavoque-low` | low | 1 |
+| `de_DE-eva_k-x_low` | x_low | 1 |
+
+Eine **Stimme = Modell + optional Sprecher**, geschrieben als `modell#sprecher`. Ohne `#`
+spricht Sprecher 0. Piper bekommt das als `--model … --speaker <n>`. Die Sprecher-Nummer
+wird nur bei Mehrsprecher-Modellen akzeptiert und gegen `num_speakers` aus der
+`.onnx.json` des Modells geprüft.
+
+In `tts.json`, per Hot-Reload ohne Neustart umstellbar (wie alle `*.json`-Werte, siehe
 `core/runtime_config.py`):
 
 ```json
 "voice": "de_DE-thorsten-medium",
-"voices": ["de_DE-thorsten-medium", "de_DE-thorsten-high", "de_DE-thorsten_emotional-medium",
-           "de_DE-kerstin-low", "de_DE-ramona-low", "de_DE-eva_k-x_low"]
+"voices": ["de_DE-thorsten-low", "de_DE-thorsten-medium", "de_DE-thorsten-high",
+           "de_DE-thorsten_emotional-medium", "de_DE-mls-medium",
+           "de_DE-kerstin-low", "de_DE-ramona-low", "de_DE-karlsson-low",
+           "de_DE-pavoque-low", "de_DE-eva_k-x_low"]
 ```
 
-- `voices` = was installiert wird (Dockerfile liest dieselbe Liste); `voice` muss daraus
-  stammen, sonst Warnung im Log und Fallback auf die erste Stimme.
-- Konkrete Liste wird bei der Umsetzung gegen das aktuelle `rhasspy/piper-voices`-Repo
-  geprüft (Namen/Verfügbarkeit oben sind der Stand meines Wissens).
+- `voices` = welche **Modelle** ins Image kommen (das Dockerfile liest dieselbe Liste).
+  Standard: alle zehn - zusammen grob einige hundert MB im Image; wer Platz sparen will,
+  streicht Modelle aus der Liste. Exakte Größen bei der Umsetzung prüfen.
+- `voice` = welche Stimme gerade spricht, z.B. `"de_DE-mls-medium#42"` oder
+  `"de_DE-thorsten_emotional-medium#3"`. Modell nicht in `voices` oder Sprecher-Nummer
+  außerhalb des Bereichs → Warnung im Log, Fallback auf `de_DE-thorsten-medium`.
 - Bewusst **nicht** durch Zuschauer wählbar - hält die Regel für sie einfach. Lässt sich
   später als `!tts <stimme>: <text>` nachrüsten, falls gewünscht.
+
+#### Stimmen probehören
+
+236 Sprecher*innen in `mls-medium` kann niemand aus einer Liste aussuchen. Dazu ein kleines
+Skript `platforms/twitch/features/tts/tools/voice_samples.py`: rendert einen festen
+Beispielsatz für jede Stimme/jeden Sprecher (oder einen Ausschnitt, z.B. `--model
+de_DE-mls-medium --speakers 0-49`) als WAV in einen Ordner, Dateiname = der fertige
+`voice`-Wert (`de_DE-mls-medium#42.wav`). Läuft lokal auf deinem Rechner (Piper per `pip
+install piper-tts`), nicht auf dem Server.
+
+#### Später, falls Piper zu robotisch klingt
+
+**Pocket TTS** (Kyutai): ~100M Parameter, läuft auf CPU schneller als Echtzeit, kann seit
+April 2026 Deutsch, klingt deutlich natürlicher und kann Stimmen aus einer WAV-Datei klonen.
+Code MIT, Gewichte CC BY 4.0 (Klon-Repo laut einer Quelle zugangsbeschränkt). Größerer
+Schritt (PyTorch im Image, mehr CPU-Last auf dem Server) - daher nicht im ersten Wurf, aber
+die Engine-Anbindung in `feature.py` hinter einer kleinen `synthesize(text, voice) -> wav`-
+Funktion kapseln, damit ein zweiter Engine-Typ später nur dort andockt.
+
+Verworfen: XTTS-v2 und Voxtral TTS (nicht-kommerzielle Lizenz - Twitch-Bits sind
+Einnahmen), Chatterbox Multilingual (braucht GPU), Kokoro (kein bestätigtes Deutsch).
 
 ## Nächster Schritt
 
