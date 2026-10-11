@@ -102,3 +102,18 @@ async def test_page_role_snapshot_may_be_async(server):
     server.add_role("companion", snapshot)
     async with websockets.connect(f"ws://127.0.0.1:{PORT}/?role=companion&token=overlay-token") as pond:
         assert json.loads(await pond.recv()) == {"type": "state", "data": []}
+
+
+async def test_role_with_own_token_and_message_handler(server):
+    async def handler(raw):
+        return {"type": "reply", "echo": json.loads(raw)["x"]}
+    server.add_role("settings", lambda: [("files", [])], token="settings-token", on_message=handler)
+    # The overlay token does not open it...
+    with pytest.raises(websockets.InvalidStatus):
+        async with websockets.connect(f"ws://127.0.0.1:{PORT}/?role=settings&token=overlay-token") as ws:
+            await ws.recv()
+    # ...its own does, and what the page sends gets an answer.
+    async with websockets.connect(f"ws://127.0.0.1:{PORT}/?role=settings&token=settings-token") as ws:
+        assert json.loads(await ws.recv())["type"] == "files"
+        await ws.send(json.dumps({"x": 42}))
+        assert json.loads(await ws.recv()) == {"type": "reply", "echo": 42}

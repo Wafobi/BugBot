@@ -280,3 +280,18 @@ def test_files_outside_the_repo_have_no_override_by_default(tmp_path):
     path = tmp_path / "x.json"
     path.write_text('{"a": 1}')
     assert LiveConfig(path).override_path is None
+
+
+def test_nested_override_set_reset_and_history(tmp_path):
+    import json as _json
+    path = tmp_path / "x.json"
+    path.write_text(_json.dumps({"texts": {"a": "A", "b": "B"}, "n": 1}))
+    config = LiveConfig(path, override=tmp_path / "settings" / "x.json")
+    config.set_override(["texts", "a"], "AA")
+    config.set_override(["n"], 2)
+    assert config.section("texts") == {"a": "AA", "b": "B"} and config.get("n") == 2
+    config.reset_override(["texts", "a"])
+    assert config.overrides == {"n": 2}  # the emptied "texts" dict is pruned
+    assert len(config.history()) == 2
+    config.restore(config.history()[0])  # back to before the reset
+    assert config.section("texts")["a"] == "AA"

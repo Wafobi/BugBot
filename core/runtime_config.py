@@ -19,12 +19,41 @@
 import json
 import logging
 import os
+import time
+import weakref
 from pathlib import Path
 from string import Formatter
 
 log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+# Every LiveConfig that exists - for the settings website (features/settings), which lists
+# and edits them without knowing which packages exist. Weak, so a config nobody holds any
+# more (tests) does not linger.
+_REGISTRY = weakref.WeakSet()
+
+# How many earlier versions of an override file are kept in settings/.history/ - see
+# LiveConfig._write_overrides.
+HISTORY_KEEP = 30
+
+
+_SERIAL = 0
+
+
+def all_configs():
+    """Every live configuration file of this checkout that has an override layer, sorted by
+    path - i.e. everything the settings website can edit. One per file: should a file have
+    been loaded more than once, the newest instance stands for it."""
+    newest = {}
+    for config in list(_REGISTRY):
+        if config.override_path is None:
+            continue
+        key = str(config.path.resolve())
+        if key not in newest or config._serial > newest[key]._serial:
+            newest[key] = config
+    return sorted(newest.values(), key=lambda c: str(c.path))
 
 
 def settings_dir():
@@ -56,6 +85,16 @@ def deep_merge(base, override):
         else:
             merged[key] = value
     return merged
+
+
+def _in_file_order(merged, file_data):
+    """`merged` with its keys in the order the file has them (defaults-only keys after) -
+    so a "_comment" stays next to what it explains when this is shown to a human."""
+    if not isinstance(merged, dict):
+        return merged
+    file_data = file_data if isinstance(file_data, dict) else {}
+    order = [k for k in file_data if k in merged] + [k for k in merged if k not in file_data]
+    return {k: _in_file_order(merged[k], file_data.get(k)) for k in order}
 
 
 def placeholders(template):
@@ -117,6 +156,10 @@ class LiveConfig:
         self._override_data = {}
         self._data = dict(self._defaults)
         self._complained = set()
+        global _SERIAL
+        _SERIAL += 1
+        self._serial = _SERIAL
+        _REGISTRY.add(self)
 
         #: Counts up on every successful reload. Anyone deriving something expensive from
         #: the configuration (the command table in the bus) uses it to notice that their
@@ -183,24 +226,92 @@ class LiveConfig:
         self.reload()
         return json.loads(json.dumps(self._override_data))
 
+    @property
+    def base(self):
+        """Code defaults plus the repository file - everything *under* the overrides, i.e.
+        what "back to default" returns to. A copy."""
+        self.reload()
+        return json.loads(json.dumps(_in_file_order(deep_merge(self._defaults, self._file_data), self._file_data)))
+
     def save_overrides(self, changes):
         """Sets top-level keys in the override file (a value of None removes the key -
-        back to the repository's value). Written to a temporary file and moved into place:
-        the settings directory is mounted as a directory, so replacing a file there is
-        seen by the container, unlike with the single-file mounts of the repo configs."""
-        if self._override_path is None:
-            raise OSError(f"{self._path.name} has no override file")
+        back to the repository's value)."""
         current = self.overrides
         for key, value in changes.items():
             if value is None:
                 current.pop(key, None)
             else:
                 current[key] = value
+        self._write_overrides(current)
+
+    def set_override(self, path, value):
+        """Sets one value at any depth - path is the list of keys, e.g. ["texts", "cheer"].
+        Dicts on the way are created; the rest of the override file stays as it is."""
+        if not path:
+            raise ValueError("empty path")
+        current = self.overrides
+        node = current
+        for key in path[:-1]:
+            if not isinstance(node.get(key), dict):
+                node[key] = {}
+            node = node[key]
+        node[path[-1]] = value
+        self._write_overrides(current)
+
+    def reset_override(self, path):
+        """Removes one value at any depth from the override file - back to the repository's
+        value - and prunes dicts left empty by that."""
+        current = self.overrides
+        trail = []
+        node = current
+        for key in path[:-1]:
+            if not isinstance(node.get(key), dict):
+                return
+            trail.append((node, key))
+            node = node[key]
+        if path and path[-1] in node:
+            del node[path[-1]]
+            for parent, key in reversed(trail):
+                if parent[key]:
+                    break
+                del parent[key]
+            self._write_overrides(current)
+
+    def _write_overrides(self, data):
+        """Written to a temporary file and moved into place: the settings directory is
+        mounted as a directory, so replacing a file there is seen by the container, unlike
+        with the single-file mounts of the repo configs. The previous version goes to
+        settings/.history/<name>/ first (the last HISTORY_KEEP are kept) - see history()."""
+        if self._override_path is None:
+            raise OSError(f"{self._path.name} has no override file")
         self._override_path.parent.mkdir(parents=True, exist_ok=True)
+        if self._override_path.exists():
+            history = self._history_dir()
+            history.mkdir(parents=True, exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime()) + f"-{time.time_ns() % 1_000_000:06d}"
+            (history / f"{stamp}.json").write_bytes(self._override_path.read_bytes())
+            for old in sorted(history.glob("*.json"))[:-HISTORY_KEEP]:
+                old.unlink()
         tmp = self._override_path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         os.replace(tmp, self._override_path)
         self.reload()
+
+    def _history_dir(self):
+        return self._override_path.parent / ".history" / self._override_path.stem
+
+    def history(self):
+        """Earlier versions of the override file, newest first: [version id, ...]."""
+        if self._override_path is None or not self._history_dir().is_dir():
+            return []
+        return sorted((p.stem for p in self._history_dir().glob("*.json")), reverse=True)
+
+    def restore(self, version):
+        """Puts an earlier version back (itself becoming history, so this can be undone too)."""
+        if not version or "/" in version or ".." in version:
+            raise ValueError("invalid version")
+        data = json.loads((self._history_dir() / f"{version}.json").read_text(encoding="utf-8"))
+        self._write_overrides(data)
 
     @property
     def data(self):

@@ -1,5 +1,12 @@
 # Settings-Website: Plan (Stand 2026-10-11)
 
+> **Umgesetzt (2026-10-11)** – maßgeblich ist [docs/settings.md](docs/settings.md). Abweichung vom
+> Plan: kein eigener Port 8080 – die Seite läuft auf dem Overlay-Listener
+> (`http://127.0.0.1:4457/settings?token=<SETTINGS_TOKEN>`), damit es bei zwei Ports bleibt;
+> Speichern über einen WebSocket auf demselben Port. Entschieden: Token in der URL (einmal, dann
+> nur im Tab), nur Einstellungen (keine DB, keine Aktionen), nur ein Zugang. Die TTS-Seite ist
+> verlinkt, aber (noch) eigenständig.
+
 Eine Einstellungs-Website für bugbot, gehostet im Container, erreichbar über den SSH-Tunnel
 unter **http://localhost:8080**. Darin soll man alles einstellen können, was heute in den
 JSON-Dateien steht – ohne SSH, ohne Editor, ohne Neustart.

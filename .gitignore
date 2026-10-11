@@ -15,4 +15,4 @@ venv/
 platforms/twitch/features/tts/voices/
 
 # Runtime overrides of the JSON configs (core/runtime_config.py) - per installation, not in git
-settings/
+/settings/

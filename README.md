@@ -61,6 +61,7 @@ The [`docs/`](docs/) folder is the long version.
 | [Overlay](docs/overlay.md) | the browser sources in the picture — stat bars and the chat mirrored alongside them: what the bot pushes, and how to wire one up |
 | [Companion](docs/companion.md) | one small pet per chatter, seeded from their name; `!companion`/`!vtubbi` |
 | [TTS](docs/tts.md) | cheers with a message and `!tts` read out loud via Piper, released one at a time from the Stream Deck |
+| [Settings website](docs/settings.md) | every JSON setting editable in the browser, saved as overrides — `127.0.0.1:4457/settings` |
 | [Twitch](docs/twitch.md) · [Discord](docs/discord.md) · [OBS](docs/obs.md) | per-platform specifics |
 | [Deployment](docs/deployment.md) | Podman, systemd, logs, and what to run after changing what |
 
@@ -125,7 +126,7 @@ when their mtime changes — editing and saving is enough.
 | `features/companion/companion.json` | companion prices and timings, texts |
 | `platforms/twitch/features/tts/tts.json` | TTS rules, voice pool, speech settings, replacements, English words, texts |
 
-Five things are worth knowing:
+Six things are worth knowing:
 
 - **Names are not cosmetics.** Discord roles and channels are found *by these strings*. Get
   `roles.moderator` wrong and nobody on that server is a moderator — mod commands then do
@@ -136,7 +137,9 @@ Five things are worth knowing:
   `"!uptime": "!live"`, `"!bug": ["!bug", "!fehler"]`, `"!giveaway": false`.
 - **You cannot lock yourself out.** Delete a key, break the JSON, remove the file entirely — the
   last good state or the shipped default still applies.
-- **Overrides.** What is changed at runtime (today: the TTS admin page) goes into
+- **Or in the browser.** The [settings website](docs/settings.md) edits every one of these files
+  through the tunnel — `http://127.0.0.1:4457/settings?token=<SETTINGS_TOKEN>`.
+- **Overrides.** What is changed at runtime (the settings website, the TTS admin page) goes into
   `settings/<name>.json`, which lies on top of the repo's file — so the files in git are never
   written and `git pull` never conflicts. → [Overrides](docs/configuration.md#overrides)
 

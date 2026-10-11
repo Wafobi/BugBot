@@ -24,7 +24,9 @@ OverlayFeature's OVERLAY capability):
     hundreds of KB) do not go to every stat bar and chat on screen;
   - add_role() makes a role a page of its own (the companion pond): on connect it gets that
     role's snapshot instead of the overlay's state/history, and the overlay's own broadcasts
-    (role=None) skip it - it only ever sees its own frames;
+    (role=None) skip it - it only ever sees its own frames. A role may bring its own token
+    (then OVERLAY_TOKEN does *not* open it) and a message handler - the one way anything
+    comes back from a browser source (the settings website saving a value);
   - add_route() answers a plain HTTP GET on its own path (/tts/next) in the handshake hook,
     without upgrading to a WebSocket - for a Stream Deck button, or a small page of its own
     (HTML, audio). Every route brings its own token: OVERLAY_TOKEN sits in the scene
@@ -118,6 +120,9 @@ class OverlayServer:
         # role -> callable returning the [(type, data), ...] frames for a fresh connection
         # with that role, see add_role.
         self._role_snapshots = {}
+        # role -> its own token, role -> async handler for what the page sends; see add_role.
+        self._role_tokens = {}
+        self._role_handlers = {}
 
     @property
     def client_count(self):
@@ -126,11 +131,17 @@ class OverlayServer:
     def clients_with_role(self, role):
         return sum(1 for connection in self._clients if self._roles.get(connection) == role)
 
-    def add_role(self, role, snapshot):
+    def add_role(self, role, snapshot, token=None, on_message=None):
         """A role that is a page of its own - see the module docstring. `snapshot` is a
         callable (sync or async) returning the frames a new connection with this role gets,
-        as [(type, data), ...]."""
+        as [(type, data), ...]. With `token`, only that token opens this role - not
+        OVERLAY_TOKEN. With `on_message`, every text frame the page sends is handed to it
+        (async, gets the raw text, returns a dict to send back or None)."""
         self._role_snapshots[role] = snapshot
+        if token is not None:
+            self._role_tokens[role] = token
+        if on_message is not None:
+            self._role_handlers[role] = on_message
 
     def add_route(self, path, handler, token):
         """Answers GET <path> with `await handler(query)` - query being the parsed query
@@ -172,6 +183,12 @@ class OverlayServer:
                 self._on_error(f"overlay route {path}: {error}")
                 status, body, content_type = http.HTTPStatus.INTERNAL_SERVER_ERROR, "error", "text/plain; charset=utf-8"
             return self._response(connection, status, body, content_type)
+        role = (parse_qs(urlsplit(request.path).query).get(ROLE_QUERY) or [""])[0]
+        if role in self._role_tokens:
+            if not _token_matches(_token_from(request), self._role_tokens[role]):
+                log.warning(f"Overlay role {role} from {connection.remote_address} rejected: wrong/missing token.")
+                return connection.respond(http.HTTPStatus.UNAUTHORIZED, "invalid token\n")
+            return None
         return self._check_token(connection, request)
 
     @staticmethod
@@ -227,10 +244,16 @@ class OverlayServer:
             else:
                 await connection.send(json.dumps({"type": "state", "data": await self._snapshot()}))
                 await connection.send(json.dumps({"type": "history", "data": self._history()}))
-            # We expect nothing from the far side. Reading runs anyway, because it is the
-            # route by which a dropped connection arrives here.
-            async for _ in connection:
-                pass
+            # Overlays send nothing; reading runs anyway, because it is the route by which a
+            # dropped connection arrives here. A role with a handler (add_role) gets its
+            # page's frames, and the handler's answer goes back to that page only.
+            handler = self._role_handlers.get(self._roles[connection])
+            async for raw in connection:
+                if handler is None or not isinstance(raw, str):
+                    continue
+                reply = await handler(raw)
+                if reply is not None:
+                    await connection.send(json.dumps(reply))
         except websockets.ConnectionClosed:
             pass
         except Exception as error:  # a broken connection must not take the bot with it

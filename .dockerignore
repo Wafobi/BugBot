@@ -8,4 +8,4 @@ __pycache__
 features/sql_db/bugbot.db
 # Local Piper models - the image downloads its own (see Dockerfile)
 platforms/twitch/features/tts/voices/
-settings/
+/settings/

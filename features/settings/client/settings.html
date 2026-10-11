@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<!--
+  The settings website - served by the bot (features/settings/feature.py) on the overlay
+  listener: http://127.0.0.1:4457/settings?token=<SETTINGS_TOKEN> through the SSH tunnel.
+
+  Builds its forms from the JSON files themselves: a switch for true/false, a number field, a
+  text field or box, one line per entry for lists, a section per object - and the "_comment"
+  keys as help next to what they explain. So a new setting shows up here without anyone
+  touching this page. Saves go into the override layer (settings/<name>.json), never into the
+  repository's files; "↺" removes an override again, "Rückgängig" puts the previous version
+  of the whole file back.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>BugBot – Einstellungen</title>
+<style>
+  :root {
+    --ink: #0f0d18; --ink-2: #15121f; --ink-deep: #08070e; --line: #2a2140; --line-2: #3a2f55;
+    --cyan: #5FEAF5; --magenta: #F22A80; --dim: #8a7ba0; --text: #e7e2f2; --green: #7cffb2; --red: #ff5f6d;
+    --font: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--ink-deep); color: var(--text); font-family: var(--font); font-size: 13px; display: flex; }
+  a { color: var(--cyan); }
+
+  nav { width: 270px; flex-shrink: 0; height: 100%; overflow-y: auto; background: var(--ink); border-right: 1px solid var(--line); padding: 16px 12px; }
+  nav h1 { font-size: 17px; color: var(--cyan); margin: 0 0 2px; }
+  nav .sub { color: var(--dim); font-size: 11px; margin-bottom: 14px; }
+  nav h2 { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .12em; margin: 16px 6px 6px; }
+  nav button {
+    display: flex; justify-content: space-between; align-items: center; gap: 6px; width: 100%;
+    text-align: left; font: inherit; color: var(--text); background: none; border: 1px solid transparent;
+    border-radius: 4px; padding: 6px 8px; cursor: pointer;
+  }
+  nav button:hover { background: var(--ink-2); }
+  nav button.active { border-color: var(--line-2); background: var(--ink-2); color: var(--cyan); }
+  nav button .owner { color: var(--dim); font-size: 11px; }
+  nav button .dot { color: var(--magenta); }
+  nav .links { margin-top: 20px; padding: 0 6px; font-size: 12px; line-height: 1.8; }
+
+  main { flex: 1; height: 100%; overflow-y: auto; padding: 18px 26px 80px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; position: sticky; top: -18px; background: var(--ink-deep); padding: 18px 0 12px; z-index: 2; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+  header h2 { margin: 0; font-size: 18px; color: var(--cyan); }
+  header .path { color: var(--dim); font-size: 12px; flex: 1; }
+  input[type=search] { font: inherit; color: var(--text); background: var(--ink); border: 1px solid var(--line-2); border-radius: 4px; padding: 6px 10px; width: 240px; }
+  header button, .add button { font: inherit; font-size: 12px; color: var(--text); background: var(--ink-2); border: 1px solid var(--line-2); border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+  header button:disabled { opacity: .4; cursor: default; }
+
+  details { border: 1px solid var(--line); border-radius: 6px; margin: 8px 0; background: var(--ink); }
+  details > summary { cursor: pointer; padding: 8px 12px; color: var(--cyan); font-weight: 600; list-style: none; display: flex; gap: 8px; align-items: center; }
+  details > summary::before { content: "▸"; color: var(--dim); }
+  details[open] > summary::before { content: "▾"; }
+  details > .body { padding: 2px 12px 10px; }
+  details details { background: var(--ink-2); }
+  .hint { color: var(--dim); font-size: 12px; margin: 4px 0 8px; line-height: 1.45; white-space: pre-wrap; }
+
+  .row { display: grid; grid-template-columns: minmax(150px, 230px) 1fr auto; gap: 10px; align-items: start; padding: 7px 0; border-top: 1px solid rgba(255,255,255,.04); }
+  .row:first-child { border-top: none; }
+  .row .key { padding-top: 6px; overflow-wrap: anywhere; }
+  .row .key .tags { display: block; margin-top: 3px; }
+  .tag { display: inline-block; font-size: 10px; border-radius: 3px; padding: 1px 5px; margin-right: 4px; }
+  .tag.changed { background: rgba(242, 42, 128, .18); color: var(--magenta); }
+  .tag.new { background: rgba(95, 234, 245, .14); color: var(--cyan); }
+  .tag.ph { background: rgba(255,255,255,.06); color: var(--dim); }
+  .row input[type=text], .row input[type=number], .row textarea {
+    font: inherit; color: var(--text); background: var(--ink-deep); border: 1px solid var(--line-2); border-radius: 4px; padding: 6px 8px; width: 100%;
+  }
+  .row textarea { min-height: 34px; resize: vertical; line-height: 1.45; }
+  .row input[type=checkbox] { width: 18px; height: 18px; margin-top: 6px; accent-color: var(--magenta); }
+  .row.changed input, .row.changed textarea { border-color: rgba(242, 42, 128, .55); }
+  .row .side { display: flex; gap: 4px; align-items: center; padding-top: 4px; min-width: 60px; }
+  .row .side button { font: inherit; background: none; border: none; color: var(--dim); cursor: pointer; font-size: 15px; }
+  .row .side button:hover { color: var(--magenta); }
+  .row .msg { grid-column: 2 / 4; font-size: 12px; margin-top: -2px; }
+  .row .msg.err { color: var(--red); } .row .msg.ok { color: var(--green); }
+  .row.readonly input, .row.readonly textarea { opacity: .6; }
+  .add { display: flex; gap: 6px; margin-top: 8px; }
+  .add input { font: inherit; color: var(--text); background: var(--ink-deep); border: 1px solid var(--line-2); border-radius: 4px; padding: 5px 8px; }
+  .add input:first-child { width: 180px; } .add input:nth-child(2) { flex: 1; }
+  .hidden { display: none !important; }
+  #toast { position: fixed; right: 20px; bottom: 20px; background: var(--ink-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 10px 14px; font-size: 13px; opacity: 0; transition: opacity .2s; }
+  #toast.show { opacity: 1; } #toast.err { border-color: var(--red); color: var(--red); } #toast.ok { border-color: var(--green); color: var(--green); }
+  .empty { color: var(--dim); padding: 40px 0; text-align: center; }
+</style>
+</head>
+<body>
+<nav>
+  <h1>⚙ BugBot</h1>
+  <div class="sub">Einstellungen · <span id="conn">verbinde …</span></div>
+  <div id="files"></div>
+  <div class="links">
+    <div>🔊 <a href="#" id="ttsLink">TTS: Stimmen &amp; Pool</a></div>
+  </div>
+</nav>
+<main>
+  <header>
+    <h2 id="title">–</h2>
+    <span class="path" id="path"></span>
+    <input type="search" id="search" placeholder="suchen … (Strg+K)">
+    <button id="undo" title="Die vorherige Version dieser Datei wiederherstellen">↶ Rückgängig</button>
+  </header>
+  <div id="content"><div class="empty">Datei links auswählen.</div></div>
+</main>
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  // The token comes in the URL once, then lives in this tab only - and leaves the address bar.
+  var params = new URLSearchParams(location.search);
+  var token = params.get("token") || sessionStorage.getItem("bugbot-settings-token") || "";
+  if (params.get("token")) {
+    sessionStorage.setItem("bugbot-settings-token", token);
+    params.delete("token");
+    history.replaceState(null, "", location.pathname + (params.toString() ? "?" + params : "") + location.hash);
+  }
+  var $ = function (id) { return document.getElementById(id); };
+  $("ttsLink").href = "/tts/admin";
+  $("ttsLink").title = "braucht den TTS_TOKEN: /tts/admin?token=…";
+
+  var socket, nextId = 1, pending = {}, files = [], current = null, state = null;
+
+  function toast(text, cls) {
+    var t = $("toast");
+    t.textContent = text; t.className = "show " + (cls || "");
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { t.className = ""; }, 2600);
+  }
+
+  // --- Connection -------------------------------------------------------------------------
+  function connect() {
+    socket = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host +
+      "/?role=settings&token=" + encodeURIComponent(token));
+    socket.onopen = function () { $("conn").textContent = "verbunden"; $("conn").style.color = "var(--green)"; };
+    socket.onclose = function () {
+      $("conn").textContent = "getrennt – verbinde neu …"; $("conn").style.color = "var(--red)";
+      setTimeout(connect, 3000);
+    };
+    socket.onmessage = function (message) {
+      var frame = JSON.parse(message.data);
+      if (frame.type === "files") { files = frame.data; renderFiles(); if (!current && files.length) open(location.hash.slice(1) || files[0].id); }
+      else if (frame.type === "reply" && pending[frame.id]) {
+        var p = pending[frame.id]; delete pending[frame.id];
+        frame.ok ? p.resolve(frame.data) : p.reject(new Error(frame.error));
+      }
+    };
+  }
+  function call(op, args) {
+    return new Promise(function (resolve, reject) {
+      var id = nextId++;
+      pending[id] = { resolve: resolve, reject: reject };
+      socket.send(JSON.stringify(Object.assign({ id: id, op: op }, args || {})));
+    });
+  }
+
+  // --- File list -------------------------------------------------------------------------
+  function renderFiles() {
+    var box = $("files");
+    box.innerHTML = "";
+    ["Plattformen", "Features"].forEach(function (group) {
+      var h = document.createElement("h2"); h.textContent = group; box.appendChild(h);
+      files.filter(function (f) { return f.group === group; }).forEach(function (f) {
+        var b = document.createElement("button");
+        b.dataset.id = f.id;
+        b.className = current === f.id ? "active" : "";
+        b.innerHTML = "<span></span>";
+        b.firstChild.textContent = f.name + (f.read_only ? " 🔒" : "");
+        if (f.owner && group === "Features") {
+          var o = document.createElement("span"); o.className = "owner"; o.textContent = f.owner; b.firstChild.appendChild(document.createTextNode(" ")); b.firstChild.appendChild(o);
+        }
+        if (f.overridden) { var d = document.createElement("span"); d.className = "dot"; d.textContent = "●"; d.title = "hat eigene Änderungen"; b.appendChild(d); }
+        b.addEventListener("click", function () { open(f.id); });
+        box.appendChild(b);
+      });
+    });
+  }
+
+  function open(id) {
+    if (!files.some(function (f) { return f.id === id; })) id = files[0].id;
+    current = id;
+    location.hash = id;
+    renderFiles();
+    return call("get", { file: id }).then(show).catch(function (e) { toast(e.message, "err"); });
+  }
+
+  function show(data) {
+    state = data;
+    var f = files.find(function (x) { return x.id === data.file; });
+    if (f) { f.overridden = Object.keys(data.overrides).length > 0; renderFiles(); }
+    $("title").textContent = data.file.split("/").pop();
+    $("path").textContent = data.file + (data.read_only ? "  · nur lesbar" : "") +
+      (Object.keys(data.overrides).length ? "  · eigene Änderungen in settings/" + data.file.split("/").pop() : "");
+    $("undo").disabled = !data.history.length;
+    var content = $("content");
+    var scroll = document.querySelector("main").scrollTop;
+    var openPaths = Array.from(content.querySelectorAll("details[open]")).map(function (d) { return d.dataset.path; });
+    content.innerHTML = "";
+    renderDict(data.base, data.overrides, [], content, openPaths, true);
+    applySearch();
+    document.querySelector("main").scrollTop = scroll;
+  }
+
+  // --- Building the form from the JSON -------------------------------------------------------
+  function at(obj, path) {
+    var node = obj;
+    for (var i = 0; i < path.length; i++) {
+      if (node === null || typeof node !== "object" || Array.isArray(node) || !(path[i] in node)) return undefined;
+      node = node[path[i]];
+    }
+    return node;
+  }
+  function kind(v) {
+    if (v === null || v === undefined) return "null";
+    if (Array.isArray(v)) return "list";
+    return typeof v === "object" ? "dict" : typeof v;
+  }
+  function hasOverrideUnder(path) {
+    var v = at(state.overrides, path);
+    return v !== undefined && !(kind(v) === "dict" && Object.keys(v).length === 0);
+  }
+  function placeholders(text) {
+    var found = [], re = /\{([^{}]+)\}/g, m;
+    while ((m = re.exec(text || ""))) if (found.indexOf(m[1]) === -1) found.push(m[1]);
+    return found;
+  }
+
+  function renderDict(base, overrides, path, container, openPaths, top) {
+    var keys = Object.keys(base || {});
+    var extra = Object.keys(at(overrides, path) && kind(at(overrides, path)) === "dict" ? at(overrides, path) : {})
+      .filter(function (k) { return keys.indexOf(k) === -1; });
+    keys.concat(extra).forEach(function (key) {
+      var childPath = path.concat(key);
+      var shipped = base ? base[key] : undefined;
+      if (key.charAt(0) === "_") {
+        if (typeof shipped === "string") {
+          var hint = document.createElement("div"); hint.className = "hint"; hint.textContent = shipped;
+          hint.dataset.search = shipped.toLowerCase();
+          container.appendChild(hint);
+        }
+        return;
+      }
+      if (kind(shipped) === "dict") {
+        var d = document.createElement("details");
+        d.dataset.path = childPath.join(".");
+        d.open = top ? Object.keys(shipped).length <= 12 || openPaths.indexOf(d.dataset.path) !== -1 : openPaths.indexOf(d.dataset.path) !== -1;
+        var s = document.createElement("summary");
+        s.textContent = key;
+        if (hasOverrideUnder(childPath)) { var t = document.createElement("span"); t.className = "tag changed"; t.textContent = "geändert"; s.appendChild(t); }
+        d.appendChild(s);
+        var body = document.createElement("div"); body.className = "body";
+        renderDict(shipped, overrides, childPath, body, openPaths, false);
+        maybeAdd(shipped, childPath, body);
+        d.appendChild(body);
+        container.appendChild(d);
+      } else {
+        container.appendChild(renderRow(key, shipped, childPath, extra.indexOf(key) !== -1));
+      }
+    });
+  }
+
+  // "+ Eintrag" only where the bot accepts new keys: a plain name -> text table.
+  function maybeAdd(shipped, path, body) {
+    if (state.read_only || path[path.length - 1] === "texts") return;
+    var values = Object.keys(shipped).filter(function (k) { return k.charAt(0) !== "_"; }).map(function (k) { return shipped[k]; });
+    if (!values.length || !values.every(function (v) { return typeof v === "string"; })) return;
+    var add = document.createElement("div"); add.className = "add";
+    add.innerHTML = '<input placeholder="neuer Name, z.B. !hallo"><input placeholder="Text"><button>＋ hinzufügen</button>';
+    add.querySelector("button").addEventListener("click", function () {
+      var k = add.children[0].value.trim(), v = add.children[1].value;
+      if (!k) return;
+      save(path.concat(k), v);
+    });
+    body.appendChild(add);
+  }
+
+  function renderRow(key, shipped, path, isNew) {
+    var override = at(state.overrides, path);
+    var changed = override !== undefined;
+    var value = changed ? override : shipped;
+    var row = document.createElement("div");
+    row.className = "row" + (changed ? " changed" : "") + (state.read_only ? " readonly" : "");
+    row.dataset.search = (path.join(".") + " " + JSON.stringify(value)).toLowerCase();
+
+    var label = document.createElement("div"); label.className = "key"; label.textContent = key;
+    var tags = document.createElement("span"); tags.className = "tags";
+    if (changed) tags.innerHTML += '<span class="tag ' + (isNew ? "new" : "changed") + '">' + (isNew ? "neu" : "geändert") + "</span>";
+    if (typeof shipped === "string") placeholders(shipped).forEach(function (p) {
+      var t = document.createElement("span"); t.className = "tag ph"; t.textContent = "{" + p + "}"; tags.appendChild(t);
+    });
+    label.appendChild(tags);
+    row.appendChild(label);
+
+    var input, read;
+    var type = kind(shipped === undefined ? value : shipped);
+    if (type === "boolean") {
+      input = document.createElement("input"); input.type = "checkbox"; input.checked = !!value;
+      read = function () { return input.checked; };
+      input.addEventListener("change", function () { commit(); });
+    } else if (type === "number") {
+      input = document.createElement("input"); input.type = "number"; input.step = "any"; input.value = value;
+      read = function () { var n = parseFloat(input.value); if (isNaN(n)) throw new Error("keine Zahl"); return n; };
+    } else if (type === "list" && (value || []).every(function (v) { return typeof v === "string" || typeof v === "number"; })) {
+      var numeric = (shipped || value || []).length && (shipped || value).every(function (v) { return typeof v === "number"; });
+      input = document.createElement("textarea"); input.value = (value || []).join("\n");
+      input.rows = Math.min(12, Math.max(2, (value || []).length + 1));
+      input.title = "ein Eintrag pro Zeile";
+      read = function () {
+        return input.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean)
+          .map(function (s) { return numeric ? parseFloat(s) : s; });
+      };
+    } else if (type === "string" || type === "null" && typeof value === "string") {
+      var long = String(value).length > 60 || String(value).indexOf("\n") !== -1 || path.indexOf("texts") !== -1;
+      input = document.createElement(long ? "textarea" : "input");
+      if (!long) input.type = "text";
+      input.value = value === null ? "" : value;
+      if (long) input.rows = Math.min(8, Math.max(1, Math.ceil(String(value).length / 90)));
+      read = function () { return input.value; };
+    } else if (type === "null") {
+      // Shipped empty ("null" = use the default) - any value may go in; empty means default.
+      input = document.createElement("input"); input.type = "text";
+      input.value = value === null || value === undefined ? "" : (typeof value === "string" ? value : JSON.stringify(value));
+      input.placeholder = "leer = Standard";
+      read = function () {
+        var raw = input.value.trim();
+        if (raw === "") return null;
+        try { return JSON.parse(raw); } catch (e) { return raw; }
+      };
+    } else {
+      input = document.createElement("textarea"); input.value = JSON.stringify(value, null, 2);
+      input.rows = Math.min(14, input.value.split("\n").length);
+      input.title = "JSON";
+      read = function () { return JSON.parse(input.value); };
+    }
+    if (state.read_only) input.disabled = true;
+    row.appendChild(input);
+
+    var side = document.createElement("div"); side.className = "side";
+    if (changed && !state.read_only) {
+      var reset = document.createElement("button"); reset.textContent = "↺";
+      reset.title = isNew ? "Eintrag entfernen" : "Auf Standard zurücksetzen: " + JSON.stringify(shipped);
+      reset.addEventListener("click", function () { resetPath(path); });
+      side.appendChild(reset);
+    }
+    row.appendChild(side);
+    var msg = document.createElement("div"); msg.className = "msg"; row.appendChild(msg);
+
+    function commit() {
+      var next;
+      try { next = read(); } catch (e) { msg.textContent = e.message; msg.className = "msg err"; return; }
+      if (JSON.stringify(next) === JSON.stringify(value)) return;
+      if (next === null && type === "null") { if (changed) resetPath(path); return; }
+      save(path, next, msg);
+    }
+    if (type !== "boolean") {
+      input.addEventListener("blur", commit);
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && (input.tagName === "INPUT" || e.ctrlKey || e.metaKey)) { e.preventDefault(); input.blur(); }
+        if (e.key === "Escape") { input.value = type === "list" ? (value || []).join("\n") : (typeof value === "object" ? JSON.stringify(value, null, 2) : value); input.blur(); }
+      });
+    }
+    return row;
+  }
+
+  function save(path, value, msg) {
+    return call("set", { file: current, path: path, value: value }).then(function (data) {
+      show(data); toast("Gespeichert: " + path.join("."), "ok");
+    }).catch(function (e) {
+      if (msg) { msg.textContent = e.message; msg.className = "msg err"; }
+      toast(e.message, "err");
+    });
+  }
+  function resetPath(path) {
+    return call("reset", { file: current, path: path }).then(function (data) {
+      show(data); toast("Zurückgesetzt: " + path.join("."), "ok");
+    }).catch(function (e) { toast(e.message, "err"); });
+  }
+
+  // --- Search -------------------------------------------------------------------------------
+  function applySearch() {
+    var q = $("search").value.trim().toLowerCase();
+    var content = $("content");
+    content.querySelectorAll(".row, .hint").forEach(function (el) {
+      el.classList.toggle("hidden", !!q && el.dataset.search.indexOf(q) === -1);
+    });
+    content.querySelectorAll("details").forEach(function (d) {
+      var any = !q || d.querySelector(".row:not(.hidden)");
+      d.classList.toggle("hidden", !any);
+      if (q && any) d.open = true;
+    });
+  }
+  $("search").addEventListener("input", applySearch);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "k" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("search").focus(); }
+  });
+  $("undo").addEventListener("click", function () {
+    if (!state || !state.history.length) return;
+    call("restore", { file: current, version: state.history[0] }).then(function (data) {
+      show(data); toast("Vorherige Version wiederhergestellt", "ok");
+    }).catch(function (e) { toast(e.message, "err"); });
+  });
+
+  if (!token) { $("content").innerHTML = '<div class="empty">Kein ?token= in der URL (SETTINGS_TOKEN).</div>'; return; }
+  connect();
+})();
+</script>
+</body>
+</html>

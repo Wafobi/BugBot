@@ -179,14 +179,15 @@ class OverlayFeature(feature_api.Feature):
         """How many browser sources with this role are connected right now."""
         return self._server.clients_with_role(role) if self._server is not None else 0
 
-    def add_role(self, role, snapshot):
+    def add_role(self, role, snapshot, token=None, on_message=None):
         """Makes ?role=<role> a page of its own on this listener: `snapshot` (sync or async,
         returning [(type, data), ...]) is what a new connection gets instead of the overlay's
-        state and chat history, and the overlay's own frames skip it. Returns False when
-        there is no listener."""
+        state and chat history, and the overlay's own frames skip it. `token` replaces
+        OVERLAY_TOKEN for this role; `on_message` receives what the page sends (see
+        server.py). Returns False when there is no listener."""
         if self._server is None:
             return False
-        self._server.add_role(role, snapshot)
+        self._server.add_role(role, snapshot, token=token, on_message=on_message)
         return True
 
     def add_route(self, path, handler, token):
