@@ -798,7 +798,6 @@
     ["OK",    "ok",    "Stream-Key validiert"],
     ["INFO",  "info",  "Wecke Zuschauer aus dem Standby …"],
     ["DEBUG", "debug", "git pull origin good-vibes"],
-    ["OK",    "ok",    "Alles bereit. Los geht's."],
     ["INFO",  "info",  "Lade Overlay-Assets …"],
     ["OK",    "ok",    "1440p @ 60fps bereit"],
     ["DEBUG", "debug", "Cache geleert: 12.4 GB Meme-Reserve"],
@@ -812,8 +811,36 @@
     ["WARN",  "warn",  "RAM-Auslastung: 14 Chrome-Tabs offen"],
     ["INFO",  "info",  "Prüfe Discord-Verbindung …"],
     ["OK",    "ok",    "Szenen-Kollektion geladen: 'Gaming'"],
-    ["INFO",  "info",  "Stimme das Mikro auf Optimismus …"]
+    ["INFO",  "info",  "Stimme das Mikro auf Optimismus …"],
+    ["DEBUG", "debug", "rm -rf /tmp/schlechte-laune"],
+    ["INFO",  "info",  "Kompiliere Shader … (1 von 48213)"],
+    ["OK",    "ok",    "Flux-Kompensator: 1,21 Gigawatt"],
+    ["WARN",  "warn",  "Zu viele Klammern in Lisp-Modul — ignoriere"],
+    ["INFO",  "info",  "Defragmentiere Gedankenpalast …"],
+    ["DEBUG", "debug", "ping chat -c 4 — 4 packets, 0% loss, 100% hype"],
+    ["OK",    "ok",    "Gummiente für Rubber-Duck-Debugging bereit"],
+    ["INFO",  "info",  "Löse Abhängigkeiten auf (node_modules: 3,7 TB) …"],
+    ["ERROR", "error", "Segmentation fault (core dumped) — war nur ein Witz"],
+    ["OK",    "ok",    "Semikolons gezählt: alle da"],
+    ["INFO",  "info",  "Verhandle mit dem Garbage Collector …"],
+    ["WARN",  "warn",  "It works on my machine™ — Prüfung übersprungen"],
+    ["DEBUG", "debug", "while(!live) { kaffee++; }"],
+    ["INFO",  "info",  "Übersetze Bugs in Features …"],
+    ["OK",    "ok",    "42 als Antwort bestätigt"],
+    ["INFO",  "info",  "Wärme Tensorkerne auf Betriebstemperatur …"],
+    ["WARN",  "warn",  "Tabs vs. Spaces: Konflikt erkannt — Waffenstillstand"],
+    ["DEBUG", "debug", "chmod +x hype.sh"],
+    ["OK",    "ok",    "Vim verlassen (nach nur 3 Versuchen)"],
+    ["INFO",  "info",  "Lade Pixel nach … nur noch ein paar Millionen"],
+    ["ERROR", "error", "404: Pause nicht gefunden"],
+    ["OK",    "ok",    "RGB-Beleuchtung: +15 FPS"],
+    ["INFO",  "info",  "Synchronisiere Uhren mit Atomzeit …"],
+    ["DEBUG", "debug", "SELECT * FROM zuschauer WHERE vibes = 'gut';"]
   ];
+
+  // Shown once, when the progress bar below reaches 100% - kept out of the random pool so
+  // it can't turn up mid-boot.
+  var FINAL_LINE = ["OK", "ok", "Alles bereit. Los geht's."];
 
   var log = document.getElementById("log");
   var maxLines = 7;
@@ -903,8 +930,8 @@
     drainChatQueue(); // chat gets first refusal on the newly free slot, same priority as the eviction order above
   }
 
-  function addLine() {
-    var entry = nextEntry();
+  function addLine(entry) {
+    entry = entry || nextEntry();
 
     if (window.__bootSound) {
       if (entry[2] === "Alles bereit. Los geht's.") {
@@ -964,7 +991,9 @@
   };
 
   var loopTimer = null;
+  var finished = false;
   function loop() {
+    if (finished) return;
     if (typingLock || chatQueue.length) {
       // Something is already typing, or chat is waiting for its turn (which wins ties) -
       // don't start a simulated line on top of it, just check back shortly.
@@ -988,20 +1017,40 @@
 
   var barFill = document.getElementById("barFill");
   var pct = document.getElementById("pct");
-  var current = 4;
-  function stepBar() {
-    // Slower, and less of a straight climb to a near-perfect number - a weak signal
-    // struggling to lock on reads better than cruising smoothly to 94-99%.
-    var target = 88 + Math.random() * 8;
-    if (Math.random() < 0.22) target = 45 + Math.random() * 25;
-    current += (target - current) * 0.1;
-    var shown = Math.round(current);
+  // The boot runs for BOOT_DURATION_MS from the gate firing and the bar hits exactly 100%
+  // at its end. In between it follows elapsed time, with the occasional small dip below
+  // that (a weak signal struggling to lock on) - never ahead of it.
+  var BOOT_DURATION_MS = 5 * 60 * 1000;
+  var BAR_START = 4;
+  var bootStart = 0;
+  function showPct(value) {
+    var shown = Math.round(value);
     barFill.style.width = shown + "%";
     pct.textContent = shown + "%";
+  }
+  function stepBar() {
+    var progress = Math.min(1, (Date.now() - bootStart) / BOOT_DURATION_MS);
+    if (progress >= 1) { finish(); return; }
+    var value = BAR_START + (100 - BAR_START) * progress;
+    if (Math.random() < 0.22) value -= 2 + Math.random() * 6;
+    showPct(Math.max(BAR_START, Math.min(99, value)));
     setTimeout(stepBar, 1100 + Math.random() * 900);
   }
 
+  // Stops the random log lines, waits for whatever is still typing, then shows FINAL_LINE.
+  function finish() {
+    finished = true;
+    clearTimeout(loopTimer);
+    showPct(100);
+    (function waitForFree() {
+      if (typingLock) { setTimeout(waitForFree, 200); return; }
+      addLine(FINAL_LINE);
+    })();
+  }
+
   window.__bootGate.onReady(function () {
+    bootStart = Date.now();
+    showPct(BAR_START);
     loop();
     startSpinner();
     stepBar();
