@@ -1,0 +1,35 @@
+@charset "utf-8";
+/* 6 · Kaffeehaus - Mokka und Milchschaum, Tafel-Etikett, Dampf steigt auf. */
+:root {
+  --font-display: "Lora", "Noto Serif", Georgia, serif;
+  --display-weight: 700;
+  --text: #3b2a22;
+  --text-soft: #8b6b5a;
+  --accent: #8b5a3c;
+  --accent-2: #c79a6b;
+  --motif-light: #f6e7d3;
+  --card-bg: #f6ece0;
+  --card-ring: 0 0 0 4px #3b2a22;
+  --card-shadow: 8px 10px 0 #3b2a22, 0 24px 50px rgba(30, 15, 5, .35);
+  --card-radius: 14px;
+  --card-inner: 0 solid transparent;
+  --scene-bg: radial-gradient(ellipse at 50% 40%, #6b4632, #2c1d16 75%);
+  --names: #8b3a2b, #3b5f7a, #5a7a3c, #9a5f1e, #6b3f6b;
+  --bar-bg: #ead9c4;
+  --ambient: steam;
+  --ambient-colors: rgba(255, 255, 255, .9);
+  --ambient-count: 6;
+  --ambient-scene-count: 18;
+  --motif: mug;
+  --label-intro: "heute auf der Karte";
+  --label-viewers: "Stammgäste";
+  --label-chat: "Am Tresen";
+  --label-follow: "neuer Stammgast";
+  --label-pause: "Kurz Milch aufschäumen";
+  --label-start: "Die Maschine heizt auf";
+  --label-start-sub: "einmal Kakao für alle";
+  --label-end: "Danke für euren Besuch";
+  --label-end-sub: "die nächste Runde geht aufs Haus";
+}
+.chat-head { border-bottom: 3px solid #3b2a22; padding-bottom: 14px; }
+.tile, .pill, .names span.n { border: 3px solid #3b2a22; }

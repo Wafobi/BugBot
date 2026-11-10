@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cozy – Vorschau</title>
+<!-- Nur für den Browser: alle Themes im Demo-Modus, und für das gewählte Theme jede Szene.
+     ?theme=<name> wählt das Theme vor. -->
+<script src="cozy.js"></script>
+<style>
+  /* no color-scheme: dark - it would make the iframes opaque white instead of transparent */
+  body { margin: 0; background: #17141c; color: #eee6da; font-family: "Noto Sans", system-ui, sans-serif; overflow: auto !important; height: auto !important; }
+  html { overflow: auto !important; height: auto !important; }
+  header { padding: 28px 32px 0; }
+  h1 { margin: 0; font-weight: 600; font-size: 26px; }
+  h2 { margin: 34px 32px 0; font-weight: 600; font-size: 20px; }
+  p.lead { margin: 6px 0 0; color: #a59d93; max-width: 980px; line-height: 1.5; }
+  code { background: #2a2530; padding: 2px 6px; border-radius: 5px; font-size: .92em; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 22px; padding: 18px 32px 0; }
+  .pick { all: unset; cursor: pointer; display: block; border-radius: 14px; padding: 8px; background: #221e28; }
+  .pick:hover { background: #2c2733; }
+  .pick.on { outline: 3px solid #ffcf8a; }
+  .pick .t { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 6px 8px; gap: 10px; }
+  .pick .t b { font-weight: 600; }
+  .pick .t span { color: #a59d93; font-size: 13px; text-align: right; }
+  .scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(560px, 1fr)); gap: 26px; padding: 16px 32px 48px; }
+  figure { margin: 0; }
+  figcaption { margin-bottom: 8px; font-size: 16px; display: flex; justify-content: space-between; gap: 12px; }
+  figcaption a { color: #ffcf8a; }
+  figcaption span { color: #a59d93; font-size: 13px; }
+  .frame { position: relative; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden;
+           background:
+             radial-gradient(ellipse at 30% 75%, #2f5d3a 0 22%, transparent 45%),
+             radial-gradient(ellipse at 70% 30%, #3e6f8a 0 18%, transparent 50%),
+             linear-gradient(160deg, #5a8fa8, #7fae7a 55%, #4b6b3f); }
+  .frame.wide { aspect-ratio: 1000 / 300; }
+  .frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cozy-Overlay – 10 Vorschläge</h1>
+  <p class="lead">Ein Theme anklicken, darunter erscheinen alle Szenen dazu. Alles läuft mit Demo-Daten und ohne Verbindung.
+    In OBS kommt an jede Seite <code>?theme=NAME&amp;token=DEIN_OVERLAY_TOKEN</code>.</p>
+</header>
+<div class="gallery" id="gallery"></div>
+<h2 id="scenesTitle"></h2>
+<div class="scenes" id="scenes"></div>
+<script>
+(function () {
+  var SCENES = [
+    ["overlay.html", "Overlay", "über dem Spiel · 2560×1440"],
+    ["avatar.html", "Avatar-Rahmen", "über der Avatar-Quelle · 2560×1440", "&name=wafobitv"],
+    ["start.html", "Start", "vor dem Stream · wird nach 12 s „live“"],
+    ["pause.html", "Pause", "BRB-Szene"],
+    ["end.html", "Ende", "Recap mit Beispieldaten"],
+    ["ad-break.html", "Werbepause", "kleine Karte · z. B. 1000×300", "", true]
+  ];
+  var current = Cozy.theme;
+  var gallery = document.getElementById("gallery");
+
+  Cozy.THEMES.forEach(function (t, i) {
+    var b = document.createElement("button");
+    b.className = "pick";
+    b.dataset.id = t.id;
+    b.innerHTML = '<div class="t"><b>' + (i + 1) + " · " + t.name + "</b><span>" + t.blurb + "</span></div>" +
+      '<div class="frame"><iframe loading="lazy" src="overlay.html?demo=1&theme=' + t.id + '"></iframe></div>';
+    b.onclick = function () { select(t.id); };
+    gallery.appendChild(b);
+  });
+
+  function select(id) {
+    current = id;
+    history.replaceState(null, "", "?theme=" + id);
+    gallery.querySelectorAll(".pick").forEach(function (b) { b.classList.toggle("on", b.dataset.id === id); });
+    var theme = Cozy.THEMES.filter(function (t) { return t.id === id; })[0] || { name: id };
+    document.getElementById("scenesTitle").textContent = "Alle Szenen in „" + theme.name + "“  (theme=" + id + ")";
+    document.getElementById("scenes").innerHTML = SCENES.map(function (s) {
+      var url = s[0] + "?demo=1&theme=" + id + (s[3] || "");
+      return '<figure><figcaption><span><b style="color:#eee6da">' + s[1] + '</b> · ' + s[2] + '</span><a href="' + url +
+        '" target="_blank">einzeln öffnen</a></figcaption><div class="frame' + (s[4] ? " wide" : "") +
+        '"><iframe src="' + url + '"></iframe></div></figure>';
+    }).join("");
+  }
+  select(Cozy.THEMES.some(function (t) { return t.id === current; }) ? current : "kamin");
+})();
+</script>
+</body>
+</html>

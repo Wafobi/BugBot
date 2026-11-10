@@ -14,8 +14,11 @@ Shipped:
 | `matrix` | green phosphor terminal |
 | `cyan` | cool cyan, tying back to bugbot's own default accent |
 | `aurora` | cyan and magenta together, echoing the hairline on `bars.html`'s own default look |
+| `glut` | the terminal with the terminal taken out: same layout and positions, but warm honey/coral/cocoa, a rounded sans instead of monospace, plain rounded cards (no dots, file names or PIDs), no prompts or cursors, no rain, glitches, scanlines or ASCII art; boot loses its fake log, end keeps the recap without timestamps/levels. Restyles and hides elements beyond colour; pairs with `bars.html?theme=sunset` |
+| `kaminfeuer` | `glut` mixed with the cozy skin's kamin look: imports glut.css, adds the running ember/gold rim around every card, a flickering flame before each heading, serif headings, and rising embers plus a firelight glow in the start/end scenes. Pairs with `bars.html?theme=sunset` |
+| `polarlicht` | exactly `kaminfeuer` (imports it), only recoloured to the aurora palette: cyan and magenta on night blue - rim cyan<->magenta, cold cyan flame, cyan sparks, an aurora glow instead of firelight. Pairs with `bars.html?theme=polarlicht` |
 
-The same three files exist under
+The same files exist under
 [`features/overlay/client/terminal/themes/`](../../../../features/overlay/client/terminal/themes/)
 for the overlay/chat/tubbi trio — kept as separate copies rather than one shared location, since
 nothing in this repo imports across a feature/platform boundary (see `docs/architecture.md`) and

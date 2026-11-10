@@ -1,0 +1,268 @@
+/* Theme "kaminfeuer" - glut (the terminal without the terminal) mixed with the cozy skin's
+   "kamin" look: everything glut does, plus
+
+     rim        the bars' running ember -> gold line as a glowing outline around every card
+                (chat, pause, ad break, start, end); the avatar frame stays plain
+     flame      a small flickering flame in front of each heading, like kamin's candle
+     fire       start/end scenes: embers drifting up and a firelight glow flickering at the
+                bottom, instead of glut's static glow
+     type       serif headings (Noto Serif, installed locally), as in kamin
+     no CRT     the card's CRT flicker is switched off
+
+   CSS only, the pages are untouched. Same file as features/overlay/client/terminal/themes/
+   kaminfeuer.css - keep both (and glut.css, which this one imports) in sync by hand. */
+@import url("glut.css");
+
+:root {
+  --ember: #C9662C;
+  --gold: #E9A85A;   /* a muted amber rather than bright gold - the rim should frame, not shine */
+  --font-display: "Lora", "Noto Serif", Georgia, serif;
+  /* stream-end.html: the recap as an overview (number tiles + "Danke an" name chips), like
+     the cozy kamin end card, instead of printed log lines */
+  --recap-layout: tiles;
+  /* stream-boot.html / stream-end.html: crackling fire, a music box and soft bells instead of
+     keystrokes, printer ticks, beeps and the chiptune loop */
+  --sound-theme: fire;
+  /* chat.html: new lines appear whole and fade in, no typewriter */
+  --chat-typing: off;
+}
+
+.crt { animation: none !important; }
+
+/* ---- running ember/gold rim ----------------------------------------------------------- */
+.chat-frame::after, .crt::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none; z-index: 5;
+  opacity: .75;
+  background: repeating-linear-gradient(90deg,
+    var(--ember) 0px, color-mix(in srgb, var(--gold) 7%, var(--ember)) 20px,
+    color-mix(in srgb, var(--gold) 25%, var(--ember)) 40px, color-mix(in srgb, var(--gold) 50%, var(--ember)) 60px,
+    color-mix(in srgb, var(--gold) 75%, var(--ember)) 80px, color-mix(in srgb, var(--gold) 93%, var(--ember)) 100px,
+    var(--gold) 120px, color-mix(in srgb, var(--gold) 93%, var(--ember)) 140px,
+    color-mix(in srgb, var(--gold) 75%, var(--ember)) 160px, color-mix(in srgb, var(--gold) 50%, var(--ember)) 180px,
+    color-mix(in srgb, var(--gold) 25%, var(--ember)) 200px, color-mix(in srgb, var(--gold) 7%, var(--ember)) 220px,
+    var(--ember) 240px);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: kf-run 10s linear infinite;
+}
+.chat-frame, .crt { box-shadow: 0 0 22px rgba(232, 131, 58, .35), 0 18px 50px rgba(0, 0, 0, .5) !important; }
+@keyframes kf-run { from { background-position-x: 0; } to { background-position-x: 240px; } }
+
+/* ---- flame in front of the headings: a teardrop (one square corner, turned to point up) ---- */
+.hero::before, .caption::before, .chat-frame .titlebar .filename::before {
+  content: ""; display: inline-block; flex: none; width: 17px; height: 17px; margin: 4px 14px 0 6px;
+  border-radius: 0 50% 50% 50%;
+  background: radial-gradient(circle at 62% 62%, #FFF6C8 0 22%, #FFC25A 45%, #E8833A 78%);
+  filter: drop-shadow(0 0 7px #FFB347);
+  transform: rotate(45deg); transform-origin: 50% 70%; animation: kf-flicker 2.6s ease-in-out infinite;
+}
+.hero::before { width: 24px; height: 24px; margin: 8px 18px 0 10px; }
+.chat-frame .titlebar .filename::before { width: 11px; height: 11px; margin: 3px 10px 0 3px; }
+.chat-frame .titlebar .filename { display: flex; align-items: center; }
+@keyframes kf-flicker {
+  0%, 100% { transform: rotate(45deg) scale(1); } 30% { transform: rotate(49deg) scale(1.07, .95); }
+  60% { transform: rotate(41deg) scale(.95, 1.07); }
+}
+/* captions are already "Pause" / "Werbepause" in the page - no case trick needed, and the
+   flame must not become the "first letter" */
+.caption { text-transform: none !important; display: flex; align-items: center; }
+.caption::first-letter { text-transform: none; }
+
+/* ---- fire in the start / end scenes ---------------------------------------------------- */
+html:has(#rain)::before, html:has(.ground)::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .7;
+  /* two big tiles of randomly placed sparks (1280x900 and 1110x1060 - big enough not to
+     visibly repeat across a 2560px source), three kinds mixed: small sharp sparks, softer
+     glowing ones, and a few big faint blurry ones like out-of-focus light. Each one's blur is
+     just how wide its gradient fades out - no filter, so it costs nothing extra */
+  background-image:
+    radial-gradient(circle at 55px 510px, rgba(255, 179, 71, 0.12) 0 10.3px, transparent 24.0px),
+    radial-gradient(circle at 260px 578px, rgba(232, 131, 58, 0.22) 0 10.0px, transparent 23.7px),
+    radial-gradient(circle at 97px 708px, rgba(255, 179, 71, 0.16) 0 6.0px, transparent 24.4px),
+    radial-gradient(circle at 874px 239px, rgba(255, 179, 71, 0.21) 0 5.8px, transparent 27.1px),
+    radial-gradient(circle at 729px 233px, rgba(232, 131, 58, 0.22) 0 7.3px, transparent 23.7px),
+    radial-gradient(circle at 460px 771px, rgba(232, 131, 58, 0.41) 0 3.5px, transparent 10.2px),
+    radial-gradient(circle at 135px 214px, rgba(255, 210, 122, 0.56) 0 2.8px, transparent 7.4px),
+    radial-gradient(circle at 800px 61px, rgba(255, 179, 71, 0.53) 0 4.3px, transparent 11.8px),
+    radial-gradient(circle at 477px 242px, rgba(255, 150, 60, 0.53) 0 4.3px, transparent 9.1px),
+    radial-gradient(circle at 478px 523px, rgba(255, 179, 71, 0.51) 0 3.2px, transparent 8.3px),
+    radial-gradient(circle at 1016px 692px, rgba(255, 210, 122, 0.60) 0 4.9px, transparent 12.8px),
+    radial-gradient(circle at 657px 210px, rgba(255, 210, 122, 0.58) 0 2.7px, transparent 7.5px),
+    radial-gradient(circle at 797px 742px, rgba(255, 179, 71, 0.46) 0 4.2px, transparent 9.3px),
+    radial-gradient(circle at 433px 146px, rgba(255, 150, 60, 0.48) 0 3.0px, transparent 8.3px),
+    radial-gradient(circle at 129px 605px, rgba(255, 179, 71, 0.95) 0 1.8px, transparent 2.7px),
+    radial-gradient(circle at 274px 228px, rgba(232, 131, 58, 0.95) 0 1.8px, transparent 2.7px),
+    radial-gradient(circle at 341px 517px, rgba(255, 179, 71, 0.85) 0 2.2px, transparent 3.5px),
+    radial-gradient(circle at 792px 657px, rgba(255, 150, 60, 0.77) 0 2.6px, transparent 3.4px),
+    radial-gradient(circle at 312px 846px, rgba(255, 150, 60, 0.90) 0 1.0px, transparent 2.0px),
+    radial-gradient(circle at 992px 387px, rgba(232, 131, 58, 0.87) 0 1.0px, transparent 1.9px),
+    radial-gradient(circle at 943px 210px, rgba(255, 179, 71, 0.92) 0 1.4px, transparent 2.3px),
+    radial-gradient(circle at 132px 658px, rgba(232, 131, 58, 0.92) 0 1.4px, transparent 3.0px),
+    radial-gradient(circle at 406px 597px, rgba(255, 150, 60, 0.85) 0 2.6px, transparent 4.0px),
+    radial-gradient(circle at 1061px 441px, rgba(232, 131, 58, 0.87) 0 2.6px, transparent 3.6px),
+    radial-gradient(circle at 661px 764px, rgba(255, 150, 60, 0.77) 0 1.8px, transparent 2.7px),
+    radial-gradient(circle at 740px 792px, rgba(232, 131, 58, 0.87) 0 1.8px, transparent 3.2px),
+    radial-gradient(circle at 370px 73px, rgba(255, 179, 71, 0.80) 0 2.2px, transparent 3.2px),
+    radial-gradient(circle at 659px 239px, rgba(255, 150, 60, 0.80) 0 1.8px, transparent 3.0px),
+    radial-gradient(circle at 581px 782px, rgba(255, 179, 71, 0.92) 0 1.0px, transparent 2.2px),
+    radial-gradient(circle at 591px 295px, rgba(232, 131, 58, 0.82) 0 2.2px, transparent 3.7px),
+    radial-gradient(circle at 851px 64px, rgba(255, 150, 60, 0.80) 0 2.2px, transparent 3.6px),
+    radial-gradient(circle at 689px 383px, rgba(255, 210, 122, 0.79) 0 1.8px, transparent 2.7px),
+    radial-gradient(circle at 540px 669px, rgba(255, 150, 60, 0.88) 0 2.2px, transparent 3.4px),
+    radial-gradient(circle at 401px 457px, rgba(255, 179, 71, 0.81) 0 1.0px, transparent 2.2px),
+    radial-gradient(circle at 1000px 35px, rgba(255, 179, 71, 0.90) 0 1.8px, transparent 2.9px),
+    radial-gradient(circle at 645px 281px, rgba(255, 210, 122, 0.94) 0 2.2px, transparent 3.7px),
+    radial-gradient(circle at 519px 649px, rgba(232, 131, 58, 0.92) 0 2.6px, transparent 4.0px),
+    radial-gradient(circle at 1205px 754px, rgba(232, 131, 58, 0.86) 0 1.0px, transparent 2.1px),
+    radial-gradient(circle at 656px 719px, rgba(255, 150, 60, 0.80) 0 2.6px, transparent 4.2px),
+    radial-gradient(circle at 823px 437px, rgba(232, 131, 58, 0.90) 0 2.6px, transparent 4.1px),
+    radial-gradient(circle at 128px 873px, rgba(232, 131, 58, 0.20) 0 11.7px, transparent 26.6px),
+    radial-gradient(circle at 872px 730px, rgba(255, 210, 122, 0.17) 0 6.9px, transparent 20.2px),
+    radial-gradient(circle at 701px 284px, rgba(255, 150, 60, 0.20) 0 10.3px, transparent 27.5px),
+    radial-gradient(circle at 662px 350px, rgba(255, 179, 71, 0.21) 0 11.5px, transparent 26.2px),
+    radial-gradient(circle at 319px 108px, rgba(255, 179, 71, 0.45) 0 3.7px, transparent 9.6px),
+    radial-gradient(circle at 1009px 713px, rgba(255, 179, 71, 0.55) 0 4.8px, transparent 12.1px),
+    radial-gradient(circle at 724px 270px, rgba(232, 131, 58, 0.47) 0 5.0px, transparent 10.8px),
+    radial-gradient(circle at 832px 961px, rgba(255, 210, 122, 0.44) 0 4.0px, transparent 8.9px),
+    radial-gradient(circle at 148px 730px, rgba(255, 150, 60, 0.49) 0 2.6px, transparent 9.5px),
+    radial-gradient(circle at 852px 169px, rgba(255, 210, 122, 0.56) 0 3.6px, transparent 9.8px),
+    radial-gradient(circle at 958px 87px, rgba(232, 131, 58, 0.54) 0 4.7px, transparent 9.9px),
+    radial-gradient(circle at 431px 158px, rgba(255, 150, 60, 0.82) 0 2.2px, transparent 3.2px),
+    radial-gradient(circle at 892px 823px, rgba(255, 210, 122, 0.91) 0 1.8px, transparent 3.1px),
+    radial-gradient(circle at 890px 380px, rgba(255, 179, 71, 0.93) 0 1.4px, transparent 2.7px),
+    radial-gradient(circle at 377px 149px, rgba(255, 179, 71, 0.91) 0 1.8px, transparent 2.8px),
+    radial-gradient(circle at 914px 231px, rgba(255, 179, 71, 0.91) 0 2.6px, transparent 3.5px),
+    radial-gradient(circle at 1025px 518px, rgba(255, 210, 122, 0.85) 0 1.4px, transparent 2.8px),
+    radial-gradient(circle at 157px 291px, rgba(255, 210, 122, 0.81) 0 1.8px, transparent 3.3px),
+    radial-gradient(circle at 151px 822px, rgba(255, 210, 122, 0.92) 0 1.0px, transparent 2.4px),
+    radial-gradient(circle at 497px 594px, rgba(232, 131, 58, 0.81) 0 1.8px, transparent 2.7px),
+    radial-gradient(circle at 826px 638px, rgba(255, 150, 60, 0.87) 0 2.6px, transparent 3.7px),
+    radial-gradient(circle at 560px 796px, rgba(255, 179, 71, 0.89) 0 2.6px, transparent 3.5px),
+    radial-gradient(circle at 322px 515px, rgba(232, 131, 58, 0.79) 0 2.2px, transparent 3.4px),
+    radial-gradient(circle at 973px 554px, rgba(232, 131, 58, 0.83) 0 2.6px, transparent 3.7px),
+    radial-gradient(circle at 438px 873px, rgba(255, 150, 60, 0.82) 0 1.8px, transparent 2.6px),
+    radial-gradient(circle at 414px 767px, rgba(232, 131, 58, 0.78) 0 2.2px, transparent 3.7px),
+    radial-gradient(circle at 225px 785px, rgba(255, 150, 60, 0.94) 0 2.6px, transparent 3.8px),
+    radial-gradient(circle at 304px 835px, rgba(255, 179, 71, 0.78) 0 2.6px, transparent 3.6px),
+    radial-gradient(circle at 230px 49px, rgba(255, 179, 71, 0.80) 0 1.8px, transparent 3.1px),
+    radial-gradient(circle at 788px 453px, rgba(255, 150, 60, 0.94) 0 1.8px, transparent 3.0px),
+    radial-gradient(circle at 849px 870px, rgba(255, 179, 71, 0.78) 0 1.0px, transparent 1.9px),
+    radial-gradient(circle at 632px 195px, rgba(255, 179, 71, 0.78) 0 1.8px, transparent 2.7px),
+    radial-gradient(circle at 618px 912px, rgba(255, 179, 71, 0.92) 0 1.8px, transparent 2.8px);
+  background-size: 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1280px 900px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px, 1110px 1060px;
+  background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+  animation: kf-embers 34s linear infinite;
+  -webkit-mask: linear-gradient(to top, #000 0%, #000 35%, transparent 95%);
+  mask: linear-gradient(to top, #000 0%, #000 35%, transparent 95%);
+}
+/* each tile moves by exactly two of its own heights, so the loop is seamless */
+@keyframes kf-embers {
+  to { background-position: 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px, 0 -2120px; }
+}
+body:has(#rain)::after {
+  content: ""; position: fixed; left: 50%; bottom: -35%; width: 130%; height: 75%; transform: translateX(-50%);
+  pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse at 50% 60%, rgba(255, 120, 40, .42), rgba(200, 70, 20, .18) 40%, transparent 68%);
+  animation: kf-fire 3.2s ease-in-out infinite;
+}
+@keyframes kf-fire { 0%, 100% { opacity: .85; } 25% { opacity: 1; } 55% { opacity: .7; } 80% { opacity: .95; } }
+body:has(#rain) .crt { z-index: 1; }
+
+/* ---- the same fire under everything: background.html ------------------------------------
+   The bottom-most source of a scene. Embers over the full height here (no fade at the top),
+   so they rise behind the see-through stat bars at the top as well as the bottom - see
+   ../../themes/kaminfeuer.css for the bars' side of it. Above .ground, hence z-index 1. */
+/* background.html is always a full 2560x1440 source: its own, bigger and denser sparks (the
+   start/end ones would shrink to nothing once the stream is scaled down to 1080p), over the
+   full height, so they rise behind the see-through stat bars at the top as well */
+html:has(.ground)::before {
+  z-index: 1; opacity: .8; -webkit-mask: none; mask: none;
+  filter: drop-shadow(0 0 4px rgba(255, 150, 60, .5));
+  /* same three kinds as above, scaled up for the full 2560px source */
+  background-image:
+    radial-gradient(circle at 327px 288px, rgba(255, 179, 71, 0.19) 0 14.9px, transparent 42.7px),
+    radial-gradient(circle at 747px 121px, rgba(232, 131, 58, 0.22) 0 11.0px, transparent 31.2px),
+    radial-gradient(circle at 406px 605px, rgba(255, 150, 60, 0.21) 0 16.0px, transparent 36.0px),
+    radial-gradient(circle at 580px 358px, rgba(255, 150, 60, 0.18) 0 10.1px, transparent 45.6px),
+    radial-gradient(circle at 1199px 102px, rgba(255, 210, 122, 0.59) 0 6.4px, transparent 14.6px),
+    radial-gradient(circle at 679px 567px, rgba(232, 131, 58, 0.54) 0 5.1px, transparent 13.3px),
+    radial-gradient(circle at 924px 90px, rgba(255, 210, 122, 0.59) 0 6.1px, transparent 12.8px),
+    radial-gradient(circle at 1076px 331px, rgba(255, 150, 60, 0.44) 0 5.6px, transparent 17.9px),
+    radial-gradient(circle at 1193px 422px, rgba(255, 150, 60, 0.52) 0 6.4px, transparent 14.6px),
+    radial-gradient(circle at 1152px 579px, rgba(255, 150, 60, 0.49) 0 7.0px, transparent 19.2px),
+    radial-gradient(circle at 225px 494px, rgba(255, 210, 122, 0.41) 0 4.3px, transparent 15.8px),
+    radial-gradient(circle at 443px 564px, rgba(232, 131, 58, 0.84) 0 3.5px, transparent 4.8px),
+    radial-gradient(circle at 436px 215px, rgba(255, 179, 71, 0.79) 0 4.2px, transparent 5.9px),
+    radial-gradient(circle at 771px 235px, rgba(255, 150, 60, 0.78) 0 1.6px, transparent 3.0px),
+    radial-gradient(circle at 452px 143px, rgba(255, 179, 71, 0.92) 0 2.2px, transparent 4.0px),
+    radial-gradient(circle at 983px 84px, rgba(255, 179, 71, 0.78) 0 3.5px, transparent 5.8px),
+    radial-gradient(circle at 622px 524px, rgba(255, 150, 60, 0.82) 0 1.6px, transparent 3.7px),
+    radial-gradient(circle at 266px 663px, rgba(255, 210, 122, 0.85) 0 1.6px, transparent 2.9px),
+    radial-gradient(circle at 171px 388px, rgba(255, 179, 71, 0.87) 0 2.2px, transparent 4.3px),
+    radial-gradient(circle at 590px 221px, rgba(255, 179, 71, 0.82) 0 1.6px, transparent 4.2px),
+    radial-gradient(circle at 281px 261px, rgba(255, 210, 122, 0.79) 0 3.5px, transparent 5.9px),
+    radial-gradient(circle at 605px 139px, rgba(255, 150, 60, 0.82) 0 4.2px, transparent 5.8px),
+    radial-gradient(circle at 1114px 224px, rgba(255, 179, 71, 0.92) 0 2.2px, transparent 4.0px),
+    radial-gradient(circle at 107px 250px, rgba(232, 131, 58, 0.76) 0 3.5px, transparent 5.6px),
+    radial-gradient(circle at 898px 515px, rgba(255, 210, 122, 0.77) 0 2.2px, transparent 4.6px),
+    radial-gradient(circle at 173px 619px, rgba(232, 131, 58, 0.88) 0 2.2px, transparent 4.6px),
+    radial-gradient(circle at 156px 70px, rgba(255, 150, 60, 0.76) 0 2.2px, transparent 4.3px),
+    radial-gradient(circle at 1036px 70px, rgba(255, 210, 122, 0.91) 0 1.6px, transparent 3.2px),
+    radial-gradient(circle at 967px 278px, rgba(255, 150, 60, 0.82) 0 4.2px, transparent 5.9px),
+    radial-gradient(circle at 305px 745px, rgba(255, 179, 71, 0.13) 0 15.8px, transparent 46.7px),
+    radial-gradient(circle at 906px 675px, rgba(255, 210, 122, 0.15) 0 11.2px, transparent 46.6px),
+    radial-gradient(circle at 305px 324px, rgba(232, 131, 58, 0.17) 0 11.8px, transparent 46.4px),
+    radial-gradient(circle at 551px 179px, rgba(232, 131, 58, 0.58) 0 5.9px, transparent 14.6px),
+    radial-gradient(circle at 119px 436px, rgba(232, 131, 58, 0.58) 0 6.9px, transparent 13.8px),
+    radial-gradient(circle at 386px 281px, rgba(255, 179, 71, 0.43) 0 6.1px, transparent 18.7px),
+    radial-gradient(circle at 611px 410px, rgba(255, 179, 71, 0.40) 0 6.1px, transparent 17.4px),
+    radial-gradient(circle at 1011px 558px, rgba(255, 179, 71, 0.42) 0 7.2px, transparent 18.9px),
+    radial-gradient(circle at 108px 222px, rgba(255, 210, 122, 0.58) 0 6.1px, transparent 18.4px),
+    radial-gradient(circle at 461px 628px, rgba(255, 210, 122, 0.94) 0 2.9px, transparent 5.4px),
+    radial-gradient(circle at 784px 93px, rgba(232, 131, 58, 0.81) 0 4.2px, transparent 6.2px),
+    radial-gradient(circle at 328px 43px, rgba(232, 131, 58, 0.94) 0 2.2px, transparent 3.5px),
+    radial-gradient(circle at 345px 64px, rgba(255, 210, 122, 0.84) 0 1.6px, transparent 3.0px),
+    radial-gradient(circle at 380px 219px, rgba(232, 131, 58, 0.83) 0 3.5px, transparent 5.1px),
+    radial-gradient(circle at 183px 453px, rgba(255, 210, 122, 0.93) 0 2.2px, transparent 4.2px),
+    radial-gradient(circle at 973px 423px, rgba(255, 179, 71, 0.85) 0 3.5px, transparent 6.1px),
+    radial-gradient(circle at 262px 135px, rgba(232, 131, 58, 0.86) 0 2.2px, transparent 4.5px),
+    radial-gradient(circle at 495px 90px, rgba(255, 210, 122, 0.77) 0 2.2px, transparent 4.6px),
+    radial-gradient(circle at 532px 374px, rgba(232, 131, 58, 0.88) 0 4.2px, transparent 5.9px),
+    radial-gradient(circle at 251px 429px, rgba(232, 131, 58, 0.84) 0 4.2px, transparent 6.6px),
+    radial-gradient(circle at 591px 89px, rgba(255, 150, 60, 0.88) 0 3.5px, transparent 5.8px),
+    radial-gradient(circle at 409px 253px, rgba(255, 210, 122, 0.77) 0 1.6px, transparent 4.0px),
+    radial-gradient(circle at 903px 504px, rgba(255, 179, 71, 0.91) 0 2.2px, transparent 4.3px);
+  background-size: 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1280px 720px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px, 1060px 900px;
+  background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+  animation: kf-embers-bg 30s linear infinite;
+}
+@keyframes kf-embers-bg {
+  to { background-position: 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1440px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px, 0 -1800px; }
+}
+body:has(.ground)::after {
+  content: ""; position: fixed; left: 50%; bottom: -35%; width: 130%; height: 75%; transform: translateX(-50%);
+  pointer-events: none; z-index: 1;
+  background: radial-gradient(ellipse at 50% 60%, rgba(255, 120, 40, .38), rgba(200, 70, 20, .16) 40%, transparent 68%);
+  animation: kf-fire 3.2s ease-in-out infinite;
+}
+
+/* chat lines without typewriter (see --chat-typing): a soft fade-in instead */
+.chat-line--fade { animation: kf-line-in .7s ease-out both; }
+@keyframes kf-line-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---- end scene: kamin-style overview ------------------------------------------------- */
+.recap-tile { background: linear-gradient(180deg, rgba(255, 190, 122, .08), rgba(255, 190, 122, .03)) !important;
+              border-color: rgba(255, 190, 122, .16) !important; border-radius: 14px !important; }
+.recap-tile .n { font-family: var(--font-display) !important; font-size: 34px !important;
+                 color: var(--amber) !important; text-shadow: 0 0 14px var(--glow); }
+.recap-tile .l, .recap-meta, .recap-names .head, .recap-extra { font-size: 13px !important; }
+.recap-names .chip { background: rgba(255, 190, 122, .07) !important; border-color: rgba(255, 190, 122, .16) !important;
+                     font-size: 14px !important; }
+.recap-meta { text-align: left; }
+
+@media (prefers-reduced-motion: reduce) {
+  .recap-tile, .recap-names .chip,
+  .chat-frame::after, .crt::after, .hero::before, .caption::before, .chat-frame .titlebar .filename::before,
+  html:has(#rain)::before, body:has(#rain)::after,
+  html:has(.ground)::before, body:has(.ground)::after { animation: none !important; }
+}

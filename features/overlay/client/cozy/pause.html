@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cozy – Pause</title>
+<!--
+  "Bin gleich wieder da" - Vollbild-Szene für eine Pause. Die Zeit zählt ab dem Moment, in dem die
+  Quelle sichtbar wird (in OBS "Aktualisieren, wenn Szene aktiv wird" anhaken). Der Chat läuft rechts
+  mit. Ohne Token gibt es keinen Chat, der Rest funktioniert trotzdem.
+  Browserquelle 2560x1440, deckend.
+  Parameter: theme= token= host= port= source= demo=1 chat=0|extern ambient=0 text= sub= t.NAME=
+-->
+<link rel="stylesheet" href="cozy.css">
+<script src="cozy.js"></script>
+</head>
+<body>
+<div class="stage full" id="stage">
+  <div class="scene-bg"><div class="ambient" id="amb"></div></div>
+  <div class="card hero" id="hero">
+    <span class="motif big" data-motif></span>
+    <h1 class="display" id="headline" data-label="pause"></h1>
+    <div class="sub" id="sub" data-label="pause-sub"></div>
+    <div class="pill"><span class="k">Pause seit</span><span id="elapsed">0:00</span></div>
+    <div class="bar indeterminate" style="width:520px;margin-top:10px"><i></i></div>
+  </div>
+</div>
+<script>
+Cozy.ready(function () {
+  var stage = document.getElementById("stage");
+  function $(id) { return document.getElementById(id); }
+  Cozy.scale(stage, 2560, 1440);
+  Cozy.ambient($("amb"), parseInt(Cozy.token("ambient-scene-count"), 10));
+  if (Cozy.params.get("text")) $("headline").textContent = Cozy.params.get("text");
+  if (Cozy.params.get("sub")) $("sub").textContent = Cozy.params.get("sub");
+  var chatMode = Cozy.params.get("chat");
+  var chat = chatMode === "0" || chatMode === "extern" ? null : Cozy.mountChat(stage);
+  if (chat || chatMode === "extern") stage.classList.add("with-chat");
+
+  var since = Date.now();
+  setInterval(function () { $("elapsed").textContent = Cozy.mmss((Date.now() - since) / 1000); }, 1000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) since = Date.now(); });
+
+  Cozy.connect({ onMessage: chat ? chat.add : null, onClear: chat ? chat.clear : null });
+});
+</script>
+</body>
+</html>

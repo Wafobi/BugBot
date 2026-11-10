@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cozy – Hintergrund</title>
+<!--
+  Der Grund unter allem: der Szenen-Hintergrund des Themes mit seinen Partikeln, ohne Karten.
+  Ganz unten in die Szene, unter die Spiel- oder Bildschirmaufnahme - sichtbar bleibt er dort,
+  wo das Bild nicht hinreicht (Letterbox-Balken). Keine Verbindung nötig.
+  Browserquelle 2560x1440, deckend.
+  Parameter: theme= ambient=0 t.NAME=
+-->
+<link rel="stylesheet" href="cozy.css">
+<script src="cozy.js"></script>
+</head>
+<body>
+<div class="stage full" id="stage">
+  <div class="scene-bg"><div class="ambient" id="amb"></div></div>
+</div>
+<script>
+Cozy.ready(function () {
+  Cozy.scale(document.getElementById("stage"), 2560, 1440);
+  Cozy.ambient(document.getElementById("amb"), parseInt(Cozy.token("ambient-scene-count"), 10));
+});
+</script>
+</body>
+</html>

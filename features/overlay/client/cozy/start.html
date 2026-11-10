@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cozy – Start</title>
+<!--
+  "Gleich geht's los" - Vollbild-Szene vor dem Stream. Sobald der Bot den Stream als live meldet,
+  wechselt die Überschrift auf "Es geht los!". Rechts läuft der Chat mit, damit die Wartenden
+  sich schon sehen. Browserquelle 2560x1440, deckend.
+  Parameter: theme= token= host= port= source= demo=1 chat=0|extern ambient=0 t.NAME=
+-->
+<link rel="stylesheet" href="cozy.css">
+<script src="cozy.js"></script>
+</head>
+<body>
+<div class="stage full" id="stage">
+  <div class="scene-bg"><div class="ambient" id="amb"></div></div>
+  <div class="card hero" id="hero">
+    <span class="motif big" data-motif></span>
+    <h1 class="display" id="headline" data-label="start"></h1>
+    <div class="sub" data-label="start-sub"></div>
+    <div class="pill" id="what" hidden><span class="k" id="gameK"></span><span id="title"></span></div>
+    <div class="eyebrow" id="clock"></div>
+  </div>
+</div>
+<script>
+Cozy.ready(function () {
+  var stage = document.getElementById("stage");
+  function $(id) { return document.getElementById(id); }
+  Cozy.scale(stage, 2560, 1440);
+  Cozy.ambient($("amb"), parseInt(Cozy.token("ambient-scene-count"), 10));
+  var chatMode = Cozy.params.get("chat");
+  var chat = chatMode === "0" || chatMode === "extern" ? null : Cozy.mountChat(stage);
+  if (chat || chatMode === "extern") stage.classList.add("with-chat");
+
+  function tickClock() { $("clock").textContent = Cozy.clock(); }
+  tickClock(); setInterval(tickClock, 5000);
+
+  var demo = Cozy.params.get("demo") === "1";
+  Cozy.connect({
+    demoState: { live: false, started_at: null },
+    onState: function (s) {
+      var live = !!s.live;
+      $("hero").classList.toggle("is-live", live);
+      $("headline").textContent = Cozy.label(live ? "live" : "start");
+      var what = s.title || s.game;
+      $("what").hidden = !what;
+      $("gameK").textContent = s.title && s.game ? s.game : "";
+      $("title").textContent = s.title || s.game || "";
+    },
+    onMessage: chat ? chat.add : null,
+    onClear: chat ? chat.clear : null
+  });
+  // in demo mode, flip to "live" after a while so both looks can be seen
+  if (demo) setTimeout(function () { Cozy.state.live = true; $("hero").classList.add("is-live"); $("headline").textContent = Cozy.label("live"); }, 12000);
+});
+</script>
+</body>
+</html>

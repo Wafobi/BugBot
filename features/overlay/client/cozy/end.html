@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cozy – Ende</title>
+<!--
+  "Danke fürs Vorbeischauen" - Vollbild-Szene am Stream-Ende mit dem Recap des laufenden Streams
+  (stream_recap aus features/overlay, siehe docs/overlay.md). Wie platforms/obs/client/terminal/
+  stream-end.html: Ist der Stream live, wartet die Seite auf das echte Recap. Ist er nicht live oder
+  fehlt der Token, zeigt sie ein Beispiel, damit die Szene nie leer ist.
+  Browserquelle 2560x1440, deckend.
+  Parameter: theme= token= host= port= source= demo=1 chat=0|extern ambient=0 t.NAME=
+-->
+<link rel="stylesheet" href="cozy.css">
+<script src="cozy.js"></script>
+<style>
+  .hero { gap: 16px; padding-top: 60px; padding-bottom: 60px; }
+  .hero h1 { font-size: 104px; }
+  .hero .sub { font-size: 38px; }
+  .extra { font-size: 26px; color: var(--text-soft); }
+</style>
+</head>
+<body>
+<div class="stage full" id="stage">
+  <div class="scene-bg"><div class="ambient" id="amb"></div></div>
+  <div class="card hero" id="hero">
+    <span class="motif" data-motif></span>
+    <h1 class="display" data-label="end"></h1>
+    <div class="sub" id="sub" data-label="end-sub"></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="names" id="names"></div>
+    <div class="extra" id="extra"></div>
+  </div>
+</div>
+<script>
+Cozy.ready(function () {
+  var stage = document.getElementById("stage");
+  function $(id) { return document.getElementById(id); }
+  Cozy.scale(stage, 2560, 1440);
+  Cozy.ambient($("amb"), parseInt(Cozy.token("ambient-scene-count"), 10));
+  var chatMode = Cozy.params.get("chat");
+  var chat = chatMode === "0" || chatMode === "extern" ? null : Cozy.mountChat(stage);
+  if (chat || chatMode === "extern") stage.classList.add("with-chat");
+
+  var SAMPLE = {
+    peak_viewers: 128, avg_viewers: 94, follows: 12, subs: 5, resubs: 2, gift_subs: 3,
+    bits: 1340, raids: 2, raid_viewers: 41, chat_messages: 842, unique_chatters: 67,
+    extra: ["TTS: 7 von 9 vorgelesen"],
+    events: [
+      { type: "follow", user_name: "teekesselchen" }, { type: "sub", user_name: "catgirl_dev" },
+      { type: "cheer", user_name: "Kevin", amount: 500 }, { type: "follow", user_name: "null_pointer" },
+      { type: "raid", user_name: "glitch_witch", amount: 41 }, { type: "resub", user_name: "byte_sized" },
+      { type: "gift_sub", user_name: "ModDoro" }, { type: "follow", user_name: "quantum_qwertz" },
+      { type: "cheer", user_name: "0x1A2B3C", amount: 100 }
+    ]
+  };
+  var NOTE = { follow: "", sub: "Abo", resub: "Abo", gift_sub: "Geschenk",
+               raid: function (e) { return "Raid · " + (e.amount || 0); },
+               cheer: function (e) { return (e.amount || 0) + " Bits"; } };
+
+  var shown = false;
+  function show(r, startedAt, game) {
+    if (shown) return;
+    shown = true;
+    var parts = [];
+    if (startedAt) parts.push(Cozy.duration(Date.now() / 1000 - startedAt));
+    if (game) parts.push(game);
+    if (parts.length) $("sub").textContent = parts.join(" · ");
+
+    var tiles = [
+      [r.follows, "neue Follower"], [(r.subs || 0) + (r.resubs || 0), "Abos"], [r.gift_subs, "verschenkte Abos"],
+      [r.bits, "Bits"], [r.raids, r.raids === 1 ? "Raid" : "Raids"], [r.peak_viewers, "Zuschauer zur Spitze"],
+      [r.chat_messages, "Nachrichten"], [r.unique_chatters, "Leute im Chat"]
+    ].filter(function (t, i) { return t[0] || i >= 5; }).slice(0, 8);
+    $("tiles").style.gridTemplateColumns = "repeat(" + Math.min(4, tiles.length) + ", 1fr)";
+    $("tiles").innerHTML = tiles.map(function (t, i) {
+      return '<div class="tile" style="animation-delay:' + (i * 0.12) + 's"><div class="n">' + (t[0] || 0) +
+        '</div><div class="l">' + t[1] + "</div></div>";
+    }).join("");
+
+    var events = r.events || [];
+    if (events.length) {
+      $("names").innerHTML = '<div class="eyebrow">' + Cozy.escapeHtml(Cozy.label("thanks")) + "</div>" +
+        events.map(function (e, i) {
+          var note = NOTE[e.type];
+          note = typeof note === "function" ? note(e) : (note || "");
+          return '<span class="n" style="--tint:' + Cozy.tint(e.user_name || "") + ";animation-delay:" + (1 + i * 0.15) + 's">' +
+            Cozy.escapeHtml(e.user_name || "?") + (note ? "<small>" + Cozy.escapeHtml(note) + "</small>" : "") + "</span>";
+        }).join("");
+    }
+    $("extra").textContent = (r.extra || []).join(" · ");
+  }
+
+  var demo = Cozy.params.get("demo") === "1";
+  Cozy.connect({
+    demoState: { started_at: Date.now() / 1000 - 187 * 60 },
+    onNoToken: function () { show(SAMPLE, Date.now() / 1000 - 187 * 60, "Stardew Valley"); },
+    onState: function (s, changed) {
+      if (demo) return show(SAMPLE, s.started_at, s.game);
+      if (s.stream_recap) return show(s.stream_recap, s.started_at, s.game);
+      if (!s.live && "live" in changed) show(SAMPLE, null, "");
+    },
+    onMessage: chat ? chat.add : null,
+    onClear: chat ? chat.clear : null
+  });
+});
+</script>
+</body>
+</html>

@@ -46,6 +46,9 @@ features/overlay/
     terminal/          an alternate skin on the same listener — chat card and avatar
                         frame, plus video.html/background.html, which need no
                         connection at all, see terminal/README.md
+    cozy/              a third skin, cozy instead of technical: overlay, avatar frame and
+                        the start/pause/end/ad-break scenes, 10 themes via ?theme=,
+                        see cozy/README.md
 ```
 
 ---

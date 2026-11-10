@@ -1,0 +1,38 @@
+@charset "utf-8";
+/* 2 · Teegarten - Salbei und Creme, runde Pillen, Chat als Pastell-Sprechblasen. */
+:root {
+  --text: #3d4a3e;
+  --text-soft: #7a8a7b;
+  --accent: #6f9a6b;
+  --accent-2: #d7a6a0;
+  --motif-light: #fffaf0;
+  --card-bg: #fffaf0;
+  --card-ring: 0 7px 0 #9cb59a;
+  --card-shadow: 0 16px 34px rgba(40, 60, 40, .25);
+  --card-radius: 40px;
+  --card-inner: 0 solid transparent;
+  --scene-bg: radial-gradient(circle at 20% 20%, #cfe0c3 0 18%, transparent 40%),
+              radial-gradient(circle at 85% 80%, #f3d9d2 0 15%, transparent 40%),
+              linear-gradient(160deg, #a9c4a0, #6f9a6b);
+  --names: #5f7f63, #a35f6e, #6a7fa8, #8a7a3c, #7a5f9a;
+  --bubbles: #fde2e4, #e2ece9, #fff1c9, #dfe7fd, #f0e2f7, #e6f4d7;
+  --bar-bg: #eef3ea;
+  --ambient: leaves;
+  --ambient-colors: #8fb58a, #a9c49f, #6f9a6b;
+  --ambient-count: 8;
+  --motif: teacup;
+  --label-intro: "heute im Teegarten";
+  --label-viewers: "Gäste";
+  --label-chat: "Teestunde";
+  --label-follow: "Willkommen";
+  --label-pause: "Kurz Tee aufgießen";
+  --label-start: "Der Tee zieht noch";
+  --label-end: "Danke für die Teestunde";
+}
+.msg { align-self: flex-start; max-width: 88%; padding: 14px 24px 16px; border-radius: 30px 30px 30px 8px;
+       background: var(--bubble, #eef3ea); box-shadow: 0 4px 0 rgba(0, 0, 0, .05); }
+.msg.right { align-self: flex-end; border-radius: 30px 30px 8px 30px; }
+.msg .who { display: block; font-size: 23px; color: #5f7f63; }
+.msg.sys { align-self: center; background: none; box-shadow: none; }
+.log { gap: 16px; }
+.chat-head { color: #5f7f63; }

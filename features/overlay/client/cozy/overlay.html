@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cozy – Overlay</title>
+<!--
+  Das Spiel-Overlay: Spielinfo oben links, Danke-Zeile unten links, Chat unten rechts.
+  Browserquelle 2560x1440 an (0,0), transparent bis auf die Karten.
+  Parameter: theme= token= host= port= source= demo=1 off=info,thanks,chat only=… ambient=0 side=left t.NAME=
+    bars=184   Letterbox-Balken oben und unten in dieser Höhe (px), hinter den Karten - gebaut wie
+               die von ../bars.html: durchscheinender Verlauf, Muster, laufende Zweifarb-Linie.
+               Aussehen über die --bars-*-Tokens des Themes, t.bars-bg=black macht sie einfach schwarz
+    tab=x,w,h  der obere Balken bekommt eine Lasche nach unten: ab x (px), w breit, bis y=h -
+               als ruhiger Grund unter einem Avatar statt eines eigenen Rahmens. Fester Teil der
+               Balken, bleibt also stehen, wenn die Avatar-Quelle ausgeblendet wird
+-->
+<link rel="stylesheet" href="cozy.css">
+<script src="cozy.js"></script>
+</head>
+<body>
+<div class="stage full" id="stage">
+  <div class="lbar top" id="barTop" hidden></div>
+  <div class="lbar bottom" id="barBottom" hidden></div>
+  <div class="card info" id="info">
+    <span class="motif" data-motif></span>
+    <div>
+      <div class="eyebrow" data-label="intro"></div>
+      <div class="game display" id="game">Just Chatting</div>
+      <div class="meta">
+        <span data-label="since"></span><b id="uptime">–</b>
+        <span class="dot">·</span><b id="viewers">0</b><span data-label="viewers"></span>
+        <span id="deathsWrap"><span class="dot">·</span> <b id="deaths">0</b> <span data-label="deaths"></span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card thanks" id="thanks">
+    <div class="item" id="fItem"><svg viewBox="0 0 34 34"><path fill="var(--accent)" d="M17 30S4 22 4 12.5A6.5 6.5 0 0 1 17 9a6.5 6.5 0 0 1 13 3.5C30 22 17 30 17 30z"/></svg><span class="k" data-label="follow"></span><span class="v" id="follower">–</span></div>
+    <div class="item" id="sItem"><svg viewBox="0 0 34 34"><path fill="var(--accent-2)" d="M17 3l4.2 8.6 9.5 1.4-6.9 6.7 1.6 9.4L17 24.6 8.6 29.1l1.6-9.4-6.9-6.7 9.5-1.4z"/></svg><span class="k" data-label="sub"></span><span class="v" id="sub">–</span></div>
+    <div class="item" id="rItem"><svg viewBox="0 0 34 34"><path fill="var(--accent)" d="M5 27c7-1 10-6 11-13 4 2 6 6 5 10 3-2 5-6 4-11 4 4 5 9 2 14z"/></svg><span class="k" data-label="raid"></span><span class="v" id="raid">–</span></div>
+  </div>
+</div>
+
+<script>
+Cozy.ready(function () {
+  var stage = document.getElementById("stage");
+  function $(id) { return document.getElementById(id); }
+  Cozy.scale(stage, 2560, 1440);
+  var bars = parseInt(Cozy.params.get("bars"), 10);
+  if (bars > 0) ["barTop", "barBottom"].forEach(function (id) { $(id).style.height = bars + "px"; $(id).hidden = false; });
+  var tab = (Cozy.params.get("tab") || "").split(",").map(Number);
+  if (bars > 0 && tab.length === 3 && tab[2] > bars) drawTab(bars, tab[0], tab[0] + tab[1], tab[2]);
+
+  // The top bar plus a rounded tab hanging down from it, joined by soft fillets: the fill is
+  // the bar itself, clipped to that outline; the hairline is an SVG stroke along the lower
+  // edge with the same two-colour run as the plain bar (a repeating gradient sliding by one tile).
+  function drawTab(b, x0, x1, h) {
+    var r = 28, f = 20, bar = $("barTop");
+    bar.style.height = h + "px";
+    bar.classList.add("has-tab");
+    bar.style.background = "var(--bars-bg, var(--bars-bg-top)) 0 0 / 100% " + b + "px no-repeat, " +
+      "linear-gradient(transparent " + b + "px, var(--bars-tab-bg) " + b + "px)";
+    bar.style.clipPath = "path('M0 0H2560V" + b + "H" + (x1 + f) + "Q" + x1 + " " + b + " " + x1 + " " + (b + f) +
+      "V" + (h - r) + "Q" + x1 + " " + h + " " + (x1 - r) + " " + h + "H" + (x0 + r) + "Q" + x0 + " " + h + " " + x0 + " " + (h - r) +
+      "V" + (b + f) + "Q" + x0 + " " + b + " " + (x0 - f) + " " + b + "H0Z')";
+    var edge = "M0 " + b + "H" + (x0 - f) + "Q" + x0 + " " + b + " " + x0 + " " + (b + f) + "V" + (h - r) +
+      "Q" + x0 + " " + h + " " + (x0 + r) + " " + h + "H" + (x1 - r) + "Q" + x1 + " " + h + " " + x1 + " " + (h - r) +
+      "V" + (b + f) + "Q" + x1 + " " + b + " " + (x1 + f) + " " + b + "H2560";
+    var svg = Cozy.runningLine(edge, 2560, h + 4);
+    svg.setAttribute("class", "tab-line");
+    bar.insertAdjacentElement("afterend", svg);
+  }
+  var chat = Cozy.off("chat") ? null : Cozy.mountChat(stage);
+  $("info").hidden = Cozy.off("info");
+  $("thanks").hidden = Cozy.off("thanks");
+
+  var seen = {};
+  function setName(id, item, value) {
+    $(id).textContent = value || "–";
+    $(item).hidden = !value && id !== "follower";
+    if (seen[id] !== undefined && seen[id] !== value && value && !Cozy.reduceMotion) {
+      var el = $(item); el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump");
+    }
+    seen[id] = value;
+  }
+
+  Cozy.connect({
+    onState: function (s) {
+      $("game").textContent = s.game || "Just Chatting";
+      $("uptime").textContent = Cozy.uptime();
+      $("viewers").textContent = s.viewers || 0;
+      $("deaths").textContent = s.deaths || 0;
+      $("deathsWrap").hidden = !s.deaths;
+      setName("follower", "fItem", s.last_follower);
+      setName("sub", "sItem", s.last_sub);
+      setName("raid", "rItem", s.last_raid);
+    },
+    onMessage: chat ? chat.add : null,
+    onClear: chat ? chat.clear : null
+  });
+});
+</script>
+</body>
+</html>

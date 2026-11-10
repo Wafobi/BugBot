@@ -1,0 +1,32 @@
+/* Theme "kaminfeuer" for the stat bars - the partner of terminal/themes/kaminfeuer.css, so one
+   ?theme=kaminfeuer means the same look on every source in the scene. Warm, see-through bars
+   instead of opaque ones: whatever sits underneath (the terminal background.html with its rising
+   embers, in that theme) shows through. No halftone pattern; the hairline runs between the same
+   muted ember and amber as the card rims. Loaded via ?theme=kaminfeuer by bars.html and chat.html.
+   Note: ?t.bar-bg-top=/t.bar-bg-bottom= on the URL still win over this file - leave them off,
+   or the bars go back to whatever colour they name. */
+:root {
+  --accent: #E9A85A;
+  --ink: #FFEFD9;
+  --dim: rgba(255, 239, 217, .55);
+  --sub: #F2937F;
+  --text-shadow: 0 0 14px rgba(232, 131, 58, .25);
+  --dot-live: #E8833A;
+  --dot-glow: rgba(232, 131, 58, .8);
+  --dot-off: #3A2A1E;
+
+  /* see-through: denser at the canvas edge, thinner towards the picture */
+  --bar-bg-top: linear-gradient(180deg, rgba(22, 13, 9, .92), rgba(22, 13, 9, .74));
+  --bar-bg-bottom: linear-gradient(0deg, rgba(22, 13, 9, .92), rgba(22, 13, 9, .74));
+  --fx: none;
+
+  /* same cosine run as bars.html's default, between #C9662C and #E9A85A */
+  --bar-line: repeating-linear-gradient(90deg,
+              #C9662C 0px, #CA682D 20px, #CF7536 40px, #D98740 60px, #E0974A 80px, #E6A256 100px,
+              #E9A85A 120px, #E6A256 140px, #E0974A 160px, #D98740 180px, #CF7536 200px, #CA682D 220px,
+              #C9662C 240px);
+  --bar-line-opacity: .75;
+
+  --cam-ring: var(--accent);
+  --cam-outer: rgba(201, 102, 44, .55);
+}

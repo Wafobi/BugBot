@@ -1,0 +1,281 @@
+@charset "utf-8";
+/*
+  Base layout for every page in this folder. Themes (themes/<name>.css) only set the tokens in
+  :root and, where they want a different shape, override a rule or two - see themes/README.md.
+*/
+:root {
+  --font: "Nunito", "Quicksand", ui-rounded, "Noto Sans", system-ui, sans-serif;
+  --font-display: var(--font);
+  --display-weight: 700;
+
+  --text: #4a2f1f;
+  --text-soft: #8a6249;
+  --accent: #e8833a;
+  --accent-2: #7d9a6a;
+  --motif-light: #fff6e8;
+
+  --card-bg: #fbf1e1;
+  --card-ring: 0 0 0 6px #f3e2c7;
+  --card-shadow: 0 18px 50px rgba(60, 30, 10, .35);
+  --card-border: 0 solid transparent;
+  --card-radius: 30px;
+  --edge-x: 60px;        /* distance of the cards from the canvas edge */
+  --edge-y: 56px;
+  --chat-w: 640px;
+  --chat-h: 760px;
+  --card-blur: none;
+  --card-inner: 3px dashed rgba(138, 98, 73, .28);
+
+  --scene-bg: radial-gradient(ellipse at 50% 110%, #8a4a22, #2b1810 70%);
+  --names: #b5562f, #7d5aa6, #4f7f5a, #b0702b, #a8455d, #3f6f8f;
+  --bubbles: none;
+  --bar-bg: rgba(0, 0, 0, .08);
+  --bar-fill: var(--accent);
+
+  /* letterbox bars (overlay.html?bars=184): a see-through gradient, darker towards the
+     canvas edge, a pattern on top, and a hairline at the edge facing the game that runs
+     between two colours - the same build as ../bars.html, in the theme's colours */
+  --bars-bg-top: linear-gradient(180deg, rgba(30, 16, 10, .95), rgba(43, 24, 16, .78));
+  --bars-bg-bottom: linear-gradient(0deg, rgba(30, 16, 10, .95), rgba(43, 24, 16, .78));
+  --bars-fx: none;
+  --bars-line-a: var(--accent);
+  --bars-line-b: var(--motif-light);
+  --bars-line-h: 3px;
+  --bars-tab-bg: rgba(46, 25, 15, .9);   /* the tab hangs over the game, so it needs more body */
+
+  --ambient-colors: #ffffff;
+  --ambient-count: 14;
+  --ambient-scene-count: 40;
+  --motif: candle;
+  --hero-line: off;
+
+  --label-intro: "heute im Stream";
+  --label-since: "seit";
+  --label-viewers: "zu Gast";
+  --label-deaths: "Hoppla";
+  --label-chat: "Plauderecke";
+  --label-follow: "neu dabei";
+  --label-sub: "Abo";
+  --label-raid: "Raid";
+  --label-start: "Gleich geht's los";
+  --label-start-sub: "mach's dir gemütlich";
+  --label-live: "Es geht los!";
+  --label-pause: "Kurz weg";
+  --label-pause-sub: "bin gleich wieder da";
+  --label-end: "Danke fürs Vorbeischauen";
+  --label-end-sub: "bis zum nächsten Mal";
+  --label-thanks: "Danke an";
+  --label-ad: "Kurze Werbepause";
+  --label-ad-sub: "danke fürs Bleiben";
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+.stage { position: absolute; left: 0; top: 0; transform-origin: 0 0;
+         font-family: var(--font); color: var(--text); -webkit-font-smoothing: antialiased; }
+.stage.full { width: 2560px; height: 1440px; }
+[hidden] { display: none !important; }
+
+/* --- cards --- */
+.card {
+  position: absolute; background: var(--card-bg); border: var(--card-border);
+  border-radius: var(--card-radius); box-shadow: var(--card-ring), var(--card-shadow);
+  backdrop-filter: var(--card-blur); -webkit-backdrop-filter: var(--card-blur);
+}
+.card::before {
+  content: ""; position: absolute; inset: 12px; border-radius: max(4px, calc(var(--card-radius) - 10px));
+  border: var(--card-inner); pointer-events: none;
+}
+.card > * { position: relative; }
+.card > .ambient { position: absolute; }
+
+.motif { display: inline-block; flex: none; width: 92px; height: 92px; }
+.motif svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.motif.small { width: 44px; height: 44px; }
+.motif.big { width: 220px; height: 220px; }
+.eyebrow { font-size: 26px; color: var(--text-soft); letter-spacing: .04em; }
+.display { font-family: var(--font-display); font-weight: var(--display-weight); line-height: 1.08; }
+
+/* --- overlay: letterbox bars --- */
+.lbar { position: absolute; left: 0; width: 2560px; overflow: hidden; }
+.lbar.top { top: 0; background: var(--bars-bg, var(--bars-bg-top)); }
+.lbar.bottom { bottom: 0; background: var(--bars-bg, var(--bars-bg-bottom)); }
+.lbar::before { content: ""; position: absolute; inset: 0; background: var(--bars-fx); pointer-events: none; }
+/* Cosine-spaced stops between the two colours, so the run has no hard kink at the peaks;
+   the tile is 240px and travels exactly 240px, which hides the jump back. */
+.lbar::after {
+  content: ""; position: absolute; left: 0; right: 0; height: var(--bars-line-h);
+  background: repeating-linear-gradient(90deg,
+    var(--bars-line-a) 0px,
+    color-mix(in srgb, var(--bars-line-b) 7%, var(--bars-line-a)) 20px,
+    color-mix(in srgb, var(--bars-line-b) 25%, var(--bars-line-a)) 40px,
+    color-mix(in srgb, var(--bars-line-b) 50%, var(--bars-line-a)) 60px,
+    color-mix(in srgb, var(--bars-line-b) 75%, var(--bars-line-a)) 80px,
+    color-mix(in srgb, var(--bars-line-b) 93%, var(--bars-line-a)) 100px,
+    var(--bars-line-b) 120px,
+    color-mix(in srgb, var(--bars-line-b) 93%, var(--bars-line-a)) 140px,
+    color-mix(in srgb, var(--bars-line-b) 75%, var(--bars-line-a)) 160px,
+    color-mix(in srgb, var(--bars-line-b) 50%, var(--bars-line-a)) 180px,
+    color-mix(in srgb, var(--bars-line-b) 25%, var(--bars-line-a)) 200px,
+    color-mix(in srgb, var(--bars-line-b) 7%, var(--bars-line-a)) 220px,
+    var(--bars-line-a) 240px);
+  -webkit-mask: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  mask: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  box-shadow: 0 0 12px var(--bars-line-a);
+  animation: bars-run 10s linear infinite;
+}
+.lbar.top::after { bottom: 0; }
+/* with ?tab= the top bar grows a tab (under the avatar): the shape comes from a clip-path, the
+   hairline from an SVG stroke that follows the outline - see overlay.html */
+.lbar.top.has-tab::after { display: none; }
+.tab-line { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none;
+            -webkit-mask: linear-gradient(90deg, transparent, #000 10%, #000 97%, transparent);
+            mask: linear-gradient(90deg, transparent, #000 10%, #000 97%, transparent);
+            filter: drop-shadow(0 0 6px var(--bars-line-a)); }
+.lbar.bottom::after { top: 0; animation-direction: reverse; }
+@keyframes bars-run { from { background-position-x: 0; } to { background-position-x: 240px; } }
+
+/* --- overlay: info top-left --- */
+.info { left: var(--edge-x); top: var(--edge-y); padding: 30px 46px 30px 38px; display: flex; gap: 28px; align-items: center; }
+.info .game { font-size: 50px; }
+.info .meta { margin-top: 8px; font-size: 28px; color: var(--text-soft); display: flex; gap: 10px; }
+.info .meta b { color: var(--text); font-weight: 800; }
+.info .meta .dot { opacity: .5; }
+
+/* --- overlay: thanks bottom-left --- */
+.thanks { left: var(--edge-x); bottom: var(--edge-y); padding: 26px 40px; display: flex; gap: 40px; font-size: 28px; }
+.thanks .item { display: flex; align-items: center; gap: 14px; }
+.thanks .item svg { width: 34px; height: 34px; flex: none; }
+.thanks .k { color: var(--text-soft); }
+.thanks .v { font-weight: 800; }
+.thanks .item.bump { animation: bump .8s ease-out; }
+@keyframes bump { 30% { transform: scale(1.1) rotate(-2deg); } }
+
+/* --- chat card (overlay and scenes) --- */
+.chat { right: var(--edge-x); bottom: var(--edge-y); width: var(--chat-w); height: var(--chat-h); padding: 38px 40px 34px;
+        display: flex; flex-direction: column; overflow: hidden; }
+.chat.left { right: auto; left: var(--edge-x); }
+.chat-head { margin: 0 0 18px; display: flex; gap: 14px; align-items: center;
+             font-family: var(--font-display); font-weight: var(--display-weight); font-size: 38px; }
+.log { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column;
+       justify-content: flex-end; gap: 16px; }
+.msg { font-size: 30px; line-height: 1.35; overflow-wrap: anywhere; animation: msg-in .6s ease-out both; }
+.msg .who { font-weight: 800; margin-right: 10px; color: var(--tint); }
+.msg.sys { font-style: italic; color: var(--text-soft); text-align: center; font-size: 26px; }
+.msg.still { animation: none; }
+@keyframes msg-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* --- scenes: start / pause / end --- */
+.scene-bg { position: absolute; inset: 0; background: var(--scene-bg); }
+.scene-bg > .ambient { position: absolute; inset: 0; }
+.hero { left: 50%; top: 50%; transform: translate(-50%, -50%); width: 1240px; padding: 80px 90px 76px;
+        display: flex; flex-direction: column; align-items: center; text-align: center; gap: 22px; }
+.with-chat .hero { left: var(--hero-x, calc((2560px - var(--chat-w) - var(--edge-x) - 60px) / 2)); }
+.with-chat.chat-left .hero { left: var(--hero-x, calc(2560px - (2560px - var(--chat-w) - var(--edge-x) - 60px) / 2)); }
+.hero { left: var(--hero-x, 50%); }  /* t.hero-x=1400px: horizontal centre of the scene card */
+/* --hero-line: on - the bars' running two-colour hairline as an outline around the scene card */
+.hero.lined { box-shadow: var(--card-shadow); }   /* the line takes the place of the ring */
+.hero.lined::after {
+  content: ""; position: absolute; inset: -4px; border-radius: calc(var(--card-radius) + 4px); padding: 4px;
+  background: repeating-linear-gradient(90deg,
+    var(--bars-line-a) 0px,
+    color-mix(in srgb, var(--bars-line-b) 7%, var(--bars-line-a)) 20px,
+    color-mix(in srgb, var(--bars-line-b) 25%, var(--bars-line-a)) 40px,
+    color-mix(in srgb, var(--bars-line-b) 50%, var(--bars-line-a)) 60px,
+    color-mix(in srgb, var(--bars-line-b) 75%, var(--bars-line-a)) 80px,
+    color-mix(in srgb, var(--bars-line-b) 93%, var(--bars-line-a)) 100px,
+    var(--bars-line-b) 120px,
+    color-mix(in srgb, var(--bars-line-b) 93%, var(--bars-line-a)) 140px,
+    color-mix(in srgb, var(--bars-line-b) 75%, var(--bars-line-a)) 160px,
+    color-mix(in srgb, var(--bars-line-b) 50%, var(--bars-line-a)) 180px,
+    color-mix(in srgb, var(--bars-line-b) 25%, var(--bars-line-a)) 200px,
+    color-mix(in srgb, var(--bars-line-b) 7%, var(--bars-line-a)) 220px,
+    var(--bars-line-a) 240px);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  filter: drop-shadow(0 0 10px var(--bars-line-a)) drop-shadow(0 0 3px var(--bars-line-a));
+  animation: bars-run 10s linear infinite; pointer-events: none;
+}
+.hero .motif.big { animation: bob 6s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-12px); } }
+.hero h1 { margin: 6px 0 0; font-size: 120px; }
+.hero .sub { font-size: 46px; color: var(--text-soft); }
+.pill { display: inline-flex; gap: 16px; align-items: center; padding: 16px 36px; border-radius: 999px;
+        background: var(--bar-bg); font-size: 34px; font-weight: 700; }
+.pill .k { color: var(--text-soft); font-weight: 600; }
+.hero.is-live h1 { color: var(--accent); animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.04); } }
+
+/* end recap */
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; width: 100%; margin-top: 18px; }
+.tile { background: var(--bar-bg); border-radius: calc(var(--card-radius) * .6); padding: 22px 10px 18px; }
+.tile .n { font-family: var(--font-display); font-weight: var(--display-weight); font-size: 64px; color: var(--accent); line-height: 1; }
+.tile .l { margin-top: 8px; font-size: 26px; color: var(--text-soft); }
+.tile { animation: msg-in .6s ease-out both; }
+.names { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 14px; max-height: 250px; overflow: hidden; }
+.names .eyebrow { width: 100%; margin-top: 10px; }
+.names span.n { padding: 8px 22px; border-radius: 999px; background: var(--bar-bg); font-size: 28px; font-weight: 700;
+                color: var(--tint, var(--text)); animation: msg-in .5s ease-out both; }
+.names span.n small { font-weight: 600; color: var(--text-soft); margin-left: 8px; font-size: 22px; }
+
+/* ad break / progress */
+.bar { width: 100%; height: 22px; border-radius: 999px; background: var(--bar-bg); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--bar-fill); transition: width 1s linear; }
+.bar.indeterminate > i { width: 30%; animation: indet 2.4s ease-in-out infinite; }
+@keyframes indet { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+
+/* --- ambient particles --- */
+.ambient { inset: 0; overflow: hidden; pointer-events: none; border-radius: inherit; z-index: 0; }
+.ambient i { position: absolute; display: block; }
+.amb-embers i { bottom: -10px; width: var(--s); height: var(--s); border-radius: 50%; background: var(--c);
+                filter: blur(1px); opacity: 0; animation: amb-rise linear infinite; }
+@keyframes amb-rise { 0% { opacity: 0; transform: translateY(0); } 15% { opacity: .65; }
+                      100% { opacity: 0; transform: translate(40px, calc(var(--fall) * -1)); } }
+.amb-rain i { top: -40px; width: 3px; height: calc(var(--s) * 4); border-radius: 3px;
+              background: linear-gradient(transparent, var(--c)); animation: amb-fall linear infinite; }
+@keyframes amb-fall { to { transform: translateY(var(--fall)); } }
+.amb-snow i { top: -20px; width: var(--s); height: var(--s); border-radius: 50%; background: var(--c);
+              animation: amb-snow linear infinite; }
+@keyframes amb-snow { 0% { transform: translate(0, 0); } 50% { transform: translate(34px, calc(var(--fall) * .5)); }
+                      100% { transform: translate(-10px, var(--fall)); } }
+.amb-leaves i, .amb-petals i { top: -40px; width: var(--s); height: calc(var(--s) * .62); background: var(--c);
+                               border-radius: 0 80% 0 80%; animation: amb-leaf linear infinite; opacity: .9; }
+.amb-petals i { border-radius: 70% 0 70% 0 / 90% 0 90% 0; }
+@keyframes amb-leaf {
+  0% { transform: translate(0, 0) rotate(0); }
+  25% { transform: translate(44px, calc(var(--fall) * .25)) rotate(100deg); }
+  50% { transform: translate(-24px, calc(var(--fall) * .5)) rotate(190deg); }
+  75% { transform: translate(34px, calc(var(--fall) * .75)) rotate(290deg); }
+  100% { transform: translate(0, var(--fall)) rotate(360deg); }
+}
+.amb-steam i { bottom: -80px; width: var(--s); height: var(--s); border-radius: 50%; background: var(--c);
+               filter: blur(20px); opacity: 0; animation: amb-steam ease-out infinite; }
+@keyframes amb-steam { 0% { opacity: 0; transform: translateY(0) scale(.6); } 30% { opacity: .4; }
+                       100% { opacity: 0; transform: translate(30px, calc(var(--fall) * -.75)) scale(1.9); } }
+.amb-stars i { width: var(--s); height: var(--s); border-radius: 50%; background: var(--c);
+               box-shadow: 0 0 10px var(--c); animation: amb-twinkle ease-in-out infinite; }
+@keyframes amb-twinkle { 50% { opacity: .15; } }
+.amb-fireflies i { width: var(--s); height: var(--s); border-radius: 50%; background: var(--c);
+                   box-shadow: 0 0 16px 5px var(--c); animation-name: amb-wander, amb-twinkle;
+                   animation-timing-function: ease-in-out; animation-iteration-count: infinite;
+                   animation-direction: alternate, normal; }
+.amb-dust i { width: var(--s); height: var(--s); border-radius: 50%; background: var(--c); opacity: .45;
+              filter: blur(1px); animation: amb-wander linear infinite alternate; }
+@keyframes amb-wander { 0% { transform: translate(0, 0); } 33% { transform: translate(60px, -40px); }
+                        66% { transform: translate(-30px, -90px); } 100% { transform: translate(40px, -20px); } }
+
+/* motif details that move */
+.m-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: flicker 2.6s ease-in-out infinite; }
+@keyframes flicker { 0%, 100% { transform: scale(1) rotate(-2deg); } 30% { transform: scale(1.06, .94) rotate(3deg); }
+                     60% { transform: scale(.95, 1.06) rotate(-3deg); } }
+.m-steam { animation: steam 3.5s ease-in-out infinite; }
+.m-steam:nth-of-type(2) { animation-delay: -1.7s; }
+@keyframes steam { 0% { opacity: 0; transform: translateY(6px); } 40% { opacity: .9; } 100% { opacity: 0; transform: translateY(-8px); } }
+.m-glow { animation: amb-twinkle 3s ease-in-out infinite; }
+.m-glow:nth-of-type(2n) { animation-delay: -1.2s; }
+.m-glow:nth-of-type(3n) { animation-delay: -2.1s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient i, .msg, .tile, .names span.n, .hero .motif.big, .hero.is-live h1, .m-flame, .m-steam, .m-glow,
+  .thanks .item.bump, .bar.indeterminate > i, .lbar::after, .hero.lined::after { animation: none !important; }
+}

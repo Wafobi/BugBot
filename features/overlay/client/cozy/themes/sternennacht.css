@@ -1,0 +1,32 @@
+@charset "utf-8";
+/* 7 · Sternennacht - Mitternachtsblau und Lila, Mond, Sterne funkeln. */
+:root {
+  --text: #efe9ff;
+  --text-soft: #b3a7d6;
+  --accent: #ffd98a;
+  --accent-2: #b69cff;
+  --motif-light: #fff3c4;
+  --card-bg: linear-gradient(160deg, rgba(48, 38, 92, .88), rgba(24, 20, 56, .9));
+  --card-ring: 0 0 0 2px rgba(182, 156, 255, .35);
+  --card-shadow: 0 0 60px rgba(150, 120, 255, .3), 0 24px 60px rgba(5, 4, 20, .6);
+  --card-radius: 36px;
+  --card-blur: blur(10px);
+  --card-inner: 0 solid transparent;
+  --scene-bg: radial-gradient(ellipse at 75% 20%, #4a3a8a, transparent 55%), linear-gradient(#0e0b26, #241a4f);
+  --names: #ffd98a, #f7a8d8, #a8d8ff, #c3b1ff, #b5f0c0;
+  --bar-bg: rgba(255, 255, 255, .08);
+  --ambient: stars;
+  --ambient-colors: #ffffff, #ffd98a, #c3b1ff;
+  --ambient-count: 30;
+  --ambient-scene-count: 140;
+  --motif: moon;
+  --label-intro: "heute Nacht";
+  --label-viewers: "Sterngucker";
+  --label-chat: "Sternenfunk";
+  --label-follow: "neuer Stern";
+  --label-pause: "Kurz Sterne zählen";
+  --label-start: "Der Mond geht auf";
+  --label-end: "Schlaft gut";
+  --label-end-sub: "danke für diese Nacht";
+}
+.card { background: var(--card-bg); }

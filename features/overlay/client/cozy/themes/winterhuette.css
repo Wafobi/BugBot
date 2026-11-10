@@ -1,0 +1,32 @@
+@charset "utf-8";
+/* 5 · Winterhütte - Holzrahmen mit Schneekappe, Wollweiß, Schnee rieselt. */
+:root {
+  --text: #2f3b4a;
+  --text-soft: #6f7f92;
+  --accent: #8a5a3b;
+  --accent-2: #4f7ea8;
+  --motif-light: #ffffff;
+  --card-bg: #f7f9fc;
+  --card-ring: 0 0 0 10px #8a5a3b;
+  --card-shadow: 0 -10px 0 8px #ffffff, 0 22px 50px rgba(20, 30, 50, .45);
+  --card-radius: 18px;
+  --card-inner: 3px dotted rgba(79, 126, 168, .3);
+  --scene-bg: radial-gradient(ellipse at 50% 120%, #ffffff 0 20%, transparent 50%),
+              linear-gradient(#22344f, #4d6c8f 70%, #9db6cf);
+  --names: #b5443b, #2f6b8f, #4f7a4a, #8a5a3b, #6b4f9a;
+  --bar-bg: #e8eef5;
+  --ambient: snow;
+  --ambient-colors: #ffffff, #e8f1fb;
+  --ambient-count: 22;
+  --ambient-scene-count: 90;
+  --motif: cabin;
+  --label-intro: "heute in der Hütte";
+  --label-viewers: "am Ofen";
+  --label-chat: "Hüttenfunk";
+  --label-follow: "reingeschneit";
+  --label-pause: "Kurz Holz holen";
+  --label-start: "Die Hütte wird warm";
+  --label-start-sub: "Schuhe aus, Socken an";
+  --label-end: "Danke fürs Aufwärmen";
+}
+.chat-head { color: var(--accent); }

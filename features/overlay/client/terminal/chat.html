@@ -255,6 +255,28 @@
 })();
 </script>
 
+<script>
+(function () {
+  /* Glass toggle from the Stream Deck: Bitfocus Companion's OBS module sends a "Custom Command"
+       CallVendorRequest {"vendorName":"obs-browser","requestType":"emit_event",
+                          "requestData":{"event_name":"wafobi-chat-glass","event_data":{"mode":"toggle"}}}
+     and obs-browser hands it to every browser source as a window event. mode: toggle | glass |
+     solid. Sets data-glass on <html>; what "glass" looks like is up to the theme (glut and the
+     themes built on it: see --chat-glass-alpha / --chat-glass-blur). Remembered in localStorage,
+     so a reload (OBS refreshing the source on scene change) keeps the state. */
+  var root = document.documentElement, KEY = "wafobi-chat-glass";
+  function set(on) {
+    if (on) root.setAttribute("data-glass", "1"); else root.removeAttribute("data-glass");
+    try { localStorage.setItem(KEY, on ? "1" : "0"); } catch (e) {}
+  }
+  try { if (localStorage.getItem(KEY) === "1") root.setAttribute("data-glass", "1"); } catch (e) {}
+  window.addEventListener("wafobi-chat-glass", function (event) {
+    var mode = (event.detail && event.detail.mode) || "toggle";
+    set(mode === "glass" ? true : mode === "solid" ? false : !root.hasAttribute("data-glass"));
+  });
+})();
+</script>
+
 <div class="stage">
   <div class="chat-frame">
     <div class="titlebar">
@@ -322,7 +344,11 @@
     while (chatLog.children.length > maxLines) chatLog.removeChild(chatLog.firstChild);
 
     var textEl = row.querySelector(".chat-text");
-    if (reduceMotion || !animate) { textEl.textContent = text; fitLog(row); return; }
+    // A theme can switch the typewriter off with --chat-typing: off (kaminfeuer does): the
+    // line then appears whole and fades in. Read per line - the theme loads asynchronously.
+    var noTyping = getComputedStyle(document.documentElement).getPropertyValue("--chat-typing").trim() === "off";
+    if (animate && noTyping && !reduceMotion) row.classList.add("chat-line--fade");
+    if (reduceMotion || !animate || noTyping) { textEl.textContent = text; fitLog(row); return; }
     var i = 0;
     (function type() {
       textEl.textContent = text.slice(0, i);

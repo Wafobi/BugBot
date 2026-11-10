@@ -572,6 +572,8 @@
 (function () {
   /* Synthesized, royalty-free sci-fi terminal sound — no samples, no modem noises. */
   var AudioCtx = window.AudioContext || window.webkitAudioContext;
+  // ?mute=1: no sound at all - for previews that show several scenes side by side
+  if (new URLSearchParams(location.search).get("mute") === "1") AudioCtx = null;
   if (!AudioCtx) {
     var noop = function () {};
     window.__bootSound = { blip: noop, ready: noop, glitch: noop, key: noop, plotter: noop, bgm: noop };
@@ -736,11 +738,160 @@
     })();
   }
 
+
+  // --- Sound theme "fire" ------------------------------------------------------------------
+  // A theme can set --sound-theme: fire in its :root (kaminfeuer does). Then the machine
+  // sounds go quiet (keys, plotter, blips, glitches) and the rest turns warm: a fireplace -
+  // breathing roar, hiss, crackle in bursts, the odd log snapping - with a slow music-box line
+  // instead of the chiptune loop, soft bells instead
+  // of the fanfare. Decided on every call, not once: the theme's stylesheet loads
+  // asynchronously and may arrive after this script has run.
+  function fireTheme() {
+    return getComputedStyle(document.documentElement).getPropertyValue("--sound-theme").trim() === "fire";
+  }
+  function themed(machine, fire) {
+    return function () { return (fireTheme() ? fire : machine).apply(null, arguments); };
+  }
+  function silent() {}
+
+  // a bell: a sine with a slow decay, plus a quieter partial an octave up
+  function bell(freq, start, duration, peak) {
+    tone(freq, start, duration, "sine", peak);
+    tone(freq * 2, start, duration * 0.6, "sine", peak * 0.25);
+  }
+  function fireChime() {        // live / recap done: a rising A-major bell arpeggio
+    var t = ctx.currentTime + 0.05;
+    [440, 554.37, 659.25, 880].forEach(function (f, i) { bell(f, t + i * 0.16, 1.8, 0.045); });
+  }
+  function fireReady() {        // a smaller two-note bell
+    var t = ctx.currentTime;
+    bell(659.25, t, 1.4, 0.04);
+    bell(880, t + 0.2, 1.8, 0.04);
+  }
+
+  var fireStarted = false;
+  function fireBGM() {
+    if (fireStarted) return;
+    fireStarted = true;
+    var t0 = ctx.currentTime;
+
+    // Everything below goes through one bus: a gentle low-pass, as if sitting a few metres
+    // from the fireplace rather than with a microphone in it.
+    var bus = ctx.createGain();
+    var air = ctx.createBiquadFilter(); air.type = "lowpass"; air.frequency.value = 9000;
+    bus.connect(air).connect(ctx.destination);
+    function panner(v) {
+      if (!ctx.createStereoPanner) return null;
+      var p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, v)); return p;
+    }
+
+    // Two noise buffers, made once and reused for every sound below by starting them at a
+    // random offset - no new buffer per crackle.
+    function noise(seconds, brown) {
+      var n = Math.floor(ctx.sampleRate * seconds), b = ctx.createBuffer(1, n, ctx.sampleRate);
+      var d = b.getChannelData(0), last = 0;
+      for (var i = 0; i < n; i++) {
+        var w = Math.random() * 2 - 1;
+        if (brown) { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; } else d[i] = w;
+      }
+      return b;
+    }
+    var white = noise(2, false), brownBuf = noise(5, true);
+    function loop(buf, out) {
+      var s = ctx.createBufferSource(); s.buffer = buf; s.loop = true;
+      s.connect(out); s.start(t0, Math.random() * buf.duration);
+    }
+
+    // 1. the roar: low brown noise that "breathes" - its level drifts all the time, like the
+    //    flames themselves
+    var roarLp = ctx.createBiquadFilter(); roarLp.type = "lowpass"; roarLp.frequency.value = 180;
+    var roar = ctx.createGain(); roar.gain.setValueAtTime(0, t0); roar.gain.linearRampToValueAtTime(0.02, t0 + 3);
+    loop(brownBuf, roarLp); roarLp.connect(roar).connect(bus);
+    // 2. the hiss: hot wood and gas, very quiet and bright, drifting on its own
+    var hissBp = ctx.createBiquadFilter(); hissBp.type = "bandpass"; hissBp.frequency.value = 4500; hissBp.Q.value = 0.7;
+    var hiss = ctx.createGain(); hiss.gain.setValueAtTime(0, t0); hiss.gain.linearRampToValueAtTime(0.0015, t0 + 3);
+    loop(white, hissBp); hissBp.connect(hiss).connect(bus);
+    setTimeout(function breathe() {
+      var t = ctx.currentTime;
+      // small, slow swells only - big fast ones were what made it sound like wind
+      roar.gain.setTargetAtTime(0.015 + Math.random() * 0.012, t, 0.8);
+      hiss.gain.setTargetAtTime(0.0008 + Math.random() * 0.0015, t, 0.8);
+      setTimeout(breathe, 600 + Math.random() * 1200);
+    }, 3000);
+
+    // 3. crackle: dry "ticks" - a hard attack and a fast decay, band-passed at a pitch that
+    //    changes every time, so it sounds like wood rather than noise. Clearly above the roar:
+    //    the crackle is the fire, the roar only the bed under it.
+    function click(when, peak, bright, side) {
+      var s = ctx.createBufferSource(); s.buffer = white;
+      var len = 0.002 + Math.random() * 0.01;
+      var bp = ctx.createBiquadFilter(); bp.type = "bandpass";
+      bp.frequency.value = bright ? 2500 + Math.random() * 3000 : 900 + Math.random() * 1600;
+      bp.Q.value = 1 + Math.random() * 2;
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(0, when);
+      g.gain.linearRampToValueAtTime(peak, when + 0.0004);
+      g.gain.exponentialRampToValueAtTime(0.0001, when + len);
+      var p = panner(side);
+      s.connect(bp).connect(g);
+      if (p) g.connect(p).connect(bus); else g.connect(bus);
+      s.start(when, Math.random() * 1.9, len + 0.01);
+    }
+    //    ...mostly alone, sometimes in a little salvo of up to ten within a fraction of a second
+    function burst() {
+      var t = ctx.currentTime + 0.01, side = Math.random() * 1.4 - 0.7;
+      var n = 1 + Math.floor(Math.pow(Math.random(), 1.6) * 10), span = 0.02 + Math.random() * 0.2;
+      for (var k = 0; k < n; k++) {
+        click(t + Math.random() * span, 0.06 * Math.pow(10, Math.random() * 0.75), Math.random() < 0.55,
+              side + (Math.random() - 0.5) * 0.2);
+      }
+    }
+    //    ...at natural random intervals (exponentially distributed, about eight a second)
+    (function crackle() {
+      burst();
+      setTimeout(crackle, 20 - Math.log(1 - Math.random()) * 110);
+    })();
+
+    // 4. now and then a log snaps: a louder, lower crack with a short wooden ring, and a few
+    //    sparks after it
+    function snap() {
+      var t = ctx.currentTime + 0.01, side = Math.random() * 1.2 - 0.6;
+      var s = ctx.createBufferSource(); s.buffer = white;
+      var bp = ctx.createBiquadFilter(); bp.type = "bandpass";
+      bp.frequency.value = 500 + Math.random() * 1100; bp.Q.value = 6 + Math.random() * 6;
+      var g = ctx.createGain(), ring = 0.05 + Math.random() * 0.07;
+      g.gain.setValueAtTime(0.3 + Math.random() * 0.2, t); g.gain.exponentialRampToValueAtTime(0.0001, t + ring);
+      var p = panner(side);
+      s.connect(bp).connect(g);
+      if (p) g.connect(p).connect(bus); else g.connect(bus);
+      s.start(t, Math.random() * 1.9, 0.006);
+      click(t, 0.25, true, side);
+      for (var k = 0; k < 3 + Math.floor(Math.random() * 5); k++) {
+        click(t + 0.03 + Math.random() * 0.35, 0.04 + Math.random() * 0.08, true, side + (Math.random() - 0.5) * 0.3);
+      }
+    }
+    (function snaps() {
+      setTimeout(function () { snap(); snaps(); }, 2000 + Math.random() * 6000);
+    })();
+
+    // a slow music-box line in A minor pentatonic, soft sines with a long ring
+    var STEP = 680;
+    var LINE = [220, null, 329.63, 261.63, null, 392, 329.63, null,
+                220, null, 293.66, 261.63, null, 329.63, null, null];
+    var step = 0;
+    setTimeout(function next() {
+      var f = LINE[step % LINE.length];
+      if (f) bell(f * 2, ctx.currentTime, 1.6, 0.014);
+      step++;
+      setTimeout(next, STEP);
+    }, 2500);
+  }
+
   window.__bootSound = {
-    blip: playBlip, ready: playReadyChime, glitch: playGlitchZap, key: playKeyClick, plotter: playPlotterTick,
-    bgm: playBGM,
+    blip: themed(playBlip, silent), ready: themed(playReadyChime, fireReady), glitch: themed(playGlitchZap, silent),
+    key: themed(playKeyClick, silent), plotter: themed(playPlotterTick, silent), bgm: themed(playBGM, fireBGM),
   };
-  window.__bootGate.onReady(playBootChime);
+  window.__bootGate.onReady(themed(playBootChime, fireChime));
 })();
 </script>
 

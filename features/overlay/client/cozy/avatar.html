@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cozy – Avatar-Rahmen</title>
+<!--
+  Ein Rahmen mit durchsichtiger Mitte für die Avatar- oder Kamera-Quelle darunter.
+  Keine Verbindung nötig. Browserquelle 2560x1440 an (0,0), über die Avatar-Quelle legen.
+  Parameter:
+    theme=          wie überall
+    x= y=           linke obere Ecke des Ausschnitts in px (Standard: oben rechts)
+    w= h=           Größe des Ausschnitts (Standard 560x316, ≈ 16:9)
+    name=           Text im Namensschild unter dem Rahmen (leer = kein Schild)
+    round=1         runder Ausschnitt statt Rechteck (nimmt w als Durchmesser)
+    demo=1          Ersatzbild im Ausschnitt, zum Einrichten
+-->
+<link rel="stylesheet" href="cozy.css">
+<script src="cozy.js"></script>
+<style>
+  /* the ring is a masked fill rather than a border, so a gradient --card-bg works too; outer
+     shadows never paint under the box itself, so the middle stays see-through */
+  .frame { position: absolute; border-radius: var(--card-radius); box-shadow: var(--card-ring), var(--card-shadow); }
+  .frame .fill { position: absolute; inset: 0; padding: 16px; border-radius: inherit; background: var(--card-bg);
+                 -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+                 -webkit-mask-composite: xor; mask-composite: exclude; }
+  .frame.round { border-radius: 50%; }
+  .frame::after { content: ""; position: absolute; inset: 6px; border-radius: inherit; border: var(--card-inner); pointer-events: none; }
+  .frame.demo::before { content: ""; position: absolute; inset: 16px; border-radius: inherit; background: linear-gradient(135deg, #6b8fb5, #a7c4a0); }
+  .frame .corner { position: absolute; left: -48px; bottom: -40px; transform: rotate(-8deg); }
+  .tag { position: absolute; left: 50%; bottom: -44px; transform: translateX(-50%); white-space: nowrap;
+         background: var(--card-bg); border-radius: 999px; padding: 10px 34px; font-size: 32px; font-weight: 800;
+         box-shadow: var(--card-ring), 0 8px 20px rgba(0,0,0,.25); font-family: var(--font-display); }
+</style>
+</head>
+<body>
+<div class="stage full" id="stage">
+  <div class="frame" id="frame">
+    <div class="fill"></div>
+    <span class="motif corner" data-motif></span>
+    <div class="tag" id="tag" hidden></div>
+  </div>
+</div>
+<script>
+Cozy.ready(function () {
+  var p = Cozy.params, frame = document.getElementById("frame");
+  Cozy.scale(document.getElementById("stage"), 2560, 1440);
+  var round = p.get("round") === "1";
+  var w = +p.get("w") || (round ? 380 : 560), h = round ? w : (+p.get("h") || 316);
+  var x = p.has("x") ? +p.get("x") : 2560 - 70 - w - 32, y = p.has("y") ? +p.get("y") : 60;
+  frame.style.cssText = "left:" + (x - 16) + "px;top:" + (y - 16) + "px;width:" + (w + 32) + "px;height:" + (h + 32) + "px";
+  frame.classList.toggle("round", round);
+  frame.classList.toggle("demo", p.get("demo") === "1");
+  var name = p.get("name");
+  if (name) { var tag = document.getElementById("tag"); tag.textContent = name; tag.hidden = false; }
+});
+</script>
+</body>
+</html>

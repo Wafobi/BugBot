@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Cozy – Werbepause</title>
+<!--
+  Kleine Karte während einer Werbepause. Der Balken folgt der echten Werbepause
+  (ad_break_started_at/ad_break_seconds aus features/overlay), genau wie
+  platforms/obs/client/terminal/ad-break.html. Ohne laufende Pause bewegt er sich unbestimmt.
+  Browserquelle z. B. 1000x300, transparent. Die Karte füllt die Quelle.
+  at=top: stattdessen eine volle 2560x1440-Quelle, die Karte sitzt oben in der Mitte.
+  Parameter: theme= token= host= port= demo=1 at=top t.NAME=
+-->
+<link rel="stylesheet" href="cozy.css">
+<script src="cozy.js"></script>
+<style>
+  .stage.ad { width: 1000px; height: 300px; }
+  .stage.ad.full { width: 2560px; height: 1440px; }
+  .ad .card { inset: 20px; padding: 30px 46px 30px 38px; display: flex; gap: 32px; align-items: center; }
+  .ad .body { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+  .ad h1 { margin: 0; font-size: 54px; }
+  .ad .row { display: flex; justify-content: space-between; font-size: 26px; color: var(--text-soft); }
+  .ad .row b { color: var(--text); font-weight: 800; }
+  .ad .motif { width: 140px; height: 140px; }
+  .stage.full .card { inset: auto; left: calc(50% - 480px); top: var(--edge-y); width: 960px; height: 260px; }
+</style>
+</head>
+<body>
+<div class="stage ad" id="stage">
+  <div class="card">
+    <span class="motif" data-motif></span>
+    <div class="body">
+      <h1 class="display" data-label="ad"></h1>
+      <div class="bar indeterminate" id="bar"><i></i></div>
+      <div class="row"><span data-label="ad-sub"></span><span id="left"></span></div>
+    </div>
+  </div>
+</div>
+<script>
+Cozy.ready(function () {
+  function $(id) { return document.getElementById(id); }
+  if (Cozy.params.get("at") === "top") { $("stage").classList.add("full"); Cozy.scale($("stage"), 2560, 1440); }
+  else Cozy.scale($("stage"), 1000, 300);
+  var ad = { startedAt: null, seconds: 0 };
+  function render() {
+    var bar = $("bar"), fill = bar.firstElementChild;
+    if (!ad.startedAt || !ad.seconds) { bar.classList.add("indeterminate"); fill.style.width = ""; $("left").textContent = ""; return; }
+    var gone = Date.now() / 1000 - ad.startedAt, left = ad.seconds - gone;
+    bar.classList.remove("indeterminate");
+    fill.style.width = Math.min(100, Math.max(0, gone / ad.seconds * 100)) + "%";
+    $("left").innerHTML = left > 0 ? "noch <b>" + Cozy.mmss(left) + "</b>" : "<b>gleich weiter</b>";
+  }
+  setInterval(render, 1000);
+  Cozy.connect({
+    demoState: { ad_break_started_at: Date.now() / 1000 - 20, ad_break_seconds: 90 },
+    onState: function (s) { ad.startedAt = s.ad_break_started_at; ad.seconds = s.ad_break_seconds; render(); }
+  });
+});
+</script>
+</body>
+</html>

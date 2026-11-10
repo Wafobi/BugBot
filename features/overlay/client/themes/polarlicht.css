@@ -1,0 +1,24 @@
+/* Theme "polarlicht" for the stat bars - the partner of terminal/themes/polarlicht.css: the same
+   see-through dark bars as kaminfeuer, in night blue, with the hairline running cyan <-> magenta
+   (bars.html's own aurora hairline, muted to the card rims). Leave t.bar-bg-* off the URL. */
+:root {
+  --accent: #5FEAF5;
+  --ink: #EAF7FF;
+  --dim: rgba(234, 247, 255, .55);
+  --sub: #F25AA0;
+  --text-shadow: 0 0 14px rgba(95, 234, 245, .22);
+  --dot-live: #F22A80;
+  --dot-glow: rgba(242, 42, 128, .8);
+  --dot-off: #24284f;
+  --bar-bg-top: linear-gradient(180deg, rgba(9, 11, 34, .92), rgba(9, 11, 34, .74));
+  --bar-bg-bottom: linear-gradient(0deg, rgba(9, 11, 34, .92), rgba(9, 11, 34, .74));
+  --fx: none;
+  /* two colours running cyan <-> magenta (the card rims stay one colour) */
+  --bar-line: repeating-linear-gradient(90deg,
+              #5FEAF5 0px, #62E3F0 20px, #6FCCE2 40px, #87A9CB 60px, #A884B2 80px, #C8619A 100px,
+              #D9407F 120px, #C8619A 140px, #A884B2 160px, #87A9CB 180px, #6FCCE2 200px, #62E3F0 220px,
+              #5FEAF5 240px);
+  --bar-line-opacity: .75;
+  --cam-ring: var(--accent);
+  --cam-outer: rgba(217, 64, 127, .55);
+}

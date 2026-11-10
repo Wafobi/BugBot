@@ -12,6 +12,8 @@ Shipped:
 | *(none)* | the shipped look — indigo/carmine fog, cyan fill, magenta outline |
 | `sunset` | warm amber/coral, no cool colours left |
 | `mono` | grayscale, minimal, no pattern |
+| `kaminfeuer` | warm and see-through, no halftone, hairline in muted ember/amber - partner of `terminal/themes/kaminfeuer.css`, whose `background.html` embers then rise behind the bars. Leave `t.bar-bg-*` off the URL, or they override the see-through bars |
+| `polarlicht` | the same see-through bars as `kaminfeuer`, in night blue with a cyan <-> magenta hairline - partner of `terminal/themes/polarlicht.css` |
 
 A theme only needs to set the tokens it wants to change — everything else falls back to the
 `:root` block in `bars.html`/`chat.html`. Precedence, low to high:

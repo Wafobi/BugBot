@@ -1,0 +1,103 @@
+/* Theme "glut" - the terminal pages with the terminal taken out: same layout, same positions,
+   same scenes, but nothing left that reads as a machine.
+
+     colours   honey/coral/cocoa instead of neon, warm brown instead of near-black
+     type      a plain rounded sans everywhere instead of monospace / the VT323 pixel font
+     windows   no traffic-light dots, no file names, no PID - softly rounded cards; the chat
+               card is titled "Chat", the avatar frame has no title bar at all
+     prompts   no shell prompts, commands or block cursors - a friendly line instead where
+               the layout needs one
+     effects   no character rain, no glitches, no scanlines, no braille spinners, no ASCII art;
+               the boot scene's fake log is gone, the end scene's recap lines stay, without
+               timestamps or INFO/OK tags
+
+   Unlike the colour-only themes next to it this one restyles and hides elements, and swaps a few
+   texts via CSS content. The pages themselves are untouched; ?theme=aurora etc. look exactly as
+   before. Same file as platforms/obs/client/terminal/themes/glut.css - keep both in sync by hand
+   (see README.md). Pairs with bars.html?theme=sunset. */
+:root {
+  --amber: #FFBE7A;
+  --amber-soft: #F2937F;
+  --amber-dim: #9A7A64;
+  --glow: rgba(255, 168, 96, 0.30);
+
+  --ink: #2E211A;
+  --ink-deep: #211813;
+  --ink-line: #4D382C;
+
+  --cyan: #A6DCCB;
+  --green: #C3DE9E;
+  --red: #F4A49A;
+  --pink: #F3AECB;
+
+  --font-body: "Nunito", "Quicksand", ui-rounded, "Noto Sans", system-ui, sans-serif;
+  --font-display: "Nunito", "Quicksand", ui-rounded, "Noto Sans", system-ui, sans-serif;
+
+  /* background.html */
+  --ground: #1A110C;
+  --ground-deep: #140D09;
+  --pattern-alpha: .12;
+  /* video.html */
+  --frame-radius: 18px;
+}
+
+/* ---- windows -> cards ---------------------------------------------------------------- */
+.chat-frame, .cam-frame, .crt { border-radius: 18px !important; border-color: var(--ink-line) !important; }
+.dots, .icon-art, .cursor, .geom { display: none !important; }
+.titlebar { background: transparent !important; border-bottom-color: rgba(255, 190, 122, .12) !important; }
+/* file names: hidden; the chat card gets a plain title instead */
+.titlebar .filename { font-size: 0 !important; }
+.chat-frame .titlebar .filename::after { content: "Chat"; font-size: 15px; font-weight: 700; color: var(--amber); letter-spacing: .02em; }
+.frame .titlebar .filename { font-size: 15px !important; color: var(--amber) !important; }  /* video.html: the title is the user's own text, keep it */
+.frame .titlebar { background: var(--ink) !important; }          /* video.html: the bar sits over the video, it needs its ground */
+.cam-frame .titlebar { display: none !important; }               /* avatar frame: no bar at all */
+
+/* ---- no scanlines, no glitches, no rain ---------------------------------------------- */
+.chat-screen::before, .cam-viewport::before, .screen::before, .cutout.crt::before { display: none !important; }
+.scanlines, .glitch-slice, #rain { display: none !important; }
+html:has(#rain), body:has(#rain) {
+  background: radial-gradient(ellipse at 50% 115%, #5a3220 0%, #2b1b13 45%, var(--ink-deep) 80%) !important;
+}
+
+/* ---- prompts and commands ------------------------------------------------------------ */
+.chat-input { display: none !important; }
+.body-stack > .prompt { display: none !important; }              /* pause / ad break */
+.hero-text .prompt, .hero-text .sub { display: none !important; } /* boot / end */
+.hero-text::after { display: block; margin-top: 6px; font-size: 17px; color: var(--amber-dim); }
+body:has(#statusBadge) .hero-text::after { content: "mach's dir gemütlich"; }
+body:has(#rain):not(:has(#statusBadge)) .hero-text::after { content: "danke, dass ihr da wart"; }
+
+/* headings in normal case */
+.hero-text h1, .caption { text-transform: lowercase; }
+.hero-text h1::first-letter, .caption::first-letter { text-transform: uppercase; }
+.hero-text h1 { font-size: clamp(22px, 4vw, 32px) !important; font-weight: 800; letter-spacing: 0 !important;
+                text-shadow: 0 0 18px var(--glow); }
+.caption { font-size: 24px !important; font-weight: 800; letter-spacing: 0 !important; }
+
+/* spinners with braille frames and jokes -> one calm line */
+#spinnerLabel { display: none !important; }
+.bar-row::before, .progress-row::before { font-size: 14px; color: var(--amber-dim); }
+body:has(.caption):has(#timer) .bar-row::before { content: "bin gleich wieder da"; }
+body:has(.caption):has(#pct) .bar-row::before { content: "gleich geht's weiter - danke fürs Bleiben"; }
+.progress-row::before { content: "gleich geht's los"; }
+
+/* ---- logs ---------------------------------------------------------------------------- */
+body:has(#statusBadge) .log { display: none !important; }        /* boot: the fake log */
+.log { background: transparent !important; border: 0 !important; }
+.log-line .ts, .log-line .lvl { display: none !important; }       /* end: recap lines stay, plain */
+.log-line .msg { color: #F3E4CF !important; font-size: 15px; }
+
+/* chat window transparency, adjustable per source URL:
+     ?t.chat-alpha=0.6   opacity of the window, 1 = solid (default), 0 = fully see-through
+     ?t.chat-blur=6px    how much the game behind the window is blurred (default none)
+   The text gets a soft shadow so it stays readable however see-through the window is. */
+:root { --chat-alpha: 1; --chat-blur: 0px; --chat-glass-alpha: .45; --chat-glass-blur: 6px; }
+/* switched from the Stream Deck (chat.html sets data-glass, see the comment there) */
+:root[data-glass="1"] { --chat-alpha: var(--chat-glass-alpha); --chat-blur: var(--chat-glass-blur); }
+.chat-frame {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--ink) calc(var(--chat-alpha) * 100%), transparent) 0%,
+    color-mix(in srgb, var(--ink-deep) calc(var(--chat-alpha) * 100%), transparent) 100%) !important;
+  -webkit-backdrop-filter: blur(var(--chat-blur)); backdrop-filter: blur(var(--chat-blur));
+}
+.chat-frame .chat-user, .chat-frame .chat-text { text-shadow: 0 1px 3px rgba(0, 0, 0, .7); }

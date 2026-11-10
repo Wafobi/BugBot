@@ -1,0 +1,42 @@
+@charset "utf-8";
+/* 9 · Bibliothek - Pergament in dunklem Holz, Serifen, Goldkante, Staub tanzt im Licht. */
+:root {
+  --font: "Lora", "Noto Serif", Georgia, serif;
+  --font-display: "Lora", "Noto Serif", Georgia, serif;
+  --display-weight: 600;
+  --text: #3a2a1a;
+  --text-soft: #806a50;
+  --accent: #8a2c2c;
+  --accent-2: #b8913a;
+  --motif-light: #fffaf0;
+  --card-bg: linear-gradient(#f4e8cf, #ead9b5);
+  --card-ring: 0 0 0 3px #b8913a, 0 0 0 12px #4a2e1c;
+  --card-shadow: 0 24px 50px rgba(20, 10, 0, .5);
+  --card-radius: 8px;
+  --card-inner: 1px solid rgba(184, 145, 58, .7);
+  --scene-bg: repeating-linear-gradient(90deg, #4a2e1c 0 60px, #5a3a22 60px 64px, #3e2616 64px 130px, #6b2c22 130px 170px, #2f4a3a 170px 220px, #4a2e1c 220px 300px),
+              #3e2616;
+  --names: #8a2c2c, #2f4a6b, #3f5f3a, #8a6a1e, #5a3a6b;
+  --bar-bg: rgba(58, 42, 26, .08);
+  --ambient: dust;
+  --ambient-colors: #fff2c4, #ffe6a0;
+  --ambient-count: 18;
+  --ambient-scene-count: 60;
+  --motif: book;
+  --label-intro: "heute im Lesesaal";
+  --label-viewers: "Leserinnen & Leser";
+  --label-chat: "Randnotizen";
+  --label-follow: "neu im Lesezirkel";
+  --label-pause: "Kurz ein Lesezeichen";
+  --label-start: "Das nächste Kapitel";
+  --label-start-sub: "beginnt in Kürze";
+  --label-end: "Ende des Kapitels";
+  --label-end-sub: "danke fürs Mitlesen";
+  --label-thanks: "Mit Dank an";
+}
+.card { background: var(--card-bg); }
+.msg .text { font-style: italic; }
+.chat-head { border-bottom: 1px solid #b8913a; padding-bottom: 12px; }
+.scene-bg::after { content: ""; position: absolute; inset: 0;
+                   background: radial-gradient(ellipse at 50% 30%, rgba(255, 220, 150, .3), rgba(0, 0, 0, .55) 80%); }
+.scene-bg > .ambient { z-index: 1; }

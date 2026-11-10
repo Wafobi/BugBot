@@ -1,0 +1,32 @@
+@charset "utf-8";
+/* 4 · Herbstlaub - Kürbis, Rostrot und Senf auf Karo-Rand, Laub fällt durch den Chat. */
+:root {
+  --font-display: "Lora", "Noto Serif", Georgia, serif;
+  --text: #43281c;
+  --text-soft: #8d5f45;
+  --accent: #d2691e;
+  --accent-2: #a33b2b;
+  --motif-light: #fff4e0;
+  --card-bg: #fff4e0;
+  --card-ring: 0 0 0 10px #c75c2b;
+  --card-shadow: 0 0 0 14px #fff4e0, 0 22px 50px rgba(60, 25, 10, .45);
+  --card-radius: 22px;
+  --card-inner: 0 solid transparent;
+  --scene-bg: repeating-linear-gradient(0deg, rgba(0,0,0,.08) 0 40px, transparent 40px 80px),
+              repeating-linear-gradient(90deg, rgba(0,0,0,.08) 0 40px, transparent 40px 80px),
+              linear-gradient(#a8471f, #6b2a16);
+  --names: #b54a1b, #7a3b6b, #3f6b4a, #a3752a, #8a2c2c;
+  --bar-bg: #f6e3c6;
+  --ambient: leaves;
+  --ambient-colors: #d2691e, #e3a23a, #a33b2b, #c7832b;
+  --ambient-count: 10;
+  --ambient-scene-count: 34;
+  --motif: leaf;
+  --label-intro: "heute im Herbstnest";
+  --label-viewers: "eingekuschelt";
+  --label-chat: "Laubgeflüster";
+  --label-pause: "Kurz Kürbistee holen";
+  --label-start-sub: "Pulli an, Kerze an";
+  --label-end: "Danke für den Herbstabend";
+}
+.chat-head { color: var(--accent-2); }

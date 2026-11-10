@@ -1,0 +1,25 @@
+@charset "utf-8";
+/* 1 · Kaminabend - cremefarbenes Papier mit Steppnaht, Kerze, Glut steigt auf. Die Standardwerte
+   in ../cozy.css sind bereits dieses Theme, hier stehen nur die Texte und die Szene. */
+:root {
+  --font-display: "Lora", "Noto Serif", Georgia, serif;
+  --display-weight: 600;
+  --ambient: embers;
+  --ambient-colors: #e8833a, #ffb347, #ff9e50;
+  --motif: candle;
+  --hero-line: on;
+  --scene-bg: radial-gradient(ellipse at 50% 115%, #c0622a 0%, #6a3418 35%, #2b1810 75%);
+  /* a quiet amber dot grid over a see-through hearth brown; the hairline runs ember -> gold */
+  --bars-bg-top: linear-gradient(180deg, rgba(34, 18, 11, .94), rgba(52, 28, 17, .74));
+  --bars-bg-bottom: linear-gradient(0deg, rgba(34, 18, 11, .94), rgba(52, 28, 17, .74));
+  --bars-fx: radial-gradient(rgba(255, 178, 102, .09) 1.2px, transparent 1.8px) 0 0 / 10px 10px;
+  --bars-line-a: #e8833a;
+  --bars-line-b: #ffd27a;
+  --label-intro: "heute am Kamin";
+  --label-viewers: "am Feuer";
+  --label-chat: "Plauderecke";
+  --label-pause: "Kurz Holz nachlegen";
+  --label-start-sub: "schnapp dir 'ne Decke";
+  --label-end: "Danke, dass ihr da wart";
+  --label-end-sub: "bis zum nächsten Kaminabend";
+}

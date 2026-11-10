@@ -1,0 +1,35 @@
+@charset "utf-8";
+/* 3 · Regenfenster - Lo-Fi-Nacht: Milchglas, warmes Lampenlicht, Regen läuft über die Scheibe. */
+:root {
+  --text: #f3ead9;
+  --text-soft: #a9a3b8;
+  --accent: #ffcf8a;
+  --accent-2: #a8d8ea;
+  --motif-light: #fff3c4;
+  --card-bg: rgba(26, 32, 58, .74);
+  --card-ring: 0 0 0 2px rgba(255, 220, 170, .18);
+  --card-shadow: 0 20px 60px rgba(5, 8, 20, .5), inset 0 -40px 90px -30px rgba(255, 190, 110, .28);
+  --card-radius: 34px;
+  --card-blur: blur(14px) saturate(1.2);
+  --card-inner: 0 solid transparent;
+  --scene-bg: radial-gradient(ellipse at 20% 0%, rgba(255, 190, 110, .25), transparent 45%),
+              linear-gradient(#141a33, #262046 60%, #3a2a4a);
+  --names: #ffcf8a, #f7a8b8, #a8d8ea, #c3b1e1, #b5e3b0, #ffd6a5;
+  --bar-bg: rgba(255, 255, 255, .08);
+  --ambient: rain;
+  --ambient-colors: rgba(200, 220, 255, .55);
+  --ambient-count: 26;
+  --ambient-scene-count: 90;
+  --motif: lamp;
+  --label-intro: "heute Abend";
+  --label-viewers: "hier drin";
+  --label-chat: "Draußen regnet's";
+  --label-follow: "reingeschneit";
+  --label-pause: "Kurz Tee holen";
+  --label-start-sub: "Regen an, Lampe an";
+  --label-end: "Gute Nacht";
+  --label-end-sub: "danke, dass ihr da wart";
+}
+.msg .who { display: block; font-size: 24px; margin: 0 0 2px; }
+.chat-head { font-size: 26px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-soft); }
+.display { font-weight: 300; }

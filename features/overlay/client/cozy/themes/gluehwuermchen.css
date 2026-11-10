@@ -1,0 +1,31 @@
+@charset "utf-8";
+/* 8 · Glühwürmchen - Waldnacht in Moosgrün, Holzrinde, Leuchtpunkte schweben. */
+:root {
+  --text: #eef3dc;
+  --text-soft: #a3b48f;
+  --accent: #e6f27a;
+  --accent-2: #7fa36b;
+  --motif-light: #f6ffd0;
+  --card-bg: rgba(28, 44, 30, .86);
+  --card-ring: 0 0 0 8px #3a2e22;
+  --card-shadow: 0 0 0 11px #5a4632, 0 24px 60px rgba(0, 10, 0, .55);
+  --card-radius: 40px;
+  --card-blur: blur(6px);
+  --card-inner: 0 solid transparent;
+  --scene-bg: radial-gradient(ellipse at 50% 100%, #2f4a2a, transparent 60%), linear-gradient(#0b1a12, #18301d);
+  --names: #e6f27a, #b8e0a0, #ffd38a, #a8d8c8, #f0b8a0;
+  --bar-bg: rgba(230, 242, 122, .1);
+  --ambient: fireflies;
+  --ambient-colors: #e6f27a, #fff3a0;
+  --ambient-count: 12;
+  --ambient-scene-count: 46;
+  --motif: jar;
+  --label-intro: "heute im Wald";
+  --label-viewers: "am Lagerfeuer";
+  --label-chat: "Waldgeflüster";
+  --label-follow: "neues Glühwürmchen";
+  --label-pause: "Kurz Glühwürmchen fangen";
+  --label-start: "Der Wald wacht auf";
+  --label-end: "Danke fürs Leuchten";
+}
+.card { border-radius: 52px 22px 52px 22px; }
