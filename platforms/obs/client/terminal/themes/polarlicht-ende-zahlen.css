@@ -1,0 +1,16 @@
+/* End-screen layout variant on top of polarlicht (stream-end.html?theme=polarlicht-ende-zahlen) - only the
+   arrangement changes, colours and sounds stay polarlicht's. Compare: ../vorschau.html */
+@import url("polarlicht.css");
+
+/* Große Zahlen: a wide card with fewer, bigger things - the numbers large in the gradient, the
+   tile frames gone, thin dividers between them instead */
+body .crt { width: min(1180px, 94vw) !important; }
+body .hero::before { width: 80px !important; height: 62px !important; }
+body .recap-tiles { gap: 0 !important; row-gap: 18px !important; }
+body .recap-tile { background: none !important; border: 0 !important; border-left: 1px solid rgba(95, 234, 245, .16) !important;
+  border-radius: 0 !important; }
+body .recap-tile:nth-child(4n+1) { border-left: 0 !important; }
+body .recap-tile .n { font-size: 52px !important;
+  background: linear-gradient(100deg, #7FEFF7 0%, #A88ABB 55%, #F25AA0 100%); -webkit-background-clip: text; background-clip: text; color: transparent !important; text-shadow: none !important; }
+body .recap-tile .l { font-size: 14px !important; }
+.crt.tiles .recap { height: 380px !important; }

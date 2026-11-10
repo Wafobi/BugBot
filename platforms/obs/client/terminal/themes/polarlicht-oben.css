@@ -1,0 +1,10 @@
+/* Start-screen layout variant on top of polarlicht (stream-boot.html?theme=polarlicht-oben) - only the
+   arrangement and the size of the gamepad change, colours and sounds stay polarlicht's.
+   Compare them side by side: ../vorschau.html */
+@import url("polarlicht.css");
+
+/* Oben zentriert: the gamepad large above the heading, everything centred */
+.crt { width: min(640px, 92vw) !important; }
+body .hero { flex-direction: column; align-items: center; text-align: center; gap: 14px; margin: 10px 0 18px; }
+body .hero::before { width: 190px !important; height: 146px !important; margin: 0 !important; }
+body .hero-text h1 { font-size: 42px !important; }

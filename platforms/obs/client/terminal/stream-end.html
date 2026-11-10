@@ -473,8 +473,17 @@
   function fireTheme() {
     return getComputedStyle(document.documentElement).getPropertyValue("--sound-theme").trim() === "fire";
   }
-  function themed(machine, fire) {
-    return function () { return (fireTheme() ? fire : machine).apply(null, arguments); };
+  function soundTheme() {
+    return getComputedStyle(document.documentElement).getPropertyValue("--sound-theme").trim();
+  }
+  // machine / fire / aurora; without an aurora variant aurora uses the fire one (silent where
+  // the fire is silent)
+  function themed(machine, fire, auroraFn) {
+    return function () {
+      var theme = soundTheme();
+      var fn = theme === "fire" ? fire : theme === "aurora" ? (auroraFn || fire) : machine;
+      return fn.apply(null, arguments);
+    };
   }
   function silent() {}
 
@@ -611,9 +620,126 @@
     }, 2500);
   }
 
+  // --- Sound theme "aurora" ----------------------------------------------------------------
+  // polarlicht's: --sound-theme: aurora. Cold and wide instead of a fireplace: a soft synth
+  // chord bed that drifts through Dmaj9 - Bm9 - Gmaj7 - A6, now and then a high glint like a
+  // star, and a slow arpeggio - everything through a wide stereo echo. The machine sounds stay
+  // quiet, like with "fire". The chimes are rising, shimmering arpeggios.
+  var auroraBus = null;
+  function aurora() {           // the shared echo bus, made once
+    if (auroraBus) return auroraBus;
+    var input = ctx.createGain(), out = ctx.createGain();
+    var lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 7000;
+    input.connect(out); out.connect(lp).connect(ctx.destination);
+    [[0.42, -0.6], [0.63, 0.6]].forEach(function (d) {     // two echoes, left and right
+      var delay = ctx.createDelay(2); delay.delayTime.value = d[0];
+      var fb = ctx.createGain(); fb.gain.value = 0.38;
+      var damp = ctx.createBiquadFilter(); damp.type = "lowpass"; damp.frequency.value = 2600;
+      var wet = ctx.createGain(); wet.gain.value = 0.5;
+      input.connect(delay); delay.connect(damp).connect(fb).connect(delay);
+      if (ctx.createStereoPanner) {
+        var p = ctx.createStereoPanner(); p.pan.value = d[1]; damp.connect(wet).connect(p).connect(out);
+      } else damp.connect(wet).connect(out);
+    });
+    auroraBus = input;
+    return input;
+  }
+  // one soft voice into the echo bus: attack, hold, release
+  function glow(freq, start, attack, hold, release, type, peak, pan) {
+    var osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = type; osc.frequency.value = freq;
+    g.gain.setValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(peak, start + attack);
+    g.gain.setValueAtTime(peak, start + attack + hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + attack + hold + release);
+    osc.connect(g);
+    if (pan && ctx.createStereoPanner) {
+      var p = ctx.createStereoPanner(); p.pan.value = pan; g.connect(p).connect(aurora());
+    } else g.connect(aurora());
+    osc.start(start); osc.stop(start + attack + hold + release + 0.05);
+  }
+  function glint(freq, start, peak, pan) {        // a star: sine with a fifth above, long ring
+    glow(freq, start, 0.004, 0, 1.4, "sine", peak, pan);
+    glow(freq * 1.5, start, 0.004, 0, 0.8, "sine", peak * 0.3, pan);
+  }
+  function auroraChime() {      // live / recap done: rising D-major arpeggio, shimmering
+    var t = ctx.currentTime + 0.05;
+    [587.33, 739.99, 880, 1174.66, 1479.98].forEach(function (f, i) {
+      glint(f, t + i * 0.13, 0.05, (i - 2) * 0.3);
+      glow(f / 2, t + i * 0.13, 0.02, 0.1, 1.2, "triangle", 0.012, 0);
+    });
+    // and a soft rising "whoosh" of air under it
+    var n = Math.floor(ctx.sampleRate * 1.4), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
+    for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    var s = ctx.createBufferSource(); s.buffer = b;
+    var bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.5;
+    bp.frequency.setValueAtTime(400, t); bp.frequency.exponentialRampToValueAtTime(5000, t + 1.2);
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.012, t + 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+    s.connect(bp).connect(g).connect(aurora()); s.start(t);
+  }
+  function auroraReady() {      // a smaller two-glint
+    var t = ctx.currentTime;
+    glint(1174.66, t, 0.035, -0.3);
+    glint(1760, t + 0.18, 0.03, 0.3);
+  }
+  var auroraStarted = false;
+  function auroraBGM() {
+    if (auroraStarted) return;
+    auroraStarted = true;
+    var CHORDS = [
+      [146.83, 220.00, 329.63, 369.99],   // Dmaj9 (D A E F#)
+      [123.47, 185.00, 277.18, 293.66],   // Bm9   (B F# C# D)
+      [98.00, 146.83, 185.00, 246.94],    // Gmaj7 (G D F# B)
+      [110.00, 164.81, 185.00, 277.18],   // A6    (A E F# C#)
+    ];
+    var BAR = 8;                          // seconds per chord
+    // the pad: every chord tone as two slightly detuned sines, swelling in and out, through a
+    // low-pass that drifts slowly - overlapping, so the chords melt into each other
+    var padLp = ctx.createBiquadFilter(); padLp.type = "lowpass"; padLp.frequency.value = 900; padLp.Q.value = 0.5;
+    padLp.connect(aurora());
+    var lfo = ctx.createOscillator(), lfoDepth = ctx.createGain();
+    lfo.frequency.value = 0.05; lfoDepth.gain.value = 450;
+    lfo.connect(lfoDepth).connect(padLp.frequency); lfo.start();
+    var bar = 0;
+    (function nextChord() {
+      var chord = CHORDS[bar % CHORDS.length], t = ctx.currentTime + 0.05;
+      chord.forEach(function (f) {
+        [-4, 4].forEach(function (cents) {
+          var osc = ctx.createOscillator(), g = ctx.createGain();
+          osc.type = "sine"; osc.frequency.value = f; osc.detune.value = cents;
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(0.006, t + 3);
+          g.gain.setValueAtTime(0.006, t + BAR - 1);
+          g.gain.linearRampToValueAtTime(0, t + BAR + 2.5);
+          osc.connect(g).connect(padLp); osc.start(t); osc.stop(t + BAR + 2.6);
+        });
+      });
+      // the arpeggio over it: chord tones an octave and two up, every other step a rest
+      var notes = chord.map(function (f) { return f * 2; }).concat([chord[1] * 4, chord[3] * 4]);
+      var STEP = 0.5;
+      for (var k = 0; k < BAR / STEP; k++) {
+        if (k % 2 || Math.random() < 0.25) continue;
+        glow(notes[Math.floor(Math.random() * notes.length)], t + k * STEP, 0.01, 0.05, 0.9, "triangle", 0.009,
+             Math.random() * 1.2 - 0.6);
+      }
+      bar++;
+      setTimeout(nextChord, BAR * 1000);
+    })();
+    // the stars: a high glint now and then, D-major pentatonic, anywhere in the stereo field
+    var STARS = [1174.66, 1318.51, 1479.98, 1760, 1975.53, 2349.32];
+    (function star() {
+      setTimeout(function () {
+        glint(STARS[Math.floor(Math.random() * STARS.length)], ctx.currentTime + 0.01, 0.006 + Math.random() * 0.006,
+              Math.random() * 1.6 - 0.8);
+        star();
+      }, 1500 + Math.random() * 3500);
+    })();
+  }
+
   window.__endSound = {
-    blip: themed(playBlip, silent), ready: themed(playReadyChime, fireChime), plotter: themed(playPlotterTick, silent),
-    key: themed(playKeyClick, silent), bgm: themed(playBGM, fireBGM),
+    blip: themed(playBlip, silent), ready: themed(playReadyChime, fireChime, auroraChime), plotter: themed(playPlotterTick, silent),
+    key: themed(playKeyClick, silent), bgm: themed(playBGM, fireBGM, auroraBGM),
   };
 })();
 </script>

@@ -1,0 +1,11 @@
+/* Start-screen layout variant on top of polarlicht (stream-boot.html?theme=polarlicht-seitlich) - only the
+   arrangement and the size of the gamepad change, colours and sounds stay polarlicht's.
+   Compare them side by side: ../vorschau.html */
+@import url("polarlicht.css");
+
+/* Groß seitlich: the gamepad big on the left, the text next to it - the current card, just wider */
+.crt { width: min(760px, 92vw) !important; }
+body .hero { gap: 26px; margin-bottom: 18px; }
+body .hero::before { width: 150px !important; height: 116px !important; margin: 0 4px 0 0 !important; }
+body .hero-text h1 { font-size: 46px !important; }
+body .hero-text::after { font-size: 19px; }

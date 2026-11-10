@@ -1,0 +1,16 @@
+/* Start-screen layout variant on top of polarlicht (stream-boot.html?theme=polarlicht-banner) - only the
+   arrangement and the size of the gamepad change, colours and sounds stay polarlicht's.
+   Compare them side by side: ../vorschau.html */
+@import url("polarlicht.css");
+
+/* Breites Banner: a wide, low card - the gamepad large and tilted on the left, the heading in the
+   cyan/magenta gradient, a thicker progress bar in the same colours */
+.crt { width: min(980px, 94vw) !important; }
+body .hero { gap: 34px; margin: 6px 0 20px; }
+body .hero::before { width: 176px !important; height: 136px !important; margin: 0 0 0 8px !important; }
+body .hero-text h1 { font-size: 60px !important;
+  background: linear-gradient(100deg, #7FEFF7 0%, #A88ABB 55%, #F25AA0 100%); -webkit-background-clip: text; background-clip: text;
+  color: transparent !important; text-shadow: none !important; filter: drop-shadow(0 0 10px rgba(95, 234, 245, .2)); }
+body .hero-text::after { font-size: 21px; }
+body .bar { height: 10px !important; border-radius: 5px !important; }
+body .bar-fill { background: linear-gradient(90deg, #5FEAF5, #F22A80) !important; border-radius: 5px !important; }

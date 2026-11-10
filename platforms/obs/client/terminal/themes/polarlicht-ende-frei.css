@@ -1,0 +1,18 @@
+/* End-screen layout variant on top of polarlicht (stream-end.html?theme=polarlicht-ende-frei) - only the
+   arrangement changes, colours and sounds stay polarlicht's. Compare: ../vorschau.html */
+@import url("polarlicht.css");
+
+/* Frei: no card - the gamepad big above a large heading, the tiles as glass floating over the
+   scene, the names under them */
+body .crt { width: min(1100px, 94vw) !important; background: none !important; border-color: transparent !important;
+  box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.crt::after, .crt .titlebar, .screen::after { display: none !important; }
+body .hero { flex-direction: column; align-items: center; text-align: center; gap: 16px; margin-bottom: 22px; }
+body .hero::before { width: 200px !important; height: 155px !important; margin: 0 !important; }
+body .hero-text h1 { font-size: 56px !important; }
+body .hero-text::after { font-size: 21px; }
+body .recap-meta { text-align: center !important; font-size: 15px !important; }
+body .recap-tile { background: rgba(14, 17, 48, .55) !important; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  border-color: rgba(95, 234, 245, .22) !important; }
+body .recap-tile .n { font-size: 42px !important; }
+.crt.tiles .recap { height: 400px !important; }

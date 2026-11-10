@@ -1,0 +1,14 @@
+/* End-screen layout variant on top of polarlicht (stream-end.html?theme=polarlicht-ende-spalten) - only the
+   arrangement changes, colours and sounds stay polarlicht's. Compare: ../vorschau.html */
+@import url("polarlicht.css");
+
+/* Zwei Spalten: a wide card - on the left the gamepad large, the heading and what was played,
+   on the right the numbers and names */
+body .crt { width: min(1240px, 94vw) !important; }
+.crt.tiles .screen { display: grid; grid-template-columns: 300px 1fr; column-gap: 34px; align-items: center; }
+.crt.tiles .hero { grid-column: 1; grid-row: 1 / span 3; flex-direction: column; align-items: flex-start; gap: 18px; margin: 0; }
+.crt.tiles .log { display: none; }
+.crt.tiles .recap { grid-column: 2; grid-row: 1 / span 3; }
+body .hero::before { width: 170px !important; height: 131px !important; margin: 0 !important; }
+body .hero-text h1 { font-size: 46px !important; line-height: 1.05 !important; }
+body .hero-text::after { font-size: 18px; }

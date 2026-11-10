@@ -25,6 +25,8 @@
      so nothing visibly travels) */
   --ember: #5FEAF5;
   --gold: #5FEAF5;
+  /* stream-boot/-end.html: the aurora sound set instead of the fireplace */
+  --sound-theme: aurora;
 }
 
 /* --- the colours glut / kaminfeuer write out directly --- */
@@ -117,13 +119,14 @@ html:has(.ground)::before { opacity: .9; }
 .hero::before, .caption::before, .chat-frame .titlebar .filename::before {
   width: 52px !important; height: 40px !important; margin: 4px 16px 0 6px !important;
   border-radius: 0 !important;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 6 64 50'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23FFFFFF'/%3E%3Cstop offset='.55' stop-color='%239FF4FA'/%3E%3Cstop offset='1' stop-color='%235FEAF5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M14,18 C18,14 46,14 50,18 C56,21 61,34 61,43 C61,51 55,53 51,49 L45,42 C42,40 22,40 19,42 L13,49 C9,53 3,51 3,43 C3,34 8,21 14,18 ZM13.8,26a4.2,4.2 0 1,0 8.4,0a4.2,4.2 0 1,0 -8.4,0zM23.6,29.8h2.8v2.8000000000000003h2.8000000000000003v2.8h-2.8000000000000003v2.8000000000000003h-2.8v-2.8000000000000003h-2.8000000000000003v-2.8h2.8000000000000003zM35.4,34a3.6,3.6 0 1,0 7.2,0a3.6,3.6 0 1,0 -7.2,0zM44.2,22a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0zM48.2,26a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0zM44.2,30a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0zM40.2,26a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0z' fill='url(%23g)' fill-rule='evenodd'/%3E%3C/svg%3E") center / contain no-repeat !important;
-  filter: drop-shadow(0 0 8px rgba(95, 234, 245, .7)) !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 6 64 50'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='.1' stop-color='%235FEAF5'/%3E%3Cstop offset='.5' stop-color='%23A88ABB'/%3E%3Cstop offset='.9' stop-color='%23F22A80'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M14,18 C18,14 46,14 50,18 C56,21 61,34 61,43 C61,51 55,53 51,49 L45,42 C42,40 22,40 19,42 L13,49 C9,53 3,51 3,43 C3,34 8,21 14,18 ZM13.8,26a4.2,4.2 0 1,0 8.4,0a4.2,4.2 0 1,0 -8.4,0zM23.6,29.8h2.8v2.8000000000000003h2.8000000000000003v2.8h-2.8000000000000003v2.8000000000000003h-2.8v-2.8000000000000003h-2.8000000000000003v-2.8h2.8000000000000003zM35.4,34a3.6,3.6 0 1,0 7.2,0a3.6,3.6 0 1,0 -7.2,0zM44.2,22a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0zM48.2,26a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0zM44.2,30a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0zM40.2,26a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0z' fill='url(%23g)' fill-rule='evenodd'/%3E%3C/svg%3E") center / contain no-repeat !important;
+  filter: drop-shadow(-2px -1px 5px rgba(95, 234, 245, .38)) drop-shadow(2px 1px 5px rgba(242, 42, 128, .32)) !important;
   transform: none; animation: pl-pad-bob 3.2s ease-in-out infinite !important;
 }
 @keyframes pl-pad-bob { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-4px) rotate(3deg); } }
+/* the gamepad in the bars' colours: cyan to magenta on the diagonal, glowing in both */
 /* sized to each heading */
-.caption::before { width: 30px !important; height: 23px !important; margin: 0 10px 0 2px !important; }
+.caption::before { width: 44px !important; height: 34px !important; margin: 0 12px 0 2px !important; }
 .chat-frame .titlebar .filename::before { width: 17px !important; height: 13px !important; margin: 0 7px 0 1px !important;
                                           filter: drop-shadow(0 0 4px rgba(95, 234, 245, .7)) !important; }
 @media (prefers-reduced-motion: reduce) {
@@ -134,3 +137,11 @@ html:has(.ground)::before { opacity: .9; }
    content is centred - heading with the gamepad, and the hint with the time / percentage */
 .caption { justify-content: center; }
 .bar-row { justify-content: center !important; gap: 18px; }
+
+/* start screen: no "gleich geht's los" over the progress bar - the heading says it already */
+.progress-row::before { content: none !important; }
+.progress-row { justify-content: flex-end !important; }
+
+/* end screen: a bigger gamepad next to "Stream vorbei" (:where keeps it weak, so the
+   polarlicht-ende-* variants still set their own size) */
+:where(body:has(#recap)) .hero::before { width: 88px !important; height: 68px !important; margin: 0 20px 0 4px !important; }

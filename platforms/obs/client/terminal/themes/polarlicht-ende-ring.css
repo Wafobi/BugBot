@@ -1,0 +1,22 @@
+/* End-screen layout variant on top of polarlicht (stream-end.html?theme=polarlicht-ende-ring) - only the
+   arrangement changes, colours and sounds stay polarlicht's. Compare: ../vorschau.html */
+@import url("polarlicht.css");
+
+/* Im Ring: like the start screen variant - the gamepad in a round frame with the running
+   cyan/magenta rim, the heading under it, everything centred */
+body .crt { width: min(940px, 94vw) !important; }
+body .hero { position: relative; flex-direction: column; align-items: center; text-align: center; gap: 14px; margin: 6px 0 16px; }
+body .hero::before { width: 170px !important; height: 170px !important; margin: 0 !important; border-radius: 50% !important;
+  background-size: 60% auto !important; animation: none !important;
+  box-shadow: inset 0 0 26px rgba(95, 234, 245, .08), 0 0 16px rgba(242, 42, 128, .1); }
+body .hero::after {
+  content: ""; position: absolute; top: 0; left: 50%; width: 170px; height: 170px; margin-left: -85px;
+  border-radius: 50%; padding: 3px; pointer-events: none;
+  background: conic-gradient(from var(--rim-turn), #5FEAF5, rgba(168, 138, 187, .95), #F22A80,
+              rgba(168, 138, 187, .95), #5FEAF5, rgba(168, 138, 187, .95), #F22A80, rgba(168, 138, 187, .95), #5FEAF5);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: pl-rim-turn 8s linear infinite;
+}
+body .recap-meta { text-align: center !important; }
+.crt.tiles .recap { height: 360px !important; }

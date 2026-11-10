@@ -1,0 +1,16 @@
+/* Start-screen layout variant on top of polarlicht (stream-boot.html?theme=polarlicht-frei) - only the
+   arrangement and the size of the gamepad change, colours and sounds stay polarlicht's.
+   Compare them side by side: ../vorschau.html */
+@import url("polarlicht.css");
+
+/* Frei schwebend: no card at all - a huge glowing gamepad floating over the scene, the heading
+   under it, a thin progress line */
+body .crt { width: min(940px, 94vw) !important; background: none !important; border-color: transparent !important;
+       box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.crt::after, .crt .titlebar, .screen::after { display: none !important; }
+body .hero { flex-direction: column; align-items: center; text-align: center; gap: 22px; margin-bottom: 26px; }
+body .hero::before { width: 300px !important; height: 232px !important; margin: 0 !important;
+  filter: drop-shadow(-5px -4px 14px rgba(95, 234, 245, .38)) drop-shadow(5px 4px 14px rgba(242, 42, 128, .32)) !important; }
+body .hero-text h1 { font-size: 54px !important; text-shadow: 0 0 14px rgba(95, 234, 245, .28) !important; }
+body .hero-text::after { font-size: 20px; }
+body .progress { width: 420px; margin: 0 auto; }

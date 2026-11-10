@@ -1,0 +1,24 @@
+/* Start-screen layout variant on top of polarlicht (stream-boot.html?theme=polarlicht-ring) - only the
+   arrangement and the size of the gamepad change, colours and sounds stay polarlicht's.
+   Compare them side by side: ../vorschau.html */
+@import url("polarlicht.css");
+
+/* Im Ring: the gamepad in a round frame whose cyan/magenta rim runs round (like the avatar
+   frame), heading below */
+.crt { width: min(620px, 92vw) !important; }
+body .hero { position: relative; flex-direction: column; align-items: center; text-align: center; gap: 18px; margin: 12px 0 18px; }
+body .hero::before { width: 230px !important; height: 230px !important; margin: 0 !important; border-radius: 50% !important;
+  background-size: 62% auto !important;
+  box-shadow: inset 0 0 30px rgba(95, 234, 245, .08), 0 0 18px rgba(242, 42, 128, .1); }
+body .hero::after {
+  content: ""; position: absolute; top: 0; left: 50%; width: 230px; height: 230px; margin-left: -115px;
+  border-radius: 50%; padding: 3px; pointer-events: none;
+  background: conic-gradient(from var(--rim-turn), #5FEAF5, rgba(168, 138, 187, .95), #F22A80,
+              rgba(168, 138, 187, .95), #5FEAF5, rgba(168, 138, 187, .95), #F22A80, rgba(168, 138, 187, .95), #5FEAF5);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: pl-rim-turn 8s linear infinite;
+}
+/* the ring and the gamepad stay still here - a bobbing disc in a fixed ring looks off */
+body .hero::before { animation: none !important; }
+body .hero-text h1 { font-size: 40px !important; }

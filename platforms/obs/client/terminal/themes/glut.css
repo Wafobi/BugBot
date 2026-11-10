@@ -53,6 +53,7 @@
 .cam-frame .titlebar { display: none !important; }               /* avatar frame: no bar at all */
 
 /* ---- no scanlines, no glitches, no rain ---------------------------------------------- */
+:root { --boot-glitch: off; }   /* stream-boot.html: no scrambled title, no zaps */
 .chat-screen::before, .cam-viewport::before, .screen::before, .cutout.crt::before { display: none !important; }
 .scanlines, .glitch-slice, #rain { display: none !important; }
 html:has(#rain), body:has(#rain) {

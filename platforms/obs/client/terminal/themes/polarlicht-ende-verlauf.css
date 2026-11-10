@@ -1,0 +1,13 @@
+/* End-screen layout variant on top of polarlicht (stream-end.html?theme=polarlicht-ende-verlauf) - only the
+   arrangement changes, colours and sounds stay polarlicht's. Compare: ../vorschau.html */
+@import url("polarlicht.css");
+
+/* Verlauf: the card as it is, but in colour - heading and numbers in the cyan/magenta
+   gradient, every tile with a gradient line along its top, a bigger gamepad */
+body .hero::before { width: 92px !important; height: 71px !important; }
+body .hero-text h1, body .recap-tile .n {
+  background: linear-gradient(100deg, #7FEFF7 0%, #A88ABB 55%, #F25AA0 100%); -webkit-background-clip: text; background-clip: text;
+  color: transparent !important; text-shadow: none !important; filter: drop-shadow(0 0 8px rgba(95, 234, 245, .18)); }
+body .recap-tile { position: relative; overflow: hidden; }
+body .recap-tile::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  background: linear-gradient(90deg, #5FEAF5, #F22A80); opacity: .9; }
