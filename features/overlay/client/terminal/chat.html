@@ -24,11 +24,12 @@
              card the log has to stay readable over a bright picture too
     theme=   load themes/<name>.css - see themes/README.md
     avatar=NAME&avatartab=y,h,w&avatarslide=x&tabscenes=A,B   a tab growing sideways out
-             of the card's right edge as the avatar's ground, the avatar sliding out with it, following the OBS source NAME in those scenes, which
-             also take the Stream Deck keys there. dock=PC&dockrect=x,y,w,h: in those
-             scenes the chat drops its card and sits in bars.html's ?chattab=.
-             obs= / obspw= for obs-websocket. Details: the script after the .stage div,
-             and ../obs-tabs.js
+             of the card's right edge as the avatar's ground, the avatar sliding out
+             with it, following the OBS source NAME in those scenes, which also take
+             the Stream Deck keys there. dock=PC&dockrect=x,y,w,h: in those scenes the
+             chat drops its card and sits in bars.html's ?chattab=. obs= / obspw= for
+             obs-websocket. Details: the script after the .stage div, and ../obs-tabs.js
+    ttl=     seconds a chat line stays before it fades out (default 120, 0 = for ever)
 
     t.NAME=  override any single design token from :root below, e.g.
              ?t.bar-h-bottom=180px
@@ -187,6 +188,8 @@
   .chat-user::after { content: ":"; opacity: .6; }
   .chat-text { color: #e9d9b8; word-break: break-word; }
   /* Twitch emotes: as tall as a line and a bit, sitting on the text */
+  /* ?ttl=: an expired line fades out, then goes (the script removes it) */
+  .chat-line--gone { opacity: 0 !important; transition: opacity .8s ease; animation: none !important; }
   .chat-emote { height: 1.75em; width: auto; vertical-align: -.5em; margin: -.15em 1px; }
   .chat-line.system {
     color: var(--amber-dim);
@@ -497,9 +500,24 @@
     if (buffer) el.appendChild(document.createTextNode(buffer));
   }
 
-  function addLine(name, text, animate, emotes) {
+  // ?ttl=: seconds a line stays before it fades out and goes (default 120, 0 = for ever).
+  // Aged by its arrival time from the bot (ts, unix seconds) where there is one, so a reload
+  // does not bring the backlog back for another full round - otherwise from now.
+  var ttl = params.has("ttl") ? Number(params.get("ttl")) : 120;
+  function expire(row, ts) {
+    if (!(ttl > 0)) return;
+    var left = ttl * 1000 - (ts ? Date.now() - ts * 1000 : 0);
+    setTimeout(function () {
+      row.classList.add("chat-line--gone");
+      setTimeout(function () { if (row.parentNode) row.parentNode.removeChild(row); }, 800);
+    }, Math.max(0, left));
+  }
+
+  function addLine(name, text, animate, emotes, ts) {
+    if (ttl > 0 && ts && Date.now() - ts * 1000 > ttl * 1000) return;   // already over
     var row = document.createElement("div");
     row.className = "chat-line";
+    expire(row, ts);
     var colorIdx = Math.abs(hash(name)) % colors.length;
     row.innerHTML =
       '<span class="chat-user" style="color:' + colors[colorIdx] + '">' + escapeHtml(name) + '</span>' +
@@ -609,10 +627,10 @@
       if (frame.type === "history") {
         chatLog.innerHTML = "";
         (frame.data || []).forEach(function (entry) {
-          if (inScope(entry)) addLine(entry.user_name || "", entry.text || "", false, entry.emotes);
+          if (inScope(entry)) addLine(entry.user_name || "", entry.text || "", false, entry.emotes, entry.ts);
         });
       } else if (frame.type === "message") {
-        if (inScope(frame.data)) addLine(frame.data.user_name || "", frame.data.text || "", true, frame.data.emotes);
+        if (inScope(frame.data)) addLine(frame.data.user_name || "", frame.data.text || "", true, frame.data.emotes, frame.data.ts);
       } else if (frame.type === "clear") {
         chatLog.innerHTML = "";
         addSystemLine("chat cleared");

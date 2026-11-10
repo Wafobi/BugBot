@@ -376,6 +376,8 @@ class OverlayFeature(feature_api.Feature):
             "is_subscriber": message.is_subscriber,
             # the platform's emotes in text, [[id, start, end], ...] - the page draws them
             "emotes": [list(e) for e in message.emotes],
+            # when it arrived (unix seconds) - lets a reloading page age the backlog
+            "ts": time.time(),
         }
         self._next_message_id += 1
         self._chat_history.append(entry)
