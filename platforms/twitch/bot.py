@@ -1252,6 +1252,20 @@ async def _handle_clearchat(line):
     await events.bus.publish(events.CHAT_CLEARED, platform=NAME)
 
 
+def parse_emotes(tag):
+    """The IRC "emotes" tag ("25:0-4,12-16/1902:6-10") as ((id, start, end), ...), sorted by
+    start - inclusive code point positions in the message text. Anything malformed is
+    skipped rather than raised: the emotes are decoration, the message must still arrive."""
+    found = []
+    for group in (tag or "").split("/"):
+        emote_id, _, ranges = group.partition(":")
+        for span in ranges.split(","):
+            start, _, end = span.partition("-")
+            if emote_id and start.isdigit() and end.isdigit() and int(start) <= int(end):
+                found.append((emote_id, int(start), int(end)))
+    return tuple(sorted(found, key=lambda e: e[1]))
+
+
 def parse_privmsg(line):
     """Parses one Twitch IRC PRIVMSG line into (tags, user_name, message), or None when the
     line does not have the shape Twitch always sends a chat message in:
@@ -1314,6 +1328,7 @@ async def _handle_privmsg(line):
         is_subscriber=is_subscriber,
         command=command_word,
         arg_text=arg_text,
+        emotes=parse_emotes(tags.get("emotes", "")),
     )
 
     # Deliberately before moderation: the messages deleted later are precisely the ones you

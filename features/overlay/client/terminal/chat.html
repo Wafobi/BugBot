@@ -23,6 +23,12 @@
              They get a text shadow in exchange, because without the dark
              card the log has to stay readable over a bright picture too
     theme=   load themes/<name>.css - see themes/README.md
+    avatar=NAME&avatartab=y,h,w&avatarslide=x&tabscenes=A,B   a tab growing sideways out
+             of the card's right edge as the avatar's ground, the avatar sliding out with it, following the OBS source NAME in those scenes, which
+             also take the Stream Deck keys there. dock=PC&dockrect=x,y,w,h: in those
+             scenes the chat drops its card and sits in bars.html's ?chattab=.
+             obs= / obspw= for obs-websocket. Details: the script after the .stage div,
+             and ../obs-tabs.js
 
     t.NAME=  override any single design token from :root below, e.g.
              ?t.bar-h-bottom=180px
@@ -61,7 +67,7 @@
     --red: #ff5f6d;
     --glow: rgba(255, 176, 0, 0.35);
     --font-display: "VT323", ui-monospace, "Courier New", monospace;
-    --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace;
+    --font-body: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace, "Noto Color Emoji";
   }
 
   * { box-sizing: border-box; }
@@ -180,6 +186,8 @@
   .chat-user { font-weight: 600; flex-shrink: 0; }
   .chat-user::after { content: ":"; opacity: .6; }
   .chat-text { color: #e9d9b8; word-break: break-word; }
+  /* Twitch emotes: as tall as a line and a bit, sitting on the text */
+  .chat-emote { height: 1.75em; width: auto; vertical-align: -.5em; margin: -.15em 1px; }
   .chat-line.system {
     color: var(--amber-dim);
     font-style: italic;
@@ -221,6 +229,37 @@
   :root[data-frame="0"] .chat-log {
     text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.8);
   }
+
+  /* ?avatartab=: a tab growing sideways out of the card's right edge - the ground the avatar stands
+     on. Its own layer next to the card (the card clips its content); fill like the card,
+     outline like the card's rim, which opens where the tab sits (--notch-l/-r). */
+  .card-tab { position: absolute; pointer-events: none; z-index: 3; overflow: visible; }
+  .card-tab .fill {
+    position: absolute; inset: 0;
+    background: color-mix(in srgb, var(--ink) calc(var(--chat-alpha, 1) * 100%), transparent);
+    -webkit-backdrop-filter: blur(var(--chat-blur, 0px)); backdrop-filter: blur(var(--chat-blur, 0px));
+  }
+  .card-tab svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .card-tab path { fill: none; stroke: var(--tab-edge, var(--ember, var(--amber-dim))); stroke-width: 1.5;
+                   opacity: var(--tab-edge-opacity, .75); }
+  .chat-frame.has-tab::after {
+    clip-path: polygon(0 0, 100% 0, 100% var(--notch-t, 0), calc(100% - 4px) var(--notch-t, 0),
+                       calc(100% - 4px) var(--notch-b, 0), 100% var(--notch-b, 0), 100% 100%, 0 100%);
+  }
+  .card-tab { filter: drop-shadow(4px 0 14px var(--glow)); }
+
+  /* ?dock=: in these scenes the chat has no card of its own - it sits in the bottom bar's
+     tab (bars.html ?chattab=), only the lines, at ?dockrect=x,y,w,h. */
+  :root[data-dock] .chat-frame {
+    left: var(--dock-x) !important; top: var(--dock-y) !important; bottom: auto !important;
+    width: var(--dock-w) !important; height: var(--dock-h) !important;
+    background: none !important; border-color: transparent !important; box-shadow: none !important;
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  }
+  :root[data-dock] .chat-frame::after, :root[data-dock] .titlebar, :root[data-dock] .card-tab { display: none !important; }
+  :root[data-dock] .chat-screen { padding: 0; }
+  :root[data-dock] .chat-screen::after { display: none; }
+  :root[data-dock] .chat-log { text-shadow: 0 1px 3px rgba(0,0,0,.9); }
 
   @media (prefers-reduced-motion: reduce) {
     * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
@@ -290,6 +329,106 @@
   </div>
 </div>
 
+<script src="../obs-tabs.js"></script>
+<script>
+(function () {
+  /* The avatar tab and the dock - both need to know the OBS program scene, so both go through
+     obs-tabs.js (local obs-websocket, ?obs= port, ?obspw= password):
+       avatar=NAME       the avatar source; avatartab=y,h,w / avatarslide=x - see below
+       tabscenes=A,B     the scenes the avatar tab is used in; there this page also takes the
+                         Stream Deck keys "wafobi-avatar" (tab first, then the avatar) and
+                         "wafobi-chat" (the chat itself on/off)
+       dock=PC           scenes where the chat sits in the bottom bar instead (bars.html
+                         ?chattab=), at dockrect=x,y,w,h - no card, no title, only the lines */
+  var params = new URLSearchParams(location.search);
+  var list = function (name) { return (params.get(name) || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean); };
+  var root = document.documentElement, frame = document.querySelector(".chat-frame");
+  var dock = list("dock"), rect = list("dockrect").map(Number);
+  if (rect.length === 4) ["x", "y", "w", "h"].forEach(function (k, i) { root.style.setProperty("--dock-" + k, rect[i] + "px"); });
+
+  // avatartab=y,h,w: the tab grows sideways out of the card's right edge - y from the card's
+  // top, h tall, w wide when out. avatarslide=x,scale: the avatar travels with it, left to
+  // right from behind the card: this page moves the OBS source itself (its crop). x is the
+  // source's left edge on screen when out, as if uncropped; scale its OBS scale (no bounding
+  // box - with one, a crop rescales instead of cutting). The source sits at the card's right
+  // edge, top-left aligned; its left part is cropped away up to there.
+  var tab = null, link = null, arg = list("avatartab").map(Number), scenes = list("tabscenes");
+  var slideArg = list("avatarslide").map(Number), slideX = slideArg[0], slideK = slideArg[1] || 1;
+  if (arg.length === 3 && arg.every(isFinite)) {
+    var ty = arg[0], th = arg[1], tw = arg[2], R = 22, F = 16;
+    var layer = document.createElement("div");
+    layer.className = "card-tab";
+    layer.innerHTML = '<div class="fill"></div><svg><path></path></svg>';
+    frame.insertAdjacentElement("afterend", layer);
+    frame.classList.add("has-tab");
+    var fill = layer.firstChild, path = layer.querySelector("path");
+    var edgeX = frame.offsetLeft + frame.offsetWidth;          // the card's right edge on stage
+    layer.style.left = (edgeX - 2) + "px";
+    layer.style.top = frame.offsetTop + "px";
+    layer.style.width = (tw + 4) + "px";
+    layer.style.height = frame.offsetHeight + "px";
+    var bx = 1.25, y0 = ty, y1 = ty + th, lastCrop = null;
+    tab = ObsTabs.tween(function (t) {
+      var d = tw * t, right = bx + d, r = Math.min(R, d / 2), f = Math.min(F, d / 2);
+      var line = d < .5 ? "" :
+        "M" + bx + " " + (y0 - f) + "Q" + bx + " " + y0 + " " + (bx + f) + " " + y0 + "H" + (right - r) +
+        "Q" + right + " " + y0 + " " + right + " " + (y0 + r) + "V" + (y1 - r) +
+        "Q" + right + " " + y1 + " " + (right - r) + " " + y1 + "H" + (bx + f) + "Q" + bx + " " + y1 + " " + bx + " " + (y1 + f);
+      path.setAttribute("d", line);
+      fill.style.clipPath = line ? "path('" + line + "H" + (bx - 1.5) + "V" + (y0 - f) + "Z')" : "path('M0 0Z')";
+      frame.style.setProperty("--notch-t", line ? (y0 - f) + "px" : "0px");
+      frame.style.setProperty("--notch-b", line ? (y1 + f) + "px" : "0px");
+      // the avatar: its virtual left edge runs from tw left of its place to its place
+      var item = link && avatarName && link.item(avatarName);
+      // only in its own scenes - elsewhere the avatar has a place of its own
+      if (isFinite(slideX) && item && scenes.indexOf(link.program) >= 0) {
+        var crop = Math.round((edgeX - (slideX - tw * (1 - t))) / slideK);
+        if (crop !== lastCrop) {
+          lastCrop = crop;
+          link.send("SetSceneItemTransform", { sceneName: link.program, sceneItemId: item.id,
+            sceneItemTransform: { positionX: edgeX, cropLeft: crop } });
+        }
+      }
+    }, 700);
+    tab.slide = isFinite(slideX);
+  }
+  var avatarName = params.get("avatar");
+
+  var avatar = params.get("avatar");
+  if (!dock.length && !(tab && avatar)) { if (tab) tab.set(true, true); return; }
+  var tabs = {}, keys = { "wafobi-chat": params.get("chat") || "Chat" };
+  // the avatar key works here with or without a tab - without one it simply switches
+  if (avatar) keys["wafobi-avatar"] = avatar;
+  if (tab && avatar) tabs[avatar] = tab;
+  link = ObsTabs.follow({
+    port: params.get("obs") || "4455", password: params.get("obspw") || "",
+    scenes: scenes, tabs: tabs, keys: keys,
+    onScene: function (scene) {
+      if (dock.indexOf(scene) >= 0) root.setAttribute("data-dock", "1"); else root.removeAttribute("data-dock");
+      setTimeout(function () { report(true); }, 50);
+    },
+  });
+
+  // Docked, the bar's tab only grows as far as the lines need: this page tells bars.html where
+  // the topmost line starts (stage y, the bottom of the screen when empty) - as an obs-browser
+  // event "wafobi-chat-height" {top}, on every change and every 5 s for a freshly loaded bar.
+  var log = document.getElementById("chatLog"), stage = document.querySelector(".stage"), lastTop = null;
+  function report(force) {
+    if (!root.hasAttribute("data-dock") || !link) return;
+    var scale = stage.getBoundingClientRect().width / 2560 || 1;
+    var first = log.firstElementChild;
+    var top = first ? Math.round(first.getBoundingClientRect().top / scale) : 1440;
+    if (!force && top === lastTop) return;
+    lastTop = top;
+    link.send("CallVendorRequest", { vendorName: "obs-browser", requestType: "emit_event",
+      requestData: { event_name: "wafobi-chat-height", event_data: { top: top } } });
+  }
+  new MutationObserver(function () { requestAnimationFrame(function () { report(false); }); })
+    .observe(log, { childList: true, subtree: true, characterData: true });
+  setInterval(function () { report(true); }, 5000);
+})();
+</script>
+
 <script>
 (function () {
   var params = new URLSearchParams(location.search);
@@ -333,7 +472,33 @@
   // One renderer for both the demo loop and the real connection - a name, a line of text,
   // and whether it should type itself out (a live arrival) or appear instantly (the history
   // batch on connect, or a demo line).
-  function addLine(name, text, animate) {
+  // Twitch emotes: the bot sends their places in the text ([[id, start, end], ...], inclusive
+  // code point positions); they become images from Twitch's emote CDN, everything else stays
+  // text. upto = how many code points are shown (the typewriter); an emote appears whole.
+  var EMOTE_URL = "https://static-cdn.jtvnw.net/emoticons/v2/{id}/default/dark/2.0";
+  function fillText(el, text, emotes, upto, row) {
+    var chars = Array.from(text), at = {};
+    (emotes || []).forEach(function (e) {
+      if (e && /^[\w-]+$/.test(String(e[0])) && e[1] >= 0 && e[2] < chars.length) at[e[1]] = e;
+    });
+    el.textContent = "";
+    var buffer = "";
+    for (var i = 0; i < Math.min(upto, chars.length); i++) {
+      var e = at[i];
+      if (!e) { buffer += chars[i]; continue; }
+      if (buffer) { el.appendChild(document.createTextNode(buffer)); buffer = ""; }
+      var img = document.createElement("img");
+      img.className = "chat-emote";
+      img.alt = chars.slice(e[1], e[2] + 1).join("");
+      img.src = EMOTE_URL.replace("{id}", e[0]);
+      img.onload = function () { fitLog(row); };
+      el.appendChild(img);
+      i = e[2];
+    }
+    if (buffer) el.appendChild(document.createTextNode(buffer));
+  }
+
+  function addLine(name, text, animate, emotes) {
     var row = document.createElement("div");
     row.className = "chat-line";
     var colorIdx = Math.abs(hash(name)) % colors.length;
@@ -344,17 +509,18 @@
     while (chatLog.children.length > maxLines) chatLog.removeChild(chatLog.firstChild);
 
     var textEl = row.querySelector(".chat-text");
+    var length = Array.from(text).length;
     // A theme can switch the typewriter off with --chat-typing: off (kaminfeuer does): the
     // line then appears whole and fades in. Read per line - the theme loads asynchronously.
     var noTyping = getComputedStyle(document.documentElement).getPropertyValue("--chat-typing").trim() === "off";
     if (animate && noTyping && !reduceMotion) row.classList.add("chat-line--fade");
-    if (reduceMotion || !animate || noTyping) { textEl.textContent = text; fitLog(row); return; }
+    if (reduceMotion || !animate || noTyping) { fillText(textEl, text, emotes, length, row); fitLog(row); return; }
     var i = 0;
     (function type() {
-      textEl.textContent = text.slice(0, i);
+      fillText(textEl, text, emotes, i, row);
       fitLog(row);
       i++;
-      if (i <= text.length) setTimeout(type, 10 + Math.random() * 8);
+      if (i <= length) setTimeout(type, 10 + Math.random() * 8);
     })();
   }
 
@@ -444,10 +610,10 @@
       if (frame.type === "history") {
         chatLog.innerHTML = "";
         (frame.data || []).forEach(function (entry) {
-          if (inScope(entry)) addLine(entry.user_name || "", entry.text || "", false);
+          if (inScope(entry)) addLine(entry.user_name || "", entry.text || "", false, entry.emotes);
         });
       } else if (frame.type === "message") {
-        if (inScope(frame.data)) addLine(frame.data.user_name || "", frame.data.text || "", true);
+        if (inScope(frame.data)) addLine(frame.data.user_name || "", frame.data.text || "", true, frame.data.emotes);
       } else if (frame.type === "clear") {
         chatLog.innerHTML = "";
         addSystemLine("chat cleared");

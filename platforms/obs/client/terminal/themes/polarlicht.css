@@ -64,6 +64,23 @@ body:has(#rain)::after, body:has(.ground)::after {
   -webkit-backdrop-filter: blur(var(--avatar-blur)); backdrop-filter: blur(var(--avatar-blur));
 }
 
+/* the avatar frame's rim: the bars' two colours - cyan and magenta - running round the frame
+   (a conic gradient turning once every 8 s), so they travel along all four sides instead of
+   only sliding sideways */
+@property --rim-turn { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.cam-frame::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 2px; pointer-events: none; z-index: 5;
+  opacity: .9;
+  background: conic-gradient(from var(--rim-turn),
+    #5FEAF5, rgba(168, 138, 187, .95), #F22A80, rgba(168, 138, 187, .95), #5FEAF5,
+    rgba(168, 138, 187, .95), #F22A80, rgba(168, 138, 187, .95), #5FEAF5);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: pl-rim-turn 8s linear infinite;
+}
+@keyframes pl-rim-turn { to { --rim-turn: 360deg; } }
+.cam-frame { border-color: transparent !important; }
+
 /* ---- rising gaming gear instead of round sparks -------------------------------------------
    Plain silhouettes (no brand logos): a gamepad with offset sticks, one with symmetric sticks,
    a pair of Joy-Con-style halves, a mouse and a keyboard. Three layers like depth in a film:
@@ -92,7 +109,7 @@ html:has(.ground)::before { opacity: .9; }
 
 /* chat: font and sizes as the aurora chat had them - IBM Plex Mono (loaded by chat.html itself),
    messages at chat.html's own 14px, the title back at the 11px the file name had */
-.chat-frame { font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace; }
+.chat-frame { font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Courier New", monospace, "Noto Color Emoji"; }
 .chat-frame .titlebar .filename::after { font-size: 11px !important; font-weight: 600; }
 
 /* a gamepad instead of the flame everywhere - start, end, pause, ad break and the chat title -

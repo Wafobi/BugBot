@@ -374,6 +374,8 @@ class OverlayFeature(feature_api.Feature):
             "text": message.text,
             "is_privileged": message.is_privileged,
             "is_subscriber": message.is_subscriber,
+            # the platform's emotes in text, [[id, start, end], ...] - the page draws them
+            "emotes": [list(e) for e in message.emotes],
         }
         self._next_message_id += 1
         self._chat_history.append(entry)

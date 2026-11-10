@@ -91,7 +91,11 @@ body:has(#statusBadge) .log { display: none !important; }        /* boot: the fa
      ?t.chat-alpha=0.6   opacity of the window, 1 = solid (default), 0 = fully see-through
      ?t.chat-blur=6px    how much the game behind the window is blurred (default none)
    The text gets a soft shadow so it stays readable however see-through the window is. */
-:root { --chat-alpha: 1; --chat-blur: 0px; --chat-glass-alpha: .45; --chat-glass-blur: 6px; }
+/* registered, so a change can be animated - the glass switch fades instead of jumping */
+@property --chat-alpha { syntax: "<number>"; inherits: true; initial-value: 1; }
+@property --chat-blur { syntax: "<length>"; inherits: true; initial-value: 0px; }
+:root { --chat-alpha: 1; --chat-blur: 0px; --chat-glass-alpha: .45; --chat-glass-blur: 6px;
+        transition: --chat-alpha .6s ease, --chat-blur .6s ease; }
 /* switched from the Stream Deck (chat.html sets data-glass, see the comment there) */
 :root[data-glass="1"] { --chat-alpha: var(--chat-glass-alpha); --chat-blur: var(--chat-glass-blur); }
 .chat-frame {

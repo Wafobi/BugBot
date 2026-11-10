@@ -23,6 +23,10 @@ file:///path/to/bugbot/features/overlay/client/bars.html?token=…&bar=110
 | `camx=` | `230` | ring centre measured from the left |
 | `accent=` | `#5FEAF5` | accent colour, URL-encoded: `%23FFE100` for `#FFE100` |
 | `t.NAME=` | — | override any single design token, e.g. `t.bar-line-h=3px` |
+| `tab=x,w,h` | — | the top bar grows a tab downwards (from `x`, `w` wide, down to `y=h`), joined by soft fillets, the hairline following its outline - a ground for an avatar sitting on the bar instead of a frame of its own. Fill: `--bar-tab-bg` |
+| `chattab=x,w,h` | — | the same out of the bottom bar, upwards to `h` above the bottom edge - the ground the chat docks into (`terminal/chat.html?dock=`) |
+| `avatar=NAME` / `chat=NAME` | — | the OBS sources the two tabs follow: out while that source is enabled in the program scene (and program is one of `tabscenes=`), slid back in when it is hidden (0.7 s, eased). Without them a tab is always out. Connects to obs-websocket locally: `obs=` port (default `4455`), `obspw=` password, URL-encoded. Shared code: `client/obs-tabs.js` |
+| `tabscenes=A,B` | — | the scenes this overlay is in. There it takes the Stream Deck keys - obs-browser events `wafobi-avatar` / `wafobi-chat` (mode `toggle`/`show`/`hide`): showing grows the tab first and enables the source once it is out; hiding disables the source first, then the tab slides in |
 | `link=1` | off | show the connection lamp, top right. Off by default so a bot restart mid-stream does not put a red dot on screen |
 | `demo=1` | off | sample data without a connection, for previewing |
 

@@ -76,7 +76,11 @@ class Message:
     Features should only touch it when they are acting platform-specifically anyway;
     everything neutral is in the fields above.
 
-    command/arg_text are filled when the message was recognised as a command."""
+    command/arg_text are filled when the message was recognised as a command.
+
+    `emotes` are the platform's own emotes in `text`, as (id, start, end) - start/end are
+    inclusive character (code point) positions, the way Twitch reports them. Empty where a
+    platform has none or does not say."""
     platform: str
     user_id: str = ""
     user_name: str = ""
@@ -86,6 +90,7 @@ class Message:
     command: str = ""
     arg_text: str = ""
     raw: object = None
+    emotes: tuple = ()
 
 
 @dataclass(frozen=True)
