@@ -397,9 +397,8 @@
   var avatar = params.get("avatar");
   if (!dock.length && !(tab && avatar)) { if (tab) tab.set(true, true); return; }
   var tabs = {}, keys = { "wafobi-chat": params.get("chat") || "Chat" };
-  // the avatar key works here with or without a tab - without one it simply switches
-  if (avatar) keys["wafobi-avatar"] = avatar;
-  if (tab && avatar) tabs[avatar] = tab;
+  // the avatar key only with a tab - without one tubbi.html (the avatar frame) takes it
+  if (tab && avatar) { tabs[avatar] = tab; keys["wafobi-avatar"] = avatar; }
   link = ObsTabs.follow({
     port: params.get("obs") || "4455", password: params.get("obspw") || "",
     scenes: scenes, tabs: tabs, keys: keys,

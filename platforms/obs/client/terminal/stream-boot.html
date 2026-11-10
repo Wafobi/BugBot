@@ -15,12 +15,16 @@
              source=twitch or source=twitch,discord. Empty = everything the
              bot sends (default) - see window.__bootChat below
     theme=   load themes/<name>.css - see themes/README.md
+    wait=1   stand by until the stream is live, only then run. Default: run right
+             away on load (like demo=1, without its sample chat) and start over from
+             scratch when the stream goes live
     demo=1   the same sequence and timing as the real thing, just without a
              bot to wait on - for judging the layout, chat mixing included
              (sample messages, see DEMO_CHAT below, not ?source= filtered)
 
-  The boot sequence (log lines, chime/blips, progress bar, ambient glitches) does not start
-  on page load: it waits for features/overlay's "live" to turn true (or ?demo=1), then three
+  The boot sequence (log lines, chime/blips, progress bar, ambient glitches) starts on page
+  load (with ?wait=1 only once features/overlay's "live" turns true), and again from scratch
+  when the stream goes live: first three
   seconds of just the blinking cursor, then the command after the shell prompt types itself
   out - keystroke sounds, the occasional typo (backspaced and corrected) - and fire()s the
   rest right after that finishes, not on a fixed timer running in parallel that could land
@@ -323,7 +327,9 @@
      bars.html/chat.html use - see docs/overlay.md - or ?demo=1), PROMPT_START_DELAY_MS has
      passed, and the typed command in startPrompt() below has finished - see its onDone.
      Reconnecting mid-standby is harmless: the gate only ever fires once, so a
-     dropped/restored connection cannot restart an already-running boot sequence. -->
+     dropped/restored connection cannot restart an already-running boot sequence. A real
+     change of "live" does: going live again after a stream, or going offline, reloads the
+     page - a fresh run, or the standby back. -->
 <script>
 (function () {
   var GATE_DELAY_MS = 5000;
@@ -471,7 +477,15 @@
     var sources = (params.get("source") || "")
       .split(",").map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
     var live = false;
+    var seenLive = null;          // the live state of the last frame - null until the first
     var promptTimer = null;
+    // By default the sequence runs right away, like ?demo=1 (without the sample chat) - the
+    // screen is never stuck on standby while waiting for the stream - and starts over from
+    // scratch the moment the stream really goes live (see the reload below). ?wait=1: the
+    // old way, standby until "live".
+    if (params.get("wait") !== "1") {
+      promptTimer = setTimeout(function () { startPrompt(fire); }, PROMPT_START_DELAY_MS);
+    }
 
     function connect() {
       var socket = new WebSocket("ws://" + host + ":" + port + "/?token=" + encodeURIComponent(token));
@@ -493,7 +507,19 @@
         }
         if (frame.type !== "state" && frame.type !== "patch") return;
         var data = frame.data || {};
-        if ("live" in data) live = !!data.live;
+        if ("live" in data) {
+          var nowLive = !!data.live;
+          // A change of the live state after this page has already run (or shown) a boot
+          // resets it - simplest and cleanest by reloading: going offline brings back the
+          // standby, going live again starts a fresh run (the reloaded page sees "live" in
+          // its first state frame). A reconnect repeats the same state and changes nothing.
+          if (seenLive !== null && nowLive !== seenLive && (promptTimer || !nowLive)) {
+            location.reload();
+            return;
+          }
+          seenLive = nowLive;
+          live = nowLive;
+        }
         if (live && !promptTimer) {
           promptTimer = setTimeout(function () { startPrompt(fire); }, PROMPT_START_DELAY_MS);
         }

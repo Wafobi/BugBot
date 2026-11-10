@@ -14,6 +14,13 @@
              lands as an inline style on the root element, so it wins over
              every rule in the stylesheet regardless of load order.
 
+    avatar=NAME  show the frame only while the OBS source NAME (the avatar itself) is
+             enabled in the program scene - it fades in and out with it, however the
+             avatar is switched (Stream Deck, OBS). Needs obs-websocket locally: obs=
+             port (default 4455), obspw= password, URL-encoded. tabscenes=A,B: there the
+             frame takes the Stream Deck's avatar key (frame first, then the avatar).
+             See ../obs-tabs.js.
+
   No spaces in values (rgba(4,5,14,1) survives a URL, "rgba(4, 5, 14, 1)"
   tears the query apart).
 -->
@@ -198,5 +205,22 @@
   }
   window.addEventListener("resize", fit);
   fit();
+})();
+</script>
+
+<script src="../obs-tabs.js"></script>
+<script>
+(function () {
+  /* ?avatar=: the frame goes with the avatar - faded, so it neither pops nor lingers. */
+  var params = new URLSearchParams(location.search), avatar = params.get("avatar");
+  if (!avatar) return;
+  var frame = document.querySelector(".cam-frame");
+  var fade = ObsTabs.tween(function (t) { frame.style.opacity = t; }, 400);
+  var tabs = {}; tabs[avatar] = fade;
+  // tabscenes=: in these scenes the frame also takes the Stream Deck's avatar key - frame
+  // first, avatar once it is there; hiding, the avatar goes first and the frame after
+  var scenes = (params.get("tabscenes") || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean);
+  ObsTabs.follow({ port: params.get("obs") || "4455", password: params.get("obspw") || "",
+                   scenes: scenes, tabs: tabs, keys: { "wafobi-avatar": avatar } });
 })();
 </script>
