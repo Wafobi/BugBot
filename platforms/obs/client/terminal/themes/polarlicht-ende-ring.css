@@ -1,5 +1,5 @@
 /* End-screen layout variant on top of polarlicht (stream-end.html?theme=polarlicht-ende-ring) - only the
-   arrangement changes, colours and sounds stay polarlicht's. Compare: ../vorschau.html */
+   arrangement changes, colours and sounds stay polarlicht's. Compare: features/overlay/client/vorschau.html */
 @import url("polarlicht.css");
 
 /* Im Ring: like the start screen variant - the gamepad in a round frame with the running

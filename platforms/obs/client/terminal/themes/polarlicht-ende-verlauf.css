@@ -1,5 +1,5 @@
 /* End-screen layout variant on top of polarlicht (stream-end.html?theme=polarlicht-ende-verlauf) - only the
-   arrangement changes, colours and sounds stay polarlicht's. Compare: ../vorschau.html */
+   arrangement changes, colours and sounds stay polarlicht's. Compare: features/overlay/client/vorschau.html */
 @import url("polarlicht.css");
 
 /* Verlauf: the card as it is, but in colour - heading and numbers in the cyan/magenta

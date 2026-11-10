@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Overlay-Vorschau</title>
+<!--
+  The one overview of everything the overlay can look like - only for the browser, nothing here
+  goes to OBS. Every picture is the real page (or several stacked like the sources of an OBS
+  scene), in demo mode where a page has one, muted. The green-blue field stands in for the game.
+  Tabs (remembered in the address, e.g. vorschau.html#farben):
+
+    Jetzt in OBS   the scenes as OBS has them now, with the sources' real parameters
+    Start / Ende   layout variants of the start and end screen (platforms/obs/client/terminal/themes/polarlicht-*.css)
+    Farben         polarlicht in other palettes, whole scenes (pl-*.css, made by
+                   platforms/obs/client/terminal/themes/palettes.py)
+    Stat-Balken    bars.html + chat.html with every theme in themes/
+    Terminal       the terminal pages with every theme in terminal/themes/
+    Cozy           the cozy skin's themes (cozy/)
+    Werkzeuge      the other previews and tools, linked
+
+  Only the open tab's frames load. "▶ anhören" on a start/end card reloads it with sound
+  (click once into the picture if the browser still keeps it quiet). The page itself loads
+  nothing from the internet; the terminal pages inside fetch their fonts as always.
+  When the OBS setup changes, update NOW below.
+-->
+<style>
+  /* no color-scheme: dark here - a scheme different from the framed pages makes Chromium paint
+     their iframes opaque white instead of transparent */
+  :root { --bg: #070920; --panel: #0e1130; --edge: #2c3266; --text: #e6ecff; --soft: #8a93c2; --hl: #5FEAF5;
+          --font: "Noto Sans", system-ui, sans-serif; --mono: ui-monospace, "DejaVu Sans Mono", monospace; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  header { padding: 26px 32px 4px; }
+  h1 { margin: 0; font-size: 26px; font-weight: 650; }
+  header p { margin: 6px 0 0; color: var(--soft); font-size: 13.5px; line-height: 1.5; max-width: 100ch; }
+  code { font-family: var(--mono); font-size: 12px; }
+  nav { position: sticky; top: 0; z-index: 5; background: var(--bg); display: flex; gap: 8px; flex-wrap: wrap;
+        padding: 14px 32px 12px; }
+  nav button { background: var(--panel); color: var(--soft); border: 1px solid var(--edge); border-radius: 999px;
+               padding: 7px 16px; font: inherit; font-size: 14px; cursor: pointer; }
+  nav button.on { color: var(--text); border-color: var(--hl); }
+  .pane { padding: 4px 32px 40px; }
+  .intro { color: var(--soft); font-size: 13px; margin: 0 0 14px; max-width: 100ch; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); gap: 18px; }
+  .grid.wide { grid-template-columns: 1fr; }
+  .card { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 10px; }
+  .shots { display: grid; gap: 10px; }
+  .shots.n2 { grid-template-columns: repeat(2, 1fr); }
+  .shots.n3 { grid-template-columns: repeat(3, 1fr); }
+  .shots.n4 { grid-template-columns: repeat(4, 1fr); }
+  .shot { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 7px; background: #000; display: block; }
+  .shot:hover { outline: 1px solid var(--hl); }
+  .shot .cap { position: absolute; left: 8px; bottom: 6px; z-index: 2; font-size: 11px; color: #fff; text-shadow: 0 1px 3px #000; }
+  .stage { position: absolute; left: 0; top: 0; width: 2560px; height: 1440px; transform-origin: 0 0; }
+  .stage iframe { position: absolute; border: 0; pointer-events: none; background: transparent; }
+  .game { position: absolute; left: 0; top: 0; width: 2560px; height: 1440px;
+          background: radial-gradient(ellipse at 30% 70%, #2f5d3a 0 20%, transparent 45%),
+                      radial-gradient(ellipse at 72% 30%, #3e6f8a 0 16%, transparent 48%),
+                      linear-gradient(160deg, #5a8fa8, #7fae7a 55%, #4b6b3f); }
+  .head { display: flex; align-items: center; gap: 10px; padding: 10px 4px 2px; flex-wrap: wrap; }
+  .name { font-weight: 650; font-size: 15px; }
+  .badge { background: var(--hl); color: #06202a; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .swatch { width: 100px; height: 12px; border-radius: 6px; }
+  .cmd { color: #6f78a8; font-family: var(--mono); font-size: 12px; margin-left: auto; }
+  .what { color: var(--soft); font-size: 12.5px; padding: 3px 4px 2px; line-height: 1.45; }
+  .what a, .tools a { color: var(--hl); }
+  .listen { background: #1b2050; color: var(--text); border: 1px solid var(--edge); border-radius: 999px;
+            padding: 3px 12px; font: inherit; font-size: 12.5px; cursor: pointer; }
+  .listen.on { background: var(--hl); color: #06202a; border-color: var(--hl); }
+  .tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
+  .tools .card { padding: 14px 16px; }
+  .tools .card b { font-size: 15px; }
+  .tools .card p { margin: 6px 0 0; color: var(--soft); font-size: 13px; line-height: 1.45; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Overlay-Vorschau</h1>
+  <p>Alles, wie es aussehen kann: die echten Seiten, gestapelt wie die Quellen einer OBS-Szene, im Demo-Modus und stumm.
+     Das grün-blaue Feld steht für das Spielbild. Ein Klick auf ein Bild öffnet die Seite groß. Übernehmen: den
+     angezeigten <code>theme=</code> in die URL der Quelle in OBS schreiben.</p>
+</header>
+<nav id="nav"></nav>
+<main id="panes"></main>
+
+<script src="cozy/cozy.js"></script>
+<script>
+(function () {
+  var OBS = "../../../platforms/obs/client/terminal/";
+  var T = "terminal/";
+
+  // --- what OBS has now (keep in step with the sources' URLs) --------------------------------
+  var NOW = {
+    term: "polarlicht", bars: "polarlicht", boot: "polarlicht-frei", end: "polarlicht",
+    background: "pattern=plain&scanlines=0&t.gear-speed=0.5",
+    barsArgs: "bar=184&cam=0&only=top,bottom&tab=2094,322,282&chattab=40,460,330&pad=72",
+    dock: "dockrect=60,1126,420,258&docked=1",
+    frame: "t.avatar-alpha=0.9&t.avatar-blur=10px",
+    video: "title=BlizzCon%202026&now=twitch.tv/blizzard"
+  };
+
+  // --- building blocks --------------------------------------------------------------------
+  function full(src) { return { src: src, x: 0, y: 0, w: 2560, h: 1440 }; }
+  function q(theme, extra) {
+    var p = [];
+    if (theme) p.push("theme=" + theme);
+    if (extra) p.push(extra);
+    return p.length ? "?" + p.join("&") : "";
+  }
+  // whole scenes, for a terminal theme and a bars theme
+  function scenes(term, bars, opts) {
+    opts = opts || {};
+    var bg = full(T + "background.html" + q(term, NOW.background));
+    var barsSrc = full("bars.html" + q(bars, "demo=1&" + NOW.barsArgs));
+    var pc = [bg, "game", barsSrc, full(T + "chat.html" + q(term, "demo=1&" + NOW.dock))];
+    var ps5 = [bg, "game", full(T + "chat.html" + q(term, "demo=1")), full(T + "tubbi.html" + q(term, NOW.frame))];
+    return {
+      pc: pc, ps5: ps5,
+      react: [bg, "game", full(T + "video.html" + q(term, NOW.video)), full(T + "chat.html" + q(term, "demo=1")),
+              full(T + "tubbi.html" + q(term, NOW.frame))],
+      pause: pc.concat([full(OBS + "stream-pause.html" + q(term))]),
+      ad: pc.concat([full(OBS + "ad-break.html" + q(term, "demo=1"))]),
+      start: [full(OBS + "stream-boot.html" + q(opts.boot || term, "demo=1&mute=1"))],
+      end: [full(OBS + "stream-end.html" + q(opts.end || term, "demo=1&mute=1"))]
+    };
+  }
+
+  // a picture: layers stacked on a 2560x1440 stage, scaled to the card; the link opens the
+  // topmost real page on its own
+  function shot(layers, caption) {
+    var html = '<a class="shot" target="_blank" href="' + layers.filter(function (l) { return l.src; }).slice(-1)[0].src + '">' +
+      (caption ? '<span class="cap">' + caption + "</span>" : "") + '<div class="stage">';
+    layers.forEach(function (l) {
+      if (l === "game") { html += '<div class="game"></div>'; return; }
+      html += '<iframe data-src="' + l.src + '" style="left:' + l.x + "px;top:" + l.y + "px;width:" + l.w + "px;height:" + l.h + 'px"></iframe>';
+    });
+    return html + "</div></a>";
+  }
+  function card(o) {
+    var n = o.shots.length;
+    return '<div class="card">' + '<div class="shots' + (n === 2 ? " n2" : n === 3 ? " n3" : n >= 4 ? " n4" : "") + '">' +
+      o.shots.map(function (s) { return shot(s[0], s[1]); }).join("") + "</div>" +
+      '<div class="head"><span class="name">' + o.name + "</span>" + (o.badge ? '<span class="badge">' + o.badge + "</span>" : "") +
+      (o.swatch ? '<span class="swatch" style="background:linear-gradient(90deg,' + o.swatch[0] + "," + o.swatch[1] + ')"></span>' : "") +
+      (o.listen ? '<button class="listen" type="button">▶ anhören</button>' : "") +
+      (o.cmd ? '<span class="cmd">' + o.cmd + "</span>" : "") + "</div>" +
+      (o.what ? '<div class="what">' + o.what + "</div>" : "") + "</div>";
+  }
+
+  // --- the tabs ----------------------------------------------------------------------------
+  var TABS = [];
+  function tab(id, label, intro, html, wide) {
+    TABS.push({ id: id, label: label, html: (intro ? '<p class="intro">' + intro + "</p>" : "") +
+      (html.indexOf('class="tools"') >= 0 ? html : '<div class="grid' + (wide ? " wide" : "") + '">' + html + "</div>") });
+  }
+
+  // Jetzt in OBS
+  var now = scenes(NOW.term, NOW.bars, { boot: NOW.boot, end: NOW.end });
+  tab("jetzt", "Jetzt in OBS",
+    "Die Szenen so, wie OBS sie gerade hat (Theme <code>" + NOW.term + "</code>, Start <code>" + NOW.boot + "</code>). " +
+    "Die Avatar-Figur selbst kommt aus einer eigenen App und fehlt hier – zu sehen sind Lasche und Rahmen.",
+    [["PC", now.pc, "Balken mit Lasche oben (Avatar) und unten (Chat, hier ganz ausgefahren)."],
+     ["PS5", now.ps5, "Chat-Karte unten links, Avatar-Rahmen oben rechts."],
+     ["React", now.react, "Video-Rahmen, Chat-Karte und Avatar-Rahmen."],
+     ["Pause", now.pause, "Über der PC-Szene."],
+     ["Werbepause", now.ad, "Über der PC-Szene."]].map(function (s) {
+      return card({ name: s[0], shots: [[s[1]]], what: s[2], badge: "in OBS" });
+    }).concat([
+      card({ name: "Start", shots: [[now.start]], badge: "in OBS", listen: true, cmd: "theme=" + NOW.boot }),
+      card({ name: "Ende", shots: [[now.end]], badge: "in OBS", listen: true, cmd: "theme=" + NOW.end })
+    ]).join(""));
+
+  // Start / Ende layouts
+  var START = [
+    ["polarlicht", "Standard", "Die Karte mit Controller links."],
+    ["polarlicht-seitlich", "Groß seitlich", "Controller groß links, Text daneben, Karte breiter."],
+    ["polarlicht-oben", "Oben zentriert", "Controller groß über der Überschrift, alles mittig."],
+    ["polarlicht-frei", "Frei schwebend", "Keine Karte, riesiger Controller, dünne Fortschrittslinie."],
+    ["polarlicht-ring", "Im Ring", "Controller in einem runden Rahmen mit umlaufendem Rand."],
+    ["polarlicht-banner", "Breites Banner", "Breite Karte, Überschrift im Farbverlauf, dicker Verlaufsbalken."]
+  ];
+  tab("start", "Start", "Layout-Varianten des Startbildschirms – Farben und Klang bleiben polarlicht.",
+    START.map(function (v) {
+      return card({ name: v[1], shots: [[[full(OBS + "stream-boot.html?theme=" + v[0] + "&demo=1&mute=1")]]], what: v[2],
+                    cmd: "theme=" + v[0], listen: true, badge: v[0] === NOW.boot ? "in OBS" : "" });
+    }).join(""));
+  var ENDE = [
+    ["polarlicht", "Standard", "Karte mit Controller, Zahlen-Kacheln und Namen."],
+    ["polarlicht-ende-verlauf", "Verlauf", "Überschrift und Zahlen im Farbverlauf, Verlaufslinie über jeder Kachel."],
+    ["polarlicht-ende-frei", "Frei", "Keine Karte, großer Controller und Überschrift, Kacheln als Glas."],
+    ["polarlicht-ende-spalten", "Zwei Spalten", "Breite Karte: links Controller und Titel, rechts Zahlen und Namen."],
+    ["polarlicht-ende-zahlen", "Große Zahlen", "Ohne Kachelrahmen, große Zahlen im Verlauf, feine Trennlinien."],
+    ["polarlicht-ende-ring", "Im Ring", "Controller im umlaufenden Ring, alles mittig – passend zum Start „Im Ring“."]
+  ];
+  tab("ende", "Ende", "Layout-Varianten des Endbildschirms, mit der Beispiel-Bilanz.",
+    ENDE.map(function (v) {
+      return card({ name: v[1], shots: [[[full(OBS + "stream-end.html?theme=" + v[0] + "&demo=1&mute=1")]]], what: v[2],
+                    cmd: "theme=" + v[0], listen: true, badge: v[0] === NOW.end ? "in OBS" : "" });
+    }).join(""));
+
+  // Farben
+  var FARBEN = [
+    ["polarlicht", "Polarlicht", "#5FEAF5", "#F22A80"],
+    ["pl-wafobi", "Wafobi-Logo", "#26D5D5", "#A72ED9"],
+    ["pl-sunset", "Sonnenuntergang", "#FFB347", "#FF3F86"],
+    ["pl-synthwave", "Synthwave", "#FF4FD8", "#7B5CFF"],
+    ["pl-toxic", "Toxic", "#9BFF5C", "#1FC8FF"],
+    ["pl-ozean", "Ozean", "#4FC3FF", "#2FFFB4"],
+    ["pl-lava", "Lava", "#FFD34F", "#FF3B2F"],
+    ["pl-eis", "Eis", "#DDF3FF", "#5B86FF"],
+    ["pl-vapor", "Vaporwave", "#B48CFF", "#45F0D0"]
+  ];
+  tab("farben", "Farben",
+    "polarlicht in anderen Paletten, ganze Szenen: Balken, Chat, Avatar-Rahmen, Hintergrund, Start und Ende. " +
+    "Gilt für alle Quellen: überall <code>theme=polarlicht</code> durch den Namen ersetzen. Neue Paletten: " +
+    "<code>platforms/obs/client/terminal/themes/palettes.py</code>.",
+    FARBEN.map(function (p) {
+      var s = scenes(p[0], p[0]);
+      return card({ name: p[1], swatch: [p[2], p[3]], cmd: "theme=" + p[0], badge: p[0] === NOW.term ? "in OBS" : "",
+                    shots: [[s.pc, "PC"], [s.ps5, "PS5"], [s.start, "Start"], [s.end, "Ende"]] });
+    }).join(""), true);
+
+  // Stat-Balken
+  var BARS = [
+    ["", "Standard", "Indigo/Karmin-Nebel, Cyan, Magenta-Kontur."],
+    ["sunset", "Sunset", "Warmes Bernstein und Koralle, keine kühlen Farben."],
+    ["mono", "Mono", "Graustufen, minimal, ohne Muster."],
+    ["kaminfeuer", "Kaminfeuer", "Warm und durchsichtig, Haarlinie in gedämpfter Glut."],
+    ["polarlicht", "Polarlicht", "Dunkelblau und durchsichtig, Haarlinie Cyan zu Magenta."]
+  ];
+  tab("balken", "Stat-Balken", "<code>bars.html</code> mit allen Inhalten und <code>chat.html</code> rechts, je Theme aus <code>themes/</code>.",
+    BARS.map(function (t) {
+      return card({ name: t[1], what: t[2], cmd: t[0] ? "theme=" + t[0] : "ohne theme=", badge: t[0] === NOW.bars ? "in OBS" : "",
+        shots: [[["game", full("bars.html" + q(t[0], "demo=1")), { src: "chat.html" + q(t[0], "demo=1&idle=0"), x: 2080, y: 300, w: 420, h: 860 }]]] });
+    }).join(""));
+
+  // Terminal
+  var TERMINAL = [
+    ["", "Amber", "Bernsteinfarbener CRT-Bildschirm, das Original."],
+    ["matrix", "Matrix", "Grüner Phosphor."],
+    ["cyan", "Cyan", "Kühles Cyan."],
+    ["aurora", "Aurora", "Cyan und Magenta im Terminal-Look."],
+    ["glut", "Glut", "Das Terminal ohne Terminal: warme Farben, runde Schrift, schlichte Karten."],
+    ["kaminfeuer", "Kaminfeuer", "Glut plus Kamin: Glutrand, Flamme, Funken, Feuerschein, Knistern."],
+    ["polarlicht", "Polarlicht", "Kaminfeuer in Cyan/Magenta auf Nachtblau, Controller und aufsteigende Gaming-Geräte, Aurora-Klang."]
+  ];
+  tab("terminal", "Terminal", "Die Terminal-Seiten je Theme aus <code>terminal/themes/</code>: Spielszene mit Chat und Avatar-Rahmen, Pause, Start und Ende.",
+    TERMINAL.map(function (t) {
+      var s = scenes(t[0], "");
+      var ps5 = [full(T + "background.html" + q(t[0], "pattern=plain&scanlines=0")), "game",
+                 full(T + "chat.html" + q(t[0], "demo=1")), full(T + "tubbi.html" + q(t[0]))];
+      return card({ name: t[1], what: t[2], cmd: t[0] ? "theme=" + t[0] : "ohne theme=", badge: t[0] === NOW.term ? "in OBS" : "",
+                    shots: [[ps5, "Spiel"], [ps5.concat([full(OBS + "stream-pause.html" + q(t[0]))]), "Pause"], [s.start, "Start"], [s.end, "Ende"]] });
+    }).join(""), true);
+
+  // Cozy
+  tab("cozy", "Cozy", 'Der eigene Cozy-Skin (<code>cozy/</code>, nicht in OBS) – alle Szenen je Theme: <a href="cozy/preview.html" style="color:var(--hl)">cozy/preview.html</a>.',
+    (window.Cozy ? Cozy.THEMES : []).map(function (t, i) {
+      return card({ name: (i + 1) + " · " + t.name, what: t.blurb + ".", cmd: "theme=" + t.id,
+        shots: [[[full("cozy/background.html?theme=" + t.id), "game", full("cozy/overlay.html?demo=1&theme=" + t.id)]]] });
+    }).join(""));
+
+  // Werkzeuge
+  var TOOLS = [
+    ["preview.html", "Stat-Balken einstellen", "bars.html mit Schiebereglern für Größen, Kamera-Ring, Teile und Farben – die URL zum Kopieren."],
+    ["chat_preview.html", "Chat einstellen", "chat.html über einem Spielbild, Breite, Höhe, Zeilen, Quelle."],
+    ["terminal/video_preview.html", "Video-Rahmen", "Der Rahmen der React-Szene (video.html) mit Titel und Quelle."],
+    ["cozy/preview.html", "Cozy – alle Szenen", "Jede Szene des Cozy-Skins je Theme."],
+    [OBS + "wrap-vergleich.html", "Umbruch-Vergleich", "Wie lange Chat-Zeilen auf Start und Ende umbrechen."],
+    ["../../../../twitch-panels/art.html", "Avatar-Stile", "Kontaktbogen der Avatar-Stilvarianten (twitch-panels, eigenes Repo)."]
+  ];
+  tab("werkzeuge", "Werkzeuge", "", '<div class="tools">' + TOOLS.map(function (t) {
+    return '<div class="card"><b><a href="' + t[0] + '" target="_blank">' + t[1] + "</a></b><p>" + t[2] + "</p></div>";
+  }).join("") + "</div>");
+
+  // --- tab switching: only the open tab's frames are loaded --------------------------------
+  var nav = document.getElementById("nav"), panes = document.getElementById("panes");
+  TABS.forEach(function (t) {
+    var b = document.createElement("button"); b.textContent = t.label; b.dataset.tab = t.id; nav.appendChild(b);
+    var p = document.createElement("section"); p.className = "pane"; p.id = t.id; p.innerHTML = t.html; panes.appendChild(p);
+  });
+  function fit() {
+    document.querySelectorAll(".pane:not([hidden]) .shot").forEach(function (s) {
+      s.querySelector(".stage").style.transform = "scale(" + s.clientWidth / 2560 + ")"; });
+  }
+  function show(id) {
+    if (!TABS.some(function (t) { return t.id === id; })) id = TABS[0].id;
+    document.querySelectorAll(".pane").forEach(function (p) {
+      var on = p.id === id;
+      p.hidden = !on;
+      p.querySelectorAll("iframe").forEach(function (f) {
+        if (on && !f.getAttribute("src")) f.src = f.dataset.src;
+        if (!on && f.getAttribute("src")) f.removeAttribute("src");
+      });
+    });
+    nav.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b.dataset.tab === id); });
+    history.replaceState(null, "", "#" + id);
+    fit();
+  }
+  nav.addEventListener("click", function (e) { if (e.target.dataset.tab) show(e.target.dataset.tab); });
+  window.addEventListener("resize", fit);
+
+  // --- listening: reload a start/end card's frame with sound (allow="autoplay" hands this
+  // click's permission down to the frame); only one at a time ----------------------------
+  var playing = null;
+  function sound(cardEl, on) {
+    var old = cardEl.querySelector(".stage iframe"), frame = document.createElement("iframe");
+    frame.style.cssText = old.style.cssText;
+    frame.dataset.src = old.dataset.src;
+    var src = old.dataset.src;
+    if (on) { frame.setAttribute("allow", "autoplay"); frame.style.pointerEvents = "auto"; src = src.replace("&mute=1", "") + "&_=" + Date.now(); }
+    frame.src = src;
+    old.replaceWith(frame);
+    var btn = cardEl.querySelector(".listen");
+    btn.textContent = on ? "■ Stopp" : "▶ anhören"; btn.classList.toggle("on", on);
+  }
+  panes.addEventListener("click", function (e) {
+    if (!e.target.classList.contains("listen")) return;
+    var cardEl = e.target.closest(".card");
+    if (playing === cardEl) { sound(cardEl, false); playing = null; return; }
+    if (playing) sound(playing, false);
+    sound(cardEl, true); playing = cardEl;
+  });
+
+  show((location.hash || "").slice(1));
+})();
+</script>
+</body>
+</html>

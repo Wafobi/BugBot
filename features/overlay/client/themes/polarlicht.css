@@ -2,6 +2,11 @@
    see-through dark bars as kaminfeuer, in night blue, with the hairline running cyan <-> magenta
    (bars.html's own aurora hairline, muted to the card rims). Leave t.bar-bg-* off the URL. */
 :root {
+  /* ?pad= gamepad in the top bar */
+  --pad-a: #5FEAF5;
+  --pad-b: #F22A80;
+  --pad-glow-a: rgba(95, 234, 245, .38);
+  --pad-glow-b: rgba(242, 42, 128, .32);
   --accent: #5FEAF5;
   --ink: #EAF7FF;
   --dim: rgba(234, 247, 255, .55);

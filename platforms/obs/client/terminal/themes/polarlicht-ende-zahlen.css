@@ -1,5 +1,5 @@
 /* End-screen layout variant on top of polarlicht (stream-end.html?theme=polarlicht-ende-zahlen) - only the
-   arrangement changes, colours and sounds stay polarlicht's. Compare: ../vorschau.html */
+   arrangement changes, colours and sounds stay polarlicht's. Compare: features/overlay/client/vorschau.html */
 @import url("polarlicht.css");
 
 /* Große Zahlen: a wide card with fewer, bigger things - the numbers large in the gradient, the

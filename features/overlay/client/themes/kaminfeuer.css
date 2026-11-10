@@ -6,6 +6,11 @@
    Note: ?t.bar-bg-top=/t.bar-bg-bottom= on the URL still win over this file - leave them off,
    or the bars go back to whatever colour they name. */
 :root {
+  /* ?pad= gamepad in the top bar */
+  --pad-a: #FFC36B;
+  --pad-b: #E8833A;
+  --pad-glow-a: rgba(255, 195, 107, .35);
+  --pad-glow-b: rgba(232, 131, 58, .32);
   --accent: #E9A85A;
   --ink: #FFEFD9;
   --dim: rgba(255, 239, 217, .55);

@@ -40,6 +40,8 @@
              (obs-browser events "wafobi-avatar" / "wafobi-chat", mode toggle|show|hide):
              showing, the tab grows first and the source appears once it is out; hiding,
              the source goes first and the tab slides in after. See obs-tabs.js.
+    pad=96   a gamepad at the left of the top bar, wobbling, 96 px high (pad=1: default
+             size). Colours: --pad-a / --pad-b, glow --pad-glow-a / --pad-glow-b
     link=1   show the connection lamp, top right (default off)
     demo=1   sample data without a connection - for looking at it in a normal browser
 
@@ -90,6 +92,11 @@
 
     /* Colors */
     --accent: #5FEAF5;
+    /* ?pad= - the gamepad in the top bar: gradient and glow */
+    --pad-a: #5FEAF5;
+    --pad-b: #F22A80;
+    --pad-glow-a: rgba(95, 234, 245, .38);
+    --pad-glow-b: rgba(242, 42, 128, .32);
     --ink: #EAF7FF;
     --dim: rgba(234, 247, 255, .5);
     /* The carmine of the fog clouds - the live dot is one of the three places allowed to
@@ -310,6 +317,17 @@
     border-radius: 50%; border: var(--cam-outer-w) solid var(--cam-outer);
   }
 
+  /* ?pad=: a gamepad at the left of the top bar, wobbling gently - the same shape as on the
+     screens (terminal themes), in a gradient from --pad-a to --pad-b. Decoration only, not a
+     data-part (so ?only=top,bottom keeps it). */
+  .bar-pad { position: absolute; left: var(--pad); top: 50%; z-index: 3; pointer-events: none;
+             height: var(--pad-h, 96px); width: calc(var(--pad-h, 96px) * 64 / 50); margin-top: calc(var(--pad-h, 96px) / -2);
+             filter: drop-shadow(-2px -1px 6px var(--pad-glow-a)) drop-shadow(2px 1px 6px var(--pad-glow-b));
+             animation: bar-pad-bob 3.2s ease-in-out infinite; }
+  .bar-pad svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  @keyframes bar-pad-bob { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-5px) rotate(3deg); } }
+  @media (prefers-reduced-motion: reduce) { .bar-pad { animation: none; } }
+
   /* Connection lamp, only interesting while setting up: visible with ?link=1, otherwise
      not. Off by default, because a red dot in the corner would otherwise sit right in the
      picture exactly when the bot restarts mid-stream. That the connection is missing is
@@ -351,6 +369,11 @@
 </div>
 
 <div id="cam" data-part="cam"></div>
+
+<template id="padArt"><div class="bar-pad"><svg viewBox="0 6 64 50" aria-hidden="true">
+  <defs><linearGradient id="padGrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset=".1" style="stop-color: var(--pad-a)"/><stop offset=".9" style="stop-color: var(--pad-b)"/></linearGradient></defs>
+  <path fill="url(#padGrad)" fill-rule="evenodd" d="M14,18 C18,14 46,14 50,18 C56,21 61,34 61,43 C61,51 55,53 51,49 L45,42 C42,40 22,40 19,42 L13,49 C9,53 3,51 3,43 C3,34 8,21 14,18 ZM13.8,26a4.2,4.2 0 1,0 8.4,0a4.2,4.2 0 1,0 -8.4,0zM23.6,29.8h2.8v2.8000000000000003h2.8000000000000003v2.8h-2.8000000000000003v2.8000000000000003h-2.8v-2.8000000000000003h-2.8000000000000003v-2.8h2.8000000000000003zM35.4,34a3.6,3.6 0 1,0 7.2,0a3.6,3.6 0 1,0 -7.2,0zM44.2,22a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0zM48.2,26a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0zM44.2,30a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0zM40.2,26a1.8,1.8 0 1,0 3.6,0a1.8,1.8 0 1,0 -3.6,0z"/></svg></div></template>
 
 <div class="bar bottom" data-part="bottom">
   <div class="block" data-part="deaths"><span class="label">Tode</span><span class="value accent" id="deaths">0</span></div>
@@ -522,6 +545,13 @@ function barTab(bar, arg, bottom) {
       scenes: list("tabscenes"), tabs, keys,
     });
   }
+}
+
+// ?pad=<height>: the wobbling gamepad at the left of the top bar (see .bar-pad)
+if (params.has("pad") && document.querySelector(".bar.top").style.display !== "none") {
+  const h = parseInt(params.get("pad"), 10);
+  if (h >= 20) root.setProperty("--pad-h", h + "px");     // smaller (pad=1): the default size
+  document.querySelector(".bar.top").appendChild(document.getElementById("padArt").content.cloneNode(true));
 }
 
 if (params.get("link") === "1") document.getElementById("link").classList.add("shown");

@@ -1,6 +1,6 @@
 /* Start-screen layout variant on top of polarlicht (stream-boot.html?theme=polarlicht-banner) - only the
    arrangement and the size of the gamepad change, colours and sounds stay polarlicht's.
-   Compare them side by side: ../vorschau.html */
+   Compare them side by side: features/overlay/client/vorschau.html */
 @import url("polarlicht.css");
 
 /* Breites Banner: a wide, low card - the gamepad large and tilted on the left, the heading in the

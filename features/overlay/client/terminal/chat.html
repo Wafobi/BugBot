@@ -28,7 +28,8 @@
              with it, following the OBS source NAME in those scenes, which also take
              the Stream Deck keys there. dock=PC&dockrect=x,y,w,h: in those scenes the
              chat drops its card and sits in bars.html's ?chattab=. obs= / obspw= for
-             obs-websocket. Details: the script after the .stage div, and ../obs-tabs.js
+             obs-websocket. docked=1 forces the docked look without OBS (previews).
+             Details: the script after the .stage div, and ../obs-tabs.js
     ttl=     seconds a chat line stays before it fades out (default 120, 0 = for ever)
 
     t.NAME=  override any single design token from :root below, e.g.
@@ -347,6 +348,8 @@
   var list = function (name) { return (params.get(name) || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean); };
   var root = document.documentElement, frame = document.querySelector(".chat-frame");
   var dock = list("dock"), rect = list("dockrect").map(Number);
+  // docked=1: always docked, without OBS - for previews (vorschau.html)
+  if (params.get("docked") === "1") root.setAttribute("data-dock", "1");
   if (rect.length === 4) ["x", "y", "w", "h"].forEach(function (k, i) { root.style.setProperty("--dock-" + k, rect[i] + "px"); });
 
   // avatartab=y,h,w: the tab grows sideways out of the card's right edge - y from the card's
