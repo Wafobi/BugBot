@@ -237,3 +237,39 @@ async def test_snapshot_recap_refresh_without_a_running_session_is_a_no_op(overl
     overlay._stats = FakeStats(stats=None, events=[])
     await overlay.snapshot()
     assert overlay._state["stream_recap"] is None
+
+
+
+# --- "live" follows the encoder's output (OBS stream_started/stream_stopped/obs_exit) -
+# ~20 s ahead of Twitch's STREAM_START, which then only adds title/category ------------
+
+async def test_obs_stream_started_goes_live_and_clears_chat(overlay):
+    await overlay.on_message(make_message("from yesterday"))
+    before = time.time()
+    await overlay.on_platform_event(platform="obs", event_type="stream_started")
+    assert overlay._state["live"] is True
+    assert before <= overlay._state["started_at"] <= time.time()
+    assert not overlay._chat_history
+
+
+async def test_twitch_start_after_obs_keeps_uptime_and_chat(overlay):
+    await overlay.on_platform_event(platform="obs", event_type="stream_started")
+    started_at = overlay._state["started_at"]
+    await overlay.on_message(make_message("moin"))
+    await overlay.on_stream_start(platform="twitch", title="T", category="G")
+    assert overlay._state["started_at"] == started_at
+    assert overlay._state["title"] == "T" and overlay._state["game"] == "G"
+    assert len(overlay._chat_history) == 1
+
+
+async def test_obs_stop_and_exit_go_offline(overlay):
+    for event_type in ("stream_stopped", "obs_exit"):
+        await overlay.on_platform_event(platform="obs", event_type="stream_started")
+        await overlay.on_platform_event(platform="obs", event_type=event_type)
+        assert overlay._state["live"] is False
+        assert overlay._state["started_at"] is None
+
+
+async def test_obs_exit_while_offline_changes_nothing(overlay):
+    await overlay.on_platform_event(platform="obs", event_type="obs_exit")
+    assert overlay._server.broadcasts == []

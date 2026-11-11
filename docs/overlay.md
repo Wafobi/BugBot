@@ -69,7 +69,16 @@ announcing the same thing would be one too many.
 The fields: `live`, `started_at` (unix seconds — the page computes uptime itself), `title`,
 `game`, `viewers`, `last_follower`, `last_sub`, `last_raid`, `deaths`, `ad_break_started_at`/
 `ad_break_seconds` (see [`platforms/obs/client/terminal/ad-break.html`](../platforms/obs/client/terminal/ad-break.html)),
-`stream_recap` (see below). `commands` carries the commands a normal viewer may use; `mod_only`
+`stream_recap` (see below).
+
+`live` follows the encoder first: OBS's `stream_started` (a `PLATFORM_EVENT`) switches it on
+the moment "Start Streaming" is pressed, `stream_stopped`/`obs_exit` switch it off - about 20 s
+before Twitch reports the stream online, so every page goes live together with the actual
+stream. Twitch's `STREAM_START` then only adds title and category (uptime and chat are not reset
+again) and stays the fallback when OBS is not connected; `STREAM_END` always ends it. This is
+the overlay's display state only - the stream session and its statistics remain Twitch's.
+
+`commands` carries the commands a normal viewer may use; `mod_only`
 ones are dropped before sending, because what a viewer cannot use they need not read.
 
 Everything comes from bus topics — `STREAM_START`, `STREAM_SEGMENT`, `VIEWERS`,

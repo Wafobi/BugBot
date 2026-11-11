@@ -60,6 +60,15 @@ log = logging.getLogger(__name__)
 # previous meaning, and there is nothing to migrate.
 DEATHS = "deaths"
 
+# PLATFORM_EVENTs of the encoder's own output (OBS) that switch "live" (see _state) directly:
+# OBS knows the moment "Start Streaming" is pressed, ~20 s before Twitch reports the stream
+# online - every page goes live together with the actual stream instead of after that gap.
+# obs_exit too - OBS shutting down (or a crash on the way out) ends the output whether or not
+# a stream_stopped still makes it out. Twitch's STREAM_START/STREAM_END stay the fallback for
+# when OBS is not connected (and the only source of title/category); the stream *session*
+# itself remains Twitch's alone, this is the overlay's display state only.
+_OUTPUT_EVENTS = {"stream_started": True, "stream_stopped": False, "obs_exit": False}
+
 DEFAULTS = {
     # The chat mirrored alongside the numbers - what used to be chat_panel.json's whole
     # file, now one section of overlay.json.
@@ -258,15 +267,31 @@ class OverlayFeature(feature_api.Feature):
     # --- Topics ---------------------------------------------------------------------
 
     async def on_stream_start(self, platform=None, title="", category="", **_):
-        await self._patch(live=True, started_at=time.time(), title=title or "", game=category or "")
+        # Usually OBS has already switched "live" on ~20 s earlier (see _OUTPUT_EVENTS) -
+        # then only title/category are new, and neither the uptime nor the chat that came in
+        # meanwhile gets reset.
+        already_live = self._state["live"]
+        await self._patch(live=True, title=title or "", game=category or "")
+        if not already_live:
+            await self._patch(started_at=time.time())
         await self._refresh_deaths()
         # A fresh stream starts with an empty chat panel too - the mid-stream reload is what
         # the history exists for, not someone tuning in to find yesterday's chat still there.
-        if platform is None or self._chat_in_scope(platform):
+        if not already_live and (platform is None or self._chat_in_scope(platform)):
             await self._clear_chat()
 
     async def on_stream_end(self, platform=None, **_):
         await self._patch(live=False, started_at=None, viewers=0)
+
+    async def _on_output(self, running):
+        """The encoder's output started or stopped (see _OUTPUT_EVENTS)."""
+        if running == self._state["live"]:
+            return
+        if running:
+            await self._patch(live=True, started_at=time.time())
+            await self._clear_chat()
+        else:
+            await self.on_stream_end()
 
     async def on_segment(self, platform=None, title="", category="", **_):
         """Title or category change. On a change of game a different counter belongs on
@@ -286,6 +311,9 @@ class OverlayFeature(feature_api.Feature):
         Only the name is remembered, nothing flashes: the on-screen alerts are done by
         Twitch's own alertbox as a separate browser source, and two places for the same
         notice would be one too many."""
+        if event_type in _OUTPUT_EVENTS:
+            await self._on_output(_OUTPUT_EVENTS[event_type])
+            return
         slot = (self.config.section("event_slots") or {}).get(event_type)
         if slot:
             await self._patch(**{slot: user_name})
