@@ -159,7 +159,7 @@
   <div class="screen">
     <div class="body-stack">
       <div class="prompt">wafobitv@twich.tv:~$ ./pause.sh --status<span class="cursor"></span></div>
-      <div class="caption">Pause</div>
+      <div class="caption" id="caption">Pause</div>
       <div>
         <div class="bar-row">
           <span id="spinnerLabel">⠋ bin gleich zurück …</span>
@@ -177,8 +177,23 @@
   var frames = ["⠇","⠏","⠟","⠿","⠾","⠼","⠸","⠰","⠠","⠀"];
   var fIdx = 0;
   var spinnerLabel = document.getElementById("spinnerLabel");
+  var params = new URLSearchParams(location.search);
 
-  var messages = [
+  // ?text= replaces the "Pause" heading. textContent, so it is never parsed as HTML.
+  var captionText = (params.get("text") || "").trim();
+  if (captionText) {
+    document.getElementById("caption").textContent = captionText;
+    document.title = captionText;
+  }
+
+  // ?msg= replaces the rotating status lines; several lines separated by "|"
+  // keep rotating, a single one stays put.
+  var customMessages = (params.get("msg") || "")
+    .split("|")
+    .map(function (m) { return m.trim(); })
+    .filter(Boolean);
+
+  var messages = customMessages.length ? customMessages : [
     "bin gleich zurück …",
     "kaffee wird nachgeladen …",
     "afk.service läuft …",
@@ -217,13 +232,22 @@
     return lastLabel;
   }
 
+  // Themes that hide the spinner line (glut and everything built on it) print a fixed
+  // ::before text on .bar-row instead; data-msg lets them show the ?msg= line there.
+  var barRow = spinnerLabel.parentNode;
+  function showLabel(text) {
+    label = text;
+    if (customMessages.length) barRow.setAttribute("data-msg", text);
+  }
+  showLabel(label);
+
   if (!reduceMotion) {
     setInterval(function () {
       fIdx = (fIdx + 1) % frames.length;
       spinnerLabel.textContent = frames[fIdx] + " " + label;
     }, 100);
     (function rotateLabel() {
-      label = nextLabel();
+      showLabel(nextLabel());
       setTimeout(rotateLabel, 2400 + Math.random() * 1400);
     })();
   } else {

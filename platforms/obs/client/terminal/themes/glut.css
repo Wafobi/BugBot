@@ -79,6 +79,8 @@ body:has(#rain):not(:has(#statusBadge)) .hero-text::after { content: "danke, das
 #spinnerLabel { display: none !important; }
 .bar-row::before, .progress-row::before { font-size: 14px; color: var(--amber-dim); }
 body:has(.caption):has(#timer) .bar-row::before { content: "bin gleich wieder da"; }
+/* stream-pause.html?msg=... sets data-msg on the row - that text instead of the fixed one */
+body:has(.caption):has(#timer) .bar-row[data-msg]::before { content: attr(data-msg); }
 body:has(.caption):has(#pct) .bar-row::before { content: "gleich geht's weiter - danke fürs Bleiben"; }
 .progress-row::before { content: "gleich geht's los"; }
 

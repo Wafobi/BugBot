@@ -67,5 +67,8 @@ file:///path/to/bugbot/platforms/obs/client/terminal/stream-pause.html
 Parameters on `ad-break.html`/`stream-boot.html`/`stream-end.html`: `token=`, `host=` (default
 `127.0.0.1`), `port=` (default `4457`), `demo=1` (simulated/sample data instead of a connection
 - on `stream-boot.html` this fires the whole sequence at once rather than waiting ten seconds,
-for judging the layout without a bot running). `?theme=` recolours all four together — see
+for judging the layout without a bot running). `stream-pause.html` takes `text=` (replaces the
+"Pause" heading) and `msg=` (replaces the rotating status lines; separate several with `|`, a
+single one stays fixed), e.g. `stream-pause.html?theme=polarlicht&text=Technik-Pause&msg=kabel+wird+gesucht`.
+`?theme=` recolours all four together — see
 `themes/README.md`.
