@@ -342,28 +342,36 @@ the point.
 
 ### What it sends
 
-Three frame types, all JSON, over the same connection as `state`/`patch`:
+Four frame types, all JSON, over the same connection as `state`/`patch`:
 
 | `type` | when | `data` |
 |---|---|---|
 | `history` | once, on connect, right after `state` | the recent messages, oldest first |
 | `message` | for every accepted message | one message |
+| `remove` | a user was banned/timed out, or a mod deleted one message | `{"ids": [...]}` — the `id`s of the lines to take off |
 | `clear` | a mod/broadcaster cleared the whole chat on the platform itself | `null` |
 
-A message: `platform`, `user_name`, `text`, `is_privileged` (mod/broadcaster),
-`is_subscriber`. `bars.html` and `chat.html` see the same four frame types on the same socket and
-each simply ignores the ones it does not render — `bars.html` skips `history`/`message`/`clear`,
+A message: `id` (the bot's own running number), `platform`, `user_name`, `text`, `is_privileged`
+(mod/broadcaster), `is_subscriber`, `emotes`, `ts`, `message_id` (the platform's id).
+`bars.html` and `chat.html` see the same frame types on the same socket and each simply ignores
+the ones it does not render — `bars.html` skips `history`/`message`/`remove`/`clear`,
 `chat.html` skips `state`/`patch`.
 
 **Deliberately `MESSAGE_ACCEPTED`, not `MESSAGE`.** A line moderation deletes never reaches this
 part of the feature, so it can never flash on screen for the second it takes the bot to remove it
-— there is no per-message "take this back" frame, because there is nothing to take back. That is
+— there is nothing to take back for those. That is
 also why the history lives only in RAM: it exists to catch up a browser source that reloads
 mid-stream, not to be queried afterwards — [`features/chat_log`](database.md) is already the
 record, and it keeps the opposite half on purpose (everything, so a deleted message can still be
 read back by a mod).
 
-**`clear` is the one exception**, because it is not about any one message. On Twitch, a moderator
+**`remove` takes back what a human moderator removes afterwards.** A ban or timeout
+(`MOD_ACTION`, from the bot itself or from Twitch's UI via EventSub `channel.ban`) takes all of
+that user's lines off, matched by name on the same platform — as Twitch's own chat does. A single
+message a mod deletes in Twitch's UI arrives as IRC `CLEARMSG`; the bot forwards it as
+`events.MESSAGE_DELETED` with the message's id, and just that line goes.
+
+**`clear` wipes everything**, because it is not about any one message. On Twitch, a moderator
 or the broadcaster hitting "Clear chat" in Twitch's own UI sends `CLEARCHAT` over IRC with no
 target user (a per-user purge/timeout is a different `CLEARCHAT`, and does *not* trigger this —
 that already surfaces through `MOD_ACTION` when the bot is the one acting). The bot forwards it as

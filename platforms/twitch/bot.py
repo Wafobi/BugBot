@@ -1209,6 +1209,15 @@ async def _handle_irc_line(line):
             raise
         except Exception as e:
             log.warning(f"Error while processing a Twitch CLEARCHAT: {e}")
+        return
+
+    if "CLEARMSG" in line:
+        try:
+            await _handle_clearmsg(line)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.warning(f"Error while processing a Twitch CLEARMSG: {e}")
 
 
 async def _send_command_reply(reply):
@@ -1250,6 +1259,22 @@ async def _handle_clearchat(line):
     if "target-user-id" in tags:
         return
     await events.bus.publish(events.CHAT_CLEARED, platform=NAME)
+
+
+async def _handle_clearmsg(line):
+    """CLEARMSG: one message was deleted - "@login=..;target-msg-id=<id>;.. :tmi.twitch.tv
+    CLEARMSG #<channel> :<text>". Checked as the command itself, not just a substring: the
+    deleted text could contain the word too. Forwarded as MESSAGE_DELETED with the id the
+    message arrived with (Message.message_id)."""
+    if not line.startswith("@"):
+        return
+    raw_tags, rest = line.split(" ", 1)
+    parts = rest.split(" ", 2)
+    if len(parts) < 2 or parts[1] != "CLEARMSG":
+        return
+    message_id = parse_irc_tags(raw_tags).get("target-msg-id", "")
+    if message_id:
+        await events.bus.publish(events.MESSAGE_DELETED, platform=NAME, message_id=message_id)
 
 
 def parse_emotes(tag):
@@ -1329,6 +1354,7 @@ async def _handle_privmsg(line):
         command=command_word,
         arg_text=arg_text,
         emotes=parse_emotes(tags.get("emotes", "")),
+        message_id=tags.get("id", ""),
     )
 
     # Deliberately before moderation: the messages deleted later are precisely the ones you

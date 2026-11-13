@@ -134,3 +134,30 @@ def test_badge_no_badges_at_all():
 
 def test_badge_unrelated_badge_does_not_grant_anything():
     assert badge_flags("premium/1") == (False, False)
+
+
+# --- CLEARMSG: one deleted message goes onto the bus as MESSAGE_DELETED --------------------
+
+@pytest.fixture
+def published(monkeypatch):
+    calls = []
+
+    async def publish(topic, **payload):
+        calls.append((topic, payload))
+        return []
+
+    monkeypatch.setattr(bot.events.bus, "publish", publish)
+    return calls
+
+
+async def test_clearmsg_publishes_message_deleted(published):
+    line = ("@login=spammer;room-id=;target-msg-id=abc-123;tmi-sent-ts=1 "
+            ":tmi.twitch.tv CLEARMSG #chan :kauf followers")
+    await bot._handle_clearmsg(line)
+    assert published == [(bot.events.MESSAGE_DELETED, {"platform": "twitch", "message_id": "abc-123"})]
+
+
+async def test_privmsg_mentioning_clearmsg_is_not_a_delete(published):
+    line = "@id=x;target-msg-id=abc :kevin!kevin@kevin.tmi.twitch.tv PRIVMSG #chan :CLEARMSG lol"
+    await bot._handle_clearmsg(line)
+    assert published == []

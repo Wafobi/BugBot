@@ -63,6 +63,11 @@ MOD_ACTION = "moderation.action"
 #   payload: platform
 CHAT_CLEARED = "chat.cleared"
 
+# A moderator deleted one message through the platform's own UI (or the bot did, via the
+# platform). Like CHAT_CLEARED for presentation only: the record keeps it.
+#   payload: platform, message_id (Message.message_id of the deleted message)
+MESSAGE_DELETED = "message.deleted"
+
 # A typed live event: follow, sub, gift sub, cheer, raid, hype train, ...
 #   payload: platform, event_type, user_name, amount (bits/count/level/0)
 PLATFORM_EVENT = "platform.event"

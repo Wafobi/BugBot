@@ -25,12 +25,13 @@ Deliberately MESSAGE_ACCEPTED and not MESSAGE: a message that moderation deletes
 reaches this feature, so it never reaches the screen either - the same reasoning as
 features/chat_log recording MESSAGE and not MESSAGE_ACCEPTED, only pointed the other way: that
 one wants everything for the record, this one wants only what a viewer was ever allowed to
-read. What already stands there goes again in three cases: a ban or timeout (MOD_ACTION -
+read. What already stands there goes again in four cases: a ban or timeout (MOD_ACTION -
 Twitch's own chat then hides everything that user wrote, so the panel does too: a "remove"
-frame with the ids of that user's lines still in the history), CHAT_CLEARED (a
-platform-wide "clear chat" is not about any one message) and STREAM_START (a fresh stream starts with an empty panel - the mid-stream
-reload is what the history exists for, not someone tuning in to find yesterday's chat still
-sitting there).
+frame with the ids of that user's lines still in the history), MESSAGE_DELETED (a moderator
+deleted that one message - the same frame with its id), CHAT_CLEARED (a platform-wide
+"clear chat" is not about any one message) and STREAM_START (a fresh stream starts with an
+empty panel - the mid-stream reload is what the history exists for, not someone tuning in
+to find yesterday's chat still sitting there).
 
 The chat history lives in RAM and not in STORAGE, same reasoning as the death counter's
 absence without one: it exists to catch up a browser source that reloads mid-stream, not to
@@ -160,6 +161,7 @@ class OverlayFeature(feature_api.Feature):
         bus.subscribe(events.MESSAGE_ACCEPTED, self.on_message)
         bus.subscribe(events.CHAT_CLEARED, self.on_chat_cleared)
         bus.subscribe(events.MOD_ACTION, self.on_mod_action)
+        bus.subscribe(events.MESSAGE_DELETED, self.on_message_deleted)
 
         if not env.OVERLAY_TOKEN:
             log.info("No OVERLAY_TOKEN set - no overlay listener. "
@@ -412,6 +414,8 @@ class OverlayFeature(feature_api.Feature):
             "emotes": [list(e) for e in message.emotes],
             # when it arrived (unix seconds) - lets a reloading page age the backlog
             "ts": time.time(),
+            # the platform's own id - what MESSAGE_DELETED refers to (see on_message_deleted)
+            "message_id": message.message_id,
         }
         self._next_message_id += 1
         self._chat_history.append(entry)
@@ -430,10 +434,20 @@ class OverlayFeature(feature_api.Feature):
         if action not in _PURGE_ACTIONS or not user_name or not self._chat_in_scope(platform):
             return
         name = user_name.casefold()
+        await self._remove_lines(
+            lambda entry: entry["platform"] == platform and entry["user_name"].casefold() == name
+        )
 
-        def hit(entry):
-            return entry["platform"] == platform and entry["user_name"].casefold() == name
+    async def on_message_deleted(self, platform=None, message_id="", **_):
+        """A moderator deleted one message - it leaves the panel too."""
+        if not message_id or not self._chat_in_scope(platform):
+            return
+        await self._remove_lines(
+            lambda entry: entry["platform"] == platform and entry["message_id"] == message_id
+        )
 
+    async def _remove_lines(self, hit):
+        """Drops the history entries `hit` matches and tells the pages which ids went."""
         ids = [entry["id"] for entry in self._chat_history if hit(entry)]
         if not ids:
             return

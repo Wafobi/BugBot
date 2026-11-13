@@ -1,5 +1,5 @@
 """OverlayFeature's chat half: the Twitch-only-by-default scope, hide_commands, history
-bound, clearing on CHAT_CLEARED/STREAM_START and removing on a ban/timeout. Formerly tests/features/chat_panel, folded
+bound, clearing on CHAT_CLEARED/STREAM_START and removing on a ban/timeout or a deleted message. Formerly tests/features/chat_panel, folded
 in along with the feature itself - see features/overlay/feature.py."""
 
 import json
@@ -50,8 +50,8 @@ class FakePlatform(platform_api.Platform):
         return
 
 
-def make_message(text, platform="twitch", user_name="someone"):
-    return feature_api.Message(platform=platform, user_name=user_name, text=text)
+def make_message(text, platform="twitch", user_name="someone", message_id=""):
+    return feature_api.Message(platform=platform, user_name=user_name, text=text, message_id=message_id)
 
 
 def make_bus():
@@ -194,6 +194,26 @@ async def test_ban_without_lines_sends_nothing(overlay):
     await overlay.on_message(make_message("hi", user_name="Kevin"))
     sent = len(overlay._server.broadcasts)
     await overlay.on_mod_action(platform="twitch", user_name="Spammer", reason="x", action="ban")
+    assert len(overlay._server.broadcasts) == sent
+
+
+async def test_deleted_message_leaves_the_panel(overlay):
+    await overlay.on_message(make_message("ok", message_id="a"))
+    await overlay.on_message(make_message("weg damit", message_id="b"))
+    gone = overlay._chat_history[1]["id"]
+
+    await overlay.on_message_deleted(platform="twitch", message_id="b")
+
+    assert [e["text"] for e in overlay._chat_history] == ["ok"]
+    assert overlay._server.broadcasts[-1] == ("remove", {"ids": [gone]})
+
+
+async def test_deleted_unknown_or_empty_id_changes_nothing(overlay):
+    await overlay.on_message(make_message("ohne id"))
+    sent = len(overlay._server.broadcasts)
+    await overlay.on_message_deleted(platform="twitch", message_id="")
+    await overlay.on_message_deleted(platform="twitch", message_id="nope")
+    assert len(overlay._chat_history) == 1
     assert len(overlay._server.broadcasts) == sent
 
 

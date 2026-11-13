@@ -80,7 +80,10 @@ class Message:
 
     `emotes` are the platform's own emotes in `text`, as (id, start, end) - start/end are
     inclusive character (code point) positions, the way Twitch reports them. Empty where a
-    platform has none or does not say."""
+    platform has none or does not say.
+
+    `message_id` is the platform's own id of this message - what a later MESSAGE_DELETED
+    refers to. Empty where a platform does not report one."""
     platform: str
     user_id: str = ""
     user_name: str = ""
@@ -91,6 +94,7 @@ class Message:
     arg_text: str = ""
     raw: object = None
     emotes: tuple = ()
+    message_id: str = ""
 
 
 @dataclass(frozen=True)
