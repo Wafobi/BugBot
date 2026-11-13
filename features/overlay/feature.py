@@ -22,12 +22,13 @@ history of accepted messages and sends every new one alongside the state/patch f
 recent history on connect, one frame per message afterwards.
 
 Deliberately MESSAGE_ACCEPTED and not MESSAGE: a message that moderation deletes never
-reaches this feature, so it never reaches the screen either. There is still no per-message
-"remove this again" frame - the same reasoning as features/chat_log recording MESSAGE and not
-MESSAGE_ACCEPTED, only pointed the other way: that one wants everything for the record, this
-one wants only what a viewer was ever allowed to read. Two things wipe the panel after the
-fact instead of a single message: CHAT_CLEARED (a platform-wide "clear chat" is not about any
-one message) and STREAM_START (a fresh stream starts with an empty panel - the mid-stream
+reaches this feature, so it never reaches the screen either - the same reasoning as
+features/chat_log recording MESSAGE and not MESSAGE_ACCEPTED, only pointed the other way: that
+one wants everything for the record, this one wants only what a viewer was ever allowed to
+read. What already stands there goes again in three cases: a ban or timeout (MOD_ACTION -
+Twitch's own chat then hides everything that user wrote, so the panel does too: a "remove"
+frame with the ids of that user's lines still in the history), CHAT_CLEARED (a
+platform-wide "clear chat" is not about any one message) and STREAM_START (a fresh stream starts with an empty panel - the mid-stream
 reload is what the history exists for, not someone tuning in to find yesterday's chat still
 sitting there).
 
@@ -68,6 +69,10 @@ DEATHS = "deaths"
 # when OBS is not connected (and the only source of title/category); the stream *session*
 # itself remains Twitch's alone, this is the overlay's display state only.
 _OUTPUT_EVENTS = {"stream_started": True, "stream_stopped": False, "obs_exit": False}
+
+# MOD_ACTION actions after which a user's lines leave the chat panel (see on_mod_action).
+# "delete" is about one message, which never reached the panel in the first place.
+_PURGE_ACTIONS = {"ban", "timeout"}
 
 DEFAULTS = {
     # The chat mirrored alongside the numbers - what used to be chat_panel.json's whole
@@ -154,6 +159,7 @@ class OverlayFeature(feature_api.Feature):
         bus.subscribe(events.AD_BREAK, self.on_ad_break)
         bus.subscribe(events.MESSAGE_ACCEPTED, self.on_message)
         bus.subscribe(events.CHAT_CLEARED, self.on_chat_cleared)
+        bus.subscribe(events.MOD_ACTION, self.on_mod_action)
 
         if not env.OVERLAY_TOKEN:
             log.info("No OVERLAY_TOKEN set - no overlay listener. "
@@ -416,6 +422,26 @@ class OverlayFeature(feature_api.Feature):
         if not self._chat_in_scope(platform):
             return
         await self._clear_chat()
+
+    async def on_mod_action(self, platform=None, user_name="", action="", **_):
+        """A ban or timeout takes the user's lines off the panel - the same as Twitch's own
+        chat does. Matched by name (case-insensitive) on the same platform: MOD_ACTION carries
+        no user id, and a ban from the Twitch UI only reports the display name."""
+        if action not in _PURGE_ACTIONS or not user_name or not self._chat_in_scope(platform):
+            return
+        name = user_name.casefold()
+
+        def hit(entry):
+            return entry["platform"] == platform and entry["user_name"].casefold() == name
+
+        ids = [entry["id"] for entry in self._chat_history if hit(entry)]
+        if not ids:
+            return
+        self._chat_history = deque(
+            (entry for entry in self._chat_history if not hit(entry)), maxlen=self._chat_history.maxlen,
+        )
+        if self._server is not None:
+            await self._server.broadcast("remove", {"ids": ids})
 
     async def _clear_chat(self):
         self._chat_history.clear()

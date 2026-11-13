@@ -299,6 +299,10 @@ function connect() {
       addMessage(frame.data);
     } else if (frame.type === "clear") {
       feed.innerHTML = "";
+    } else if (frame.type === "remove") {
+      // a ban/timeout: that user's lines go (one message can be several lines, see addMessage)
+      const ids = new Set(((frame.data || {}).ids || []).map(String));
+      for (const div of [...feed.children]) if (ids.has(div.dataset.id)) div.remove();
     }
   };
 }

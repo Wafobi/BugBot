@@ -1,5 +1,5 @@
 """OverlayFeature's chat half: the Twitch-only-by-default scope, hide_commands, history
-bound, and clearing on CHAT_CLEARED/STREAM_START. Formerly tests/features/chat_panel, folded
+bound, clearing on CHAT_CLEARED/STREAM_START and removing on a ban/timeout. Formerly tests/features/chat_panel, folded
 in along with the feature itself - see features/overlay/feature.py."""
 
 import json
@@ -156,6 +156,45 @@ async def test_chat_cleared_out_of_scope_platform_is_ignored(overlay):
     await overlay.on_message(make_message("hello"))
     await overlay.on_chat_cleared(platform="discord")
     assert len(overlay._chat_history) == 1  # unaffected - discord is out of scope by default
+
+
+# --- removing: a ban/timeout takes that user's lines off the panel ----------------------
+
+@pytest.mark.parametrize("action", ["ban", "timeout"])
+async def test_ban_or_timeout_removes_that_users_lines(overlay, action):
+    await overlay.on_message(make_message("hi", user_name="Spammer"))
+    await overlay.on_message(make_message("hallo", user_name="Kevin"))
+    await overlay.on_message(make_message("kauf followers", user_name="Spammer"))
+    ids = [e["id"] for e in overlay._chat_history if e["user_name"] == "Spammer"]
+
+    await overlay.on_mod_action(platform="twitch", user_name="spammer", reason="x", action=action)
+
+    assert [e["user_name"] for e in overlay._chat_history] == ["Kevin"]
+    assert overlay._server.broadcasts[-1] == ("remove", {"ids": ids})
+
+
+@pytest.mark.parametrize("action", ["delete", "warn", "unban"])
+async def test_other_mod_actions_leave_the_panel_alone(overlay, action):
+    await overlay.on_message(make_message("hi", user_name="Spammer"))
+    sent = len(overlay._server.broadcasts)
+
+    await overlay.on_mod_action(platform="twitch", user_name="Spammer", reason="x", action=action)
+
+    assert len(overlay._chat_history) == 1
+    assert len(overlay._server.broadcasts) == sent
+
+
+async def test_ban_on_another_platform_does_not_remove(overlay):
+    await overlay.on_message(make_message("hi", user_name="Spammer"))
+    await overlay.on_mod_action(platform="discord", user_name="Spammer", reason="x", action="ban")
+    assert len(overlay._chat_history) == 1
+
+
+async def test_ban_without_lines_sends_nothing(overlay):
+    await overlay.on_message(make_message("hi", user_name="Kevin"))
+    sent = len(overlay._server.broadcasts)
+    await overlay.on_mod_action(platform="twitch", user_name="Spammer", reason="x", action="ban")
+    assert len(overlay._server.broadcasts) == sent
 
 
 async def test_stream_start_empties_history_and_broadcasts(overlay):

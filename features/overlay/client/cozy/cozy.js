@@ -266,6 +266,7 @@
         var name = m.user_name || "";
         var row = document.createElement("div");
         row.className = "msg" + (live ? "" : " still") + ((hash(name) >> 3) % 2 ? " right" : "");
+        if (m.id != null) row.dataset.chatId = m.id;
         row.style.setProperty("--tint", tint(name));
         if (bubbles.length) row.style.setProperty("--bubble", bubbles[hash(name) % bubbles.length]);
         row.innerHTML = '<span class="who">' + escapeHtml(name) + '</span><span class="text">' + escapeHtml(m.text || "") + "</span>";
@@ -348,6 +349,12 @@
           if (inScope(frame.data)) onMessage(frame.data, true);
         } else if (frame.type === "clear") {
           onClear(false);
+        } else if (frame.type === "remove") {
+          // a ban/timeout: that user's lines leave every chat card on the page
+          ((frame.data || {}).ids || []).forEach(function (id) {
+            var rows = document.querySelectorAll('[data-chat-id="' + Number(id) + '"]');
+            Array.prototype.forEach.call(rows, function (row) { row.parentNode.removeChild(row); });
+          });
         }
       };
     })();

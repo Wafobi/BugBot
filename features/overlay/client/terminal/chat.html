@@ -516,10 +516,11 @@
     }, Math.max(0, left));
   }
 
-  function addLine(name, text, animate, emotes, ts) {
+  function addLine(name, text, animate, emotes, ts, id) {
     if (ttl > 0 && ts && Date.now() - ts * 1000 > ttl * 1000) return;   // already over
     var row = document.createElement("div");
     row.className = "chat-line";
+    if (id != null) row.dataset.id = id;
     expire(row, ts);
     var colorIdx = Math.abs(hash(name)) % colors.length;
     row.innerHTML =
@@ -630,13 +631,19 @@
       if (frame.type === "history") {
         chatLog.innerHTML = "";
         (frame.data || []).forEach(function (entry) {
-          if (inScope(entry)) addLine(entry.user_name || "", entry.text || "", false, entry.emotes, entry.ts);
+          if (inScope(entry)) addLine(entry.user_name || "", entry.text || "", false, entry.emotes, entry.ts, entry.id);
         });
       } else if (frame.type === "message") {
-        if (inScope(frame.data)) addLine(frame.data.user_name || "", frame.data.text || "", true, frame.data.emotes, frame.data.ts);
+        if (inScope(frame.data)) addLine(frame.data.user_name || "", frame.data.text || "", true, frame.data.emotes, frame.data.ts, frame.data.id);
       } else if (frame.type === "clear") {
         chatLog.innerHTML = "";
         addSystemLine("chat cleared");
+      } else if (frame.type === "remove") {
+        // a ban/timeout: that user's lines go
+        var ids = ((frame.data || {}).ids || []).map(String);
+        Array.prototype.slice.call(chatLog.children).forEach(function (row) {
+          if (ids.indexOf(row.dataset.id) !== -1) chatLog.removeChild(row);
+        });
       }
       // "state"/"patch" - bars.html's/tubbi.html's half of the same socket - not rendered here.
     };
